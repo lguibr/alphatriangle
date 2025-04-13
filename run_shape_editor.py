@@ -126,7 +126,7 @@ class ShapeEditor:
 
         num_shapes = len(self.saved_shapes)
         for i, (triangles, color) in enumerate(self.saved_shapes):
-            print(f"    [ # Shape {i+1}")  # Start of the inner list for this shape
+            print(f"    [ # Shape {i + 1}")  # Start of the inner list for this shape
             num_triangles = len(triangles)
             for j, (r, c, u) in enumerate(triangles):
                 # Indentation for the tuple elements
@@ -297,7 +297,7 @@ class ShapeEditor:
             # Draw shape number title
             if title_font:
                 title_surf = title_font.render(
-                    f"Shape #{i+1}", True, visualization.colors.LIGHT_GRAY
+                    f"Shape #{i + 1}", True, visualization.colors.LIGHT_GRAY
                 )
                 title_rect = title_surf.get_rect(
                     left=slot_rect_local.left + inner_pad,

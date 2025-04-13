@@ -2,6 +2,7 @@
 """
 Grid submodule handling the triangular grid structure, data, and logic.
 """
+
 from .grid_data import GridData
 
 # Removed: from .triangle import Triangle

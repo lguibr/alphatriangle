@@ -78,6 +78,6 @@ def test_get_neighbors():
 def test_predefined_shapes_are_connected():
     """Verify that all predefined shapes are connected."""
     for i, template in enumerate(PREDEFINED_SHAPE_TEMPLATES):
-        assert is_shape_connected(
-            template
-        ), f"Predefined shape {i} is not connected: {template}"
+        assert is_shape_connected(template), (
+            f"Predefined shape {i} is not connected: {template}"
+        )

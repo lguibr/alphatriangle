@@ -218,9 +218,9 @@ def test_add_dirichlet_noise(
             priors_changed = True
 
     assert priors_changed, "Priors did not change after adding noise"
-    assert mixed_sum == pytest.approx(
-        1.0, abs=1e-6
-    ), f"Noisy priors sum to {mixed_sum}, not 1.0"
+    assert mixed_sum == pytest.approx(1.0, abs=1e-6), (
+        f"Noisy priors sum to {mixed_sum}, not 1.0"
+    )
 
 
 def test_add_dirichlet_noise_disabled(
@@ -243,9 +243,9 @@ def test_add_dirichlet_noise_disabled(
 
     selection.add_dirichlet_noise(node, config_alpha_zero)
     priors_after_alpha_zero = {a: c.prior_probability for a, c in node.children.items()}
-    assert (
-        priors_after_alpha_zero == original_priors
-    ), "Priors changed when alpha was zero"
+    assert priors_after_alpha_zero == original_priors, (
+        "Priors changed when alpha was zero"
+    )
 
     # Reset priors before next test
     for a, p in original_priors.items():
@@ -253,9 +253,9 @@ def test_add_dirichlet_noise_disabled(
 
     selection.add_dirichlet_noise(node, config_eps_zero)
     priors_after_eps_zero = {a: c.prior_probability for a, c in node.children.items()}
-    assert (
-        priors_after_eps_zero == original_priors
-    ), "Priors changed when epsilon was zero"
+    assert priors_after_eps_zero == original_priors, (
+        "Priors changed when epsilon was zero"
+    )
 
 
 # --- Test Traversal ---
@@ -274,9 +274,9 @@ def test_traverse_to_leaf_expanded(
     """Test traversal selects a child from an expanded node and stops (depth 1)."""
     root = expanded_node_mock_state
     for child in root.children.values():
-        assert (
-            not child.is_expanded
-        ), f"Child {child} should not be expanded in this fixture setup"
+        assert not child.is_expanded, (
+            f"Child {child} should not be expanded in this fixture setup"
+        )
 
     leaf, depth = selection.traverse_to_leaf(root, mock_mcts_config)
 
@@ -314,9 +314,9 @@ def test_traverse_to_leaf_max_depth(
 
     leaf, depth = selection.traverse_to_leaf(root, config_copy)
 
-    assert (
-        leaf in root.children.values()
-    ), "Leaf node should be a direct child of the root"
+    assert leaf in root.children.values(), (
+        "Leaf node should be a direct child of the root"
+    )
     assert depth == 1, "Depth should be 1 when max_search_depth is 1"
 
 
@@ -375,16 +375,16 @@ def test_traverse_to_leaf_deeper(
         pytest.fail("Fixture error: Child 0 has no valid actions for grandchildren")
 
     expected_grandchild = child0.children.get(preferred_gc_action)
-    assert (
-        expected_grandchild is not None
-    ), f"Expected grandchild for action {preferred_gc_action} not found"
+    assert expected_grandchild is not None, (
+        f"Expected grandchild for action {preferred_gc_action} not found"
+    )
 
     # --- Run traversal ---
     leaf, depth = selection.traverse_to_leaf(root, config_copy)
 
     # --- Assertions ---
     # It should select child0, then the expected grandchild (which is a leaf in the fixture setup)
-    assert (
-        leaf is expected_grandchild
-    ), f"Expected leaf {expected_grandchild}, but got {leaf}"
+    assert leaf is expected_grandchild, (
+        f"Expected leaf {expected_grandchild}, but got {leaf}"
+    )
     assert depth == 2, f"Expected depth 2, but got {depth}"

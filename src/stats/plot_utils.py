@@ -154,7 +154,7 @@ def render_single_plot(
     # Format x-axis (steps)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=4, integer=True))
     ax.xaxis.set_major_formatter(
-        FuncFormatter(lambda x, p: f"{int(x/1000)}k" if x >= 1000 else f"{int(x)}")
+        FuncFormatter(lambda x, p: f"{int(x / 1000)}k" if x >= 1000 else f"{int(x)}")
     )
     ax.set_xlabel("Step", fontsize=8, color="gray")
 

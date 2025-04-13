@@ -150,9 +150,9 @@ def test_evaluate_single(
     assert all(
         isinstance(k, int) and isinstance(v, float) for k, v in policy_map.items()
     )
-    assert (
-        abs(sum(policy_map.values()) - 1.0) < 1e-5
-    ), f"Policy probs sum to {sum(policy_map.values())}"
+    assert abs(sum(policy_map.values()) - 1.0) < 1e-5, (
+        f"Policy probs sum to {sum(policy_map.values())}"
+    )
     assert -1.0 <= value <= 1.0
 
 
@@ -217,18 +217,18 @@ def test_get_set_weights(nn_interface: NeuralNetwork):
         assert key in new_weights
         # Compare on CPU
         if initial_weights[key].dtype.is_floating_point:
-            assert torch.allclose(
-                modified_weights[key], new_weights[key], atol=1e-6
-            ), f"Weight mismatch for key {key}"
+            assert torch.allclose(modified_weights[key], new_weights[key], atol=1e-6), (
+                f"Weight mismatch for key {key}"
+            )
         else:
-            assert torch.equal(
-                initial_weights[key], new_weights[key]
-            ), f"Non-float tensor mismatch for key {key}"
+            assert torch.equal(initial_weights[key], new_weights[key]), (
+                f"Non-float tensor mismatch for key {key}"
+            )
 
     # Test setting back original weights
     nn_interface.set_weights(initial_weights)
     final_weights = nn_interface.get_weights()
     for key in initial_weights:
-        assert torch.equal(
-            initial_weights[key], final_weights[key]
-        ), f"Weight mismatch after setting back original for key {key}"
+        assert torch.equal(initial_weights[key], final_weights[key]), (
+            f"Weight mismatch after setting back original for key {key}"
+        )

@@ -14,7 +14,7 @@ DARK_GREEN: tuple[int, int, int] = (10, 80, 10)
 ORANGE: tuple[int, int, int] = (240, 150, 20)
 PURPLE: tuple[int, int, int] = (140, 40, 140)
 CYAN: tuple[int, int, int] = (40, 200, 200)
-LIGHTG: tuple[int, int, int] = (144, 238, 144) 
+LIGHTG: tuple[int, int, int] = (144, 238, 144)
 
 GOOGLE_COLORS: list[tuple[int, int, int]] = [
     (15, 157, 88),  # Green

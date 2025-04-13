@@ -61,9 +61,9 @@ def test_log_batch_metrics(stats_actor):
     assert "metric_a" in data
     assert "metric_b" in data
     # Now metric_a should have 2 entries
-    assert (
-        len(data["metric_a"]) == 2
-    ), f"Expected 2 entries for metric_a, found {len(data['metric_a'])}"
+    assert len(data["metric_a"]) == 2, (
+        f"Expected 2 entries for metric_a, found {len(data['metric_a'])}"
+    )
     assert len(data["metric_b"]) == 1
     assert data["metric_a"][0] == (1, 1.0)
     assert data["metric_a"][1] == (2, 1.1)
@@ -151,9 +151,9 @@ def test_get_set_state(stats_actor):
         (10, 1.0),
         (11, 1.5),
     ], f"Actual m1 list: {state['_metrics_data_list']['m1']}"
-    assert state["_metrics_data_list"]["m2"] == [
-        (10, 2.0)
-    ], f"Actual m2 list: {state['_metrics_data_list']['m2']}"
+    assert state["_metrics_data_list"]["m2"] == [(10, 2.0)], (
+        f"Actual m2 list: {state['_metrics_data_list']['m2']}"
+    )
     # --- End Updated Assertion Key ---
 
     # Use cloudpickle to simulate saving/loading

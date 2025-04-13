@@ -92,12 +92,12 @@ def test_line_precomputation(game_state: GameState):
     precomputed_set = {tuple(sorted(line)) for line in precomputed_lines_indices}
     expected_set = {tuple(sorted(line)) for line in all_expected_indices}
 
-    assert len(precomputed_set) == len(
-        all_expected_indices
-    ), f"Expected {len(all_expected_indices)} lines, but found {len(precomputed_set)}"
-    assert (
-        precomputed_set == expected_set
-    ), "Precomputed lines do not match expected lines"
+    assert len(precomputed_set) == len(all_expected_indices), (
+        f"Expected {len(all_expected_indices)} lines, but found {len(precomputed_set)}"
+    )
+    assert precomputed_set == expected_set, (
+        "Precomputed lines do not match expected lines"
+    )
 
 
 # --- Test Line Clearing Logic ---
@@ -179,9 +179,9 @@ def test_check_and_clear_lines_multiple(
         GridLogic.check_and_clear_lines(grid_data, newly_occupied)
     )
 
-    assert (
-        lines_cleared == expected_cleared_lines_count
-    ), f"Expected {expected_cleared_lines_count} lines cleared, got {lines_cleared}"
+    assert lines_cleared == expected_cleared_lines_count, (
+        f"Expected {expected_cleared_lines_count} lines cleared, got {lines_cleared}"
+    )
     assert unique_tris_cleared == expected_cleared_tris
     assert cleared_lines_set == expected_cleared_lines_set
 

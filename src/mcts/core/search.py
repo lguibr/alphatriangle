@@ -124,7 +124,7 @@ def run_mcts_simulations(
             leaf_node: Optional[Node] = None
             try:
                 logger.debug(
-                    f"  [MCTS Select] Starting Sim {current_sim_idx+1} Selection..."
+                    f"  [MCTS Select] Starting Sim {current_sim_idx + 1} Selection..."
                 )
                 leaf_node, selection_depth = selection.traverse_to_leaf(
                     root_node, config
@@ -133,25 +133,25 @@ def run_mcts_simulations(
                 if leaf_node.state.is_over():
                     outcome = leaf_node.state.get_outcome()
                     logger.debug(
-                        f"  [MCTS Select] Sim {current_sim_idx+1}: Selected TERMINAL leaf at depth {selection_depth}. Outcome: {outcome:.3f}. Adding to backprop queue."
+                        f"  [MCTS Select] Sim {current_sim_idx + 1}: Selected TERMINAL leaf at depth {selection_depth}. Outcome: {outcome:.3f}. Adding to backprop queue."
                     )
                     paths_to_backprop.append((leaf_node, outcome))
                 elif not leaf_node.is_expanded:
                     logger.debug(
-                        f"  [MCTS Select] Sim {current_sim_idx+1}: Selected leaf for EVALUATION at depth {selection_depth}. Node: {leaf_node}."
+                        f"  [MCTS Select] Sim {current_sim_idx + 1}: Selected leaf for EVALUATION at depth {selection_depth}. Node: {leaf_node}."
                     )
                     leaves_to_evaluate.append(leaf_node)
                     num_collected_for_batch += 1
                 else:
                     logger.debug(
-                        f"  [MCTS Select] Sim {current_sim_idx+1}: Traversal stopped at EXPANDED node (likely max depth {selection_depth}). Value: {leaf_node.value_estimate:.3f}. Adding to backprop queue."
+                        f"  [MCTS Select] Sim {current_sim_idx + 1}: Traversal stopped at EXPANDED node (likely max depth {selection_depth}). Value: {leaf_node.value_estimate:.3f}. Adding to backprop queue."
                     )
                     paths_to_backprop.append((leaf_node, leaf_node.value_estimate))
 
             except Exception as e:
                 sim_error_count += 1
                 logger.error(
-                    f"[MCTS Select] Error during MCTS selection phase (Sim {current_sim_idx+1}): {e}",
+                    f"[MCTS Select] Error during MCTS selection phase (Sim {current_sim_idx + 1}): {e}",
                     exc_info=True,
                 )
 

@@ -61,9 +61,9 @@ def render_hud(
         # Format simulations nicely
         if isinstance(sims, (int, float)):
             sims_str = (
-                f"{sims/1e6:.2f}M"
+                f"{sims / 1e6:.2f}M"
                 if sims >= 1e6
-                else (f"{sims/1e3:.1f}k" if sims >= 1000 else str(int(sims)))
+                else (f"{sims / 1e3:.1f}k" if sims >= 1000 else str(int(sims)))
             )
             stats_items.append(f"Sims: {sims_str}")
         else:

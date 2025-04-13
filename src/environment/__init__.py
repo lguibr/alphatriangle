@@ -3,6 +3,7 @@
 Environment module defining the game rules, state, actions, and logic.
 This module is now independent of feature extraction for the NN.
 """
+
 # Core components
 from .core.game_state import GameState
 from .core.action_codec import encode_action, decode_action
