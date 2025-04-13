@@ -1,24 +1,19 @@
 # File: src/visualization/drawing/hud.py
+from typing import Any
+
 import pygame
-from typing import TYPE_CHECKING, Dict, Optional, Any
+
+from src.visualization.ui import ProgressBar  # Import ProgressBar for type check
 
 from ..core import colors
-from src.visualization.ui import ProgressBar  # Import ProgressBar for type check
-from src.utils import format_eta  # Import format_eta
-
-if TYPE_CHECKING:
-    # Removed: from ...environment import GameState
-    pass
 
 
 def render_hud(
     surface: pygame.Surface,
     # Removed: game_state: "GameState", # No longer needed
     mode: str,
-    fonts: Dict[str, Optional[pygame.font.Font]],
-    display_stats: Optional[
-        Dict[str, Any]
-    ] = None,  # Renamed from global_stats for clarity
+    fonts: dict[str, pygame.font.Font | None],
+    display_stats: dict[str, Any] | None = None,  # Renamed from global_stats for clarity
 ) -> None:
     """
     Renders global information (like step count, worker status) at the bottom.

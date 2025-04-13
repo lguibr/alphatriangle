@@ -1,10 +1,10 @@
 # File: run_shape_editor.py
-import pygame
-import sys
-import os
 import logging
+import os
 import random
-from typing import List, Tuple, Optional, Dict
+import sys
+
+import pygame
 
 # Ensure the src directory is in the Python path
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -13,7 +13,7 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 # Imports from your project structure
-from src import config, utils, environment, visualization, structs
+from src import config, environment, structs, visualization
 
 # Basic logging setup
 logging.basicConfig(
@@ -42,25 +42,25 @@ class ShapeEditor:
 
         # --- Editor State ---
         self.grid_data = environment.GridData(self.env_config)
-        self.current_shape_triangles: List[Tuple[int, int, bool]] = []
-        self.current_shape_color: Tuple[int, int, int] = random.choice(
+        self.current_shape_triangles: list[tuple[int, int, bool]] = []
+        self.current_shape_color: tuple[int, int, int] = random.choice(
             structs.SHAPE_COLORS
         )
-        self.hover_coord: Optional[Tuple[int, int]] = None
-        self.layout_rects: Optional[Dict[str, pygame.Rect]] = None
-        self._layout_calculated_for_size: Tuple[int, int] = (0, 0)
+        self.hover_coord: tuple[int, int] | None = None
+        self.layout_rects: dict[str, pygame.Rect] | None = None
+        self._layout_calculated_for_size: tuple[int, int] = (0, 0)
 
         # --- Shape Collection ---
         # Stores tuples of (normalized_triangle_list, color_tuple)
-        self.saved_shapes: List[
-            Tuple[List[Tuple[int, int, bool]], Tuple[int, int, int]]
+        self.saved_shapes: list[
+            tuple[list[tuple[int, int, bool]], tuple[int, int, int]]
         ] = []
 
         self.running = True
         logger.info("Shape Editor Initialized.")
         self.ensure_layout()
 
-    def ensure_layout(self) -> Dict[str, pygame.Rect]:
+    def ensure_layout(self) -> dict[str, pygame.Rect]:
         """Calculates or retrieves the layout rectangles."""
         current_w, current_h = self.screen.get_size()
         current_size = (current_w, current_h)
@@ -81,7 +81,7 @@ class ShapeEditor:
 
     def normalize_shape_triangles(
         self,
-    ) -> Optional[List[Tuple[int, int, bool]]]:
+    ) -> list[tuple[int, int, bool]] | None:
         """Normalizes triangle coordinates relative to the top-leftmost triangle."""
         if not self.current_shape_triangles:
             return None

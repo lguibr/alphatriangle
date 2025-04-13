@@ -7,9 +7,9 @@ Shapes submodule handling shape generation and management.
 # Import logic functions directly into the package namespace
 from .logic import (
     generate_random_shape,
-    refill_shape_slots,
-    is_shape_connected,
     get_neighbors,
+    is_shape_connected,
+    refill_shape_slots,
 )
 
 # Import the constant from the templates file

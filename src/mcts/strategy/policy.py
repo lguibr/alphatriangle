@@ -1,11 +1,10 @@
-import numpy as np
 import logging
-from typing import TYPE_CHECKING, Optional, List
 
-from ..core.node import Node
+import numpy as np
 
-from ..core.types import ActionPolicyMapping
 from ...utils.types import ActionType
+from ..core.node import Node
+from ..core.types import ActionPolicyMapping
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +116,7 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
     Raises PolicyGenerationError if target cannot be generated.
     """
     action_dim = root_node.state.env_config.ACTION_DIM
-    full_target = {a: 0.0 for a in range(action_dim)}
+    full_target = dict.fromkeys(range(action_dim), 0.0)
 
     if not root_node.children or root_node.visit_count == 0:
         logger.warning(

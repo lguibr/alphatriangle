@@ -1,13 +1,13 @@
 # File: src/interaction/play_mode_handler.py
-import pygame
 import logging
-from typing import TYPE_CHECKING, Tuple, Optional
+from typing import TYPE_CHECKING
 
-from src.visualization import core as vis_core
+import pygame
+
 from src.environment import core as env_core
 from src.environment import grid as env_grid
-from src.environment import logic as env_logic  # Keep for potential future use
 from src.structs import Shape
+from src.visualization import core as vis_core
 
 if TYPE_CHECKING:
     from .input_handler import InputHandler  # Import InputHandler type
@@ -69,7 +69,7 @@ def handle_play_click(event: pygame.event.Event, handler: "InputHandler") -> Non
         grid_coords = vis_core.coord_mapper.get_grid_coords_from_screen(
             mouse_pos, grid_rect, game_state.env_config
         )
-        shape_to_place: Optional[Shape] = game_state.shapes[selected_idx]
+        shape_to_place: Shape | None = game_state.shapes[selected_idx]
 
         # Check if the placement is valid *at the clicked location*
         if (
@@ -120,7 +120,7 @@ def update_play_hover(handler: "InputHandler") -> None:
     shape_idx = handler.selected_shape_idx
     if not (0 <= shape_idx < len(game_state.shapes)):
         return
-    shape: Optional[Shape] = game_state.shapes[shape_idx]
+    shape: Shape | None = game_state.shapes[shape_idx]
     if not shape:
         return
 

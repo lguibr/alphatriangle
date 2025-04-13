@@ -5,9 +5,9 @@ for orchestrating the reinforcement learning training process.
 """
 
 from .components import TrainingComponents
+from .logging_utils import Tee, get_root_logger, setup_file_logging
 from .loop import TrainingLoop
 from .pipeline import TrainingPipeline
-from .logging_utils import setup_file_logging, get_root_logger, Tee
 
 __all__ = [
     "TrainingComponents",

@@ -1,4 +1,4 @@
-from typing import Tuple
+
 from src.config import EnvConfig
 from src.utils.types import ActionType
 
@@ -18,7 +18,7 @@ def encode_action(shape_idx: int, r: int, c: int, config: EnvConfig) -> ActionTy
     return action_index
 
 
-def decode_action(action_index: ActionType, config: EnvConfig) -> Tuple[int, int, int]:
+def decode_action(action_index: ActionType, config: EnvConfig) -> tuple[int, int, int]:
     """Decodes an integer action into (shape_idx, r, c)."""
     if not (0 <= action_index < config.ACTION_DIM):
         raise ValueError(

@@ -1,17 +1,17 @@
 # File: src/visualization/drawing/previews.py
-import pygame
 import logging
-from typing import TYPE_CHECKING, Tuple, Dict, Optional
+from typing import TYPE_CHECKING
+
+import pygame
+
+from src.structs import Shape, Triangle
 
 from ..core import colors, coord_mapper
-
 from .shapes import draw_shape
 
-from src.structs import Triangle, Shape
-
 if TYPE_CHECKING:
-    from src.environment import GameState
     from src.config import EnvConfig, VisConfig
+    from src.environment import GameState
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +19,15 @@ logger = logging.getLogger(__name__)
 def render_previews(
     surface: pygame.Surface,
     game_state: "GameState",
-    area_topleft: Tuple[int, int],
+    area_topleft: tuple[int, int],
     mode: str,  # Keep mode for potential future differences
     env_config: "EnvConfig",
     vis_config: "VisConfig",
     selected_shape_idx: int = -1,  # Add the new parameter with default
-) -> Dict[int, pygame.Rect]:
+) -> dict[int, pygame.Rect]:
     """Renders shape previews in their area. Returns dict {index: screen_rect}."""
     surface.fill(colors.PREVIEW_BG)
-    preview_rects_screen: Dict[int, pygame.Rect] = {}
+    preview_rects_screen: dict[int, pygame.Rect] = {}
     num_slots = env_config.NUM_SHAPE_SLOTS
     pad = vis_config.PREVIEW_PADDING
     inner_pad = vis_config.PREVIEW_INNER_PADDING
@@ -54,7 +54,7 @@ def render_previews(
             slot_rect_screen  # Store screen rect for interaction mapping
         )
 
-        shape: Optional[Shape] = game_state.shapes[i]
+        shape: Shape | None = game_state.shapes[i]
         # Use the passed selected_shape_idx for highlighting
         is_selected = selected_shape_idx == i
 
@@ -172,7 +172,7 @@ def draw_placement_preview(
 def draw_floating_preview(
     surface: pygame.Surface,
     shape: "Shape",
-    screen_pos: Tuple[int, int],  # Position relative to the surface being drawn on
+    screen_pos: tuple[int, int],  # Position relative to the surface being drawn on
     config: "EnvConfig",  # EnvConfig might not be strictly needed here if cell_size is fixed
 ) -> None:
     """Draws a semi-transparent shape floating at the screen position."""

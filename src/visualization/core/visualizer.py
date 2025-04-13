@@ -1,23 +1,23 @@
 # File: src/visualization/core/visualizer.py
-import pygame
 import logging
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+from typing import TYPE_CHECKING
 
-from . import colors, layout, coord_mapper
-
-from ..drawing import grid as grid_drawing
-from ..drawing import previews as preview_drawing
-from ..drawing import hud as hud_drawing
-from ..drawing import highlight as highlight_drawing
-from ..drawing.previews import (
-    draw_placement_preview,
-    draw_floating_preview,
-)  # Import specific functions
+import pygame
 
 from src.structs import Shape  # Import Shape
 
+from ..drawing import grid as grid_drawing
+from ..drawing import highlight as highlight_drawing
+from ..drawing import hud as hud_drawing
+from ..drawing import previews as preview_drawing
+from ..drawing.previews import (
+    draw_floating_preview,
+    draw_placement_preview,
+)  # Import specific functions
+from . import colors, layout
+
 if TYPE_CHECKING:
-    from src.config import VisConfig, EnvConfig
+    from src.config import EnvConfig, VisConfig
     from src.environment.core.game_state import GameState
 
 logger = logging.getLogger(__name__)
@@ -34,18 +34,18 @@ class Visualizer:
         screen: pygame.Surface,
         vis_config: "VisConfig",
         env_config: "EnvConfig",
-        fonts: Dict[str, Optional[pygame.font.Font]],
+        fonts: dict[str, pygame.font.Font | None],
     ):
         self.screen = screen
         self.vis_config = vis_config
         self.env_config = env_config
         self.fonts = fonts
-        self.layout_rects: Optional[Dict[str, pygame.Rect]] = None
-        self.preview_rects: Dict[int, pygame.Rect] = {}  # Cache preview rects
-        self._layout_calculated_for_size: Tuple[int, int] = (0, 0)
+        self.layout_rects: dict[str, pygame.Rect] | None = None
+        self.preview_rects: dict[int, pygame.Rect] = {}  # Cache preview rects
+        self._layout_calculated_for_size: tuple[int, int] = (0, 0)
         self.ensure_layout()  # Initial layout calculation
 
-    def ensure_layout(self) -> Dict[str, pygame.Rect]:
+    def ensure_layout(self) -> dict[str, pygame.Rect]:
         """Returns cached layout or calculates it if needed."""
         current_w, current_h = self.screen.get_size()
         current_size = (current_w, current_h)
@@ -73,11 +73,11 @@ class Visualizer:
         mode: str,
         # Interaction state passed in:
         selected_shape_idx: int = -1,
-        hover_shape: Optional[Shape] = None,
-        hover_grid_coord: Optional[Tuple[int, int]] = None,
+        hover_shape: Shape | None = None,
+        hover_grid_coord: tuple[int, int] | None = None,
         hover_is_valid: bool = False,
-        hover_screen_pos: Optional[Tuple[int, int]] = None,
-        debug_highlight_coord: Optional[Tuple[int, int]] = None,
+        hover_screen_pos: tuple[int, int] | None = None,
+        debug_highlight_coord: tuple[int, int] | None = None,
     ):
         """
         Renders the entire game visualization for interactive modes.
@@ -135,11 +135,11 @@ class Visualizer:
         game_state: "GameState",
         mode: str,
         grid_rect: pygame.Rect,  # Pass grid_rect for hover calculations
-        hover_shape: Optional[Shape],
-        hover_grid_coord: Optional[Tuple[int, int]],
+        hover_shape: Shape | None,
+        hover_grid_coord: tuple[int, int] | None,
         hover_is_valid: bool,
-        hover_screen_pos: Optional[Tuple[int, int]],
-        debug_highlight_coord: Optional[Tuple[int, int]],
+        hover_screen_pos: tuple[int, int] | None,
+        debug_highlight_coord: tuple[int, int] | None,
     ):
         """Renders the main game grid and overlays onto the provided grid_surf."""
         # Background

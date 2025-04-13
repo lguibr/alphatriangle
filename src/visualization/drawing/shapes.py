@@ -1,21 +1,18 @@
+
 import pygame
-from typing import TYPE_CHECKING, Tuple, Optional
+
+from src.structs import Shape, Triangle
 
 from ..core import colors
-
-from src.structs import Triangle, Shape
-
-if TYPE_CHECKING:
-    pass
 
 
 def draw_shape(
     surface: pygame.Surface,
     shape: Shape,
-    topleft: Tuple[int, int],
+    topleft: tuple[int, int],
     cell_size: float,
     is_selected: bool = False,
-    origin_offset: Tuple[int, int] = (0, 0),
+    origin_offset: tuple[int, int] = (0, 0),
 ) -> None:
     """Draws a single shape onto a surface."""
     if not shape or not shape.triangles or cell_size <= 0:

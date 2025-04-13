@@ -1,11 +1,12 @@
 # File: src/interaction/input_handler.py
-import pygame
 import logging
-from typing import TYPE_CHECKING, Optional, Tuple
 
-from . import event_processor, play_mode_handler, debug_mode_handler
+import pygame
+
 from src import environment, visualization
 from src.structs import Shape  # Import Shape
+
+from . import debug_mode_handler, event_processor, play_mode_handler
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +31,11 @@ class InputHandler:
 
         # Interaction state managed here
         self.selected_shape_idx: int = -1
-        self.hover_grid_coord: Optional[Tuple[int, int]] = None
+        self.hover_grid_coord: tuple[int, int] | None = None
         self.hover_is_valid: bool = False
-        self.hover_shape: Optional[Shape] = None
-        self.debug_highlight_coord: Optional[Tuple[int, int]] = None
-        self.mouse_pos: Tuple[int, int] = (0, 0)
+        self.hover_shape: Shape | None = None
+        self.debug_highlight_coord: tuple[int, int] | None = None
+        self.mouse_pos: tuple[int, int] = (0, 0)
 
     def handle_input(self) -> bool:
         """Processes Pygame events and updates state based on mode. Returns False to quit."""

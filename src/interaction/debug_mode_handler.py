@@ -1,12 +1,12 @@
 # File: src/interaction/debug_mode_handler.py
-import pygame
 import logging
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
-from src.visualization import core as vis_core
-from src.environment import core as env_core
+import pygame
+
 from src.environment import grid as env_grid
 from src.structs import Triangle
+from src.visualization import core as vis_core
 
 if TYPE_CHECKING:
     from .input_handler import InputHandler  # Import InputHandler type

@@ -1,9 +1,10 @@
 # File: src/cli.py
-import typer
 import logging
-import sys
 import os
-from typing_extensions import Annotated
+import sys
+from typing import Annotated
+
+import typer
 
 # Ensure the src directory is in the Python path *if running directly*,
 # but this shouldn't be necessary when installed as a package.
@@ -17,12 +18,12 @@ if project_root not in sys.path:
 try:
     from src import config
     from src.app import Application
+    from src.mcts import MCTSConfig  # Import Pydantic MCTSConfig
     from src.training.runners import (
-        run_training_visual_mode,
         run_training_headless_mode,
+        run_training_visual_mode,
     )
     from src.utils import set_random_seeds
-    from src.mcts import MCTSConfig  # Import Pydantic MCTSConfig
 except ImportError as e:
     print(f"ImportError in cli.py: {e}")
     print("This might happen if the package is not installed correctly or")

@@ -1,6 +1,5 @@
-from typing import Optional
-import os
 from pathlib import Path
+
 from pydantic import BaseModel, Field, computed_field
 
 
@@ -36,7 +35,7 @@ class PersistenceConfig(BaseModel):
         abs_path = Path(self.ROOT_DATA_DIR).joinpath(self.MLFLOW_DIR_NAME).resolve()
         return abs_path.as_uri()
 
-    def get_run_base_dir(self, run_name: Optional[str] = None) -> str:
+    def get_run_base_dir(self, run_name: str | None = None) -> str:
         """Gets the base directory for a specific run."""
         name = run_name if run_name else self.RUN_NAME
         return str(Path(self.ROOT_DATA_DIR).joinpath(self.RUNS_DIR_NAME, name))

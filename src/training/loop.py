@@ -1,34 +1,21 @@
 # File: src/training/loop.py
 import logging
-import time
-import threading
 import queue
-import ray
-import torch
-import traceback
+import threading
+import time
 
 # Add Tuple to the import
-from typing import Optional, Dict, Any, List, Set, Tuple
-from collections import deque
+from typing import Any
+
+import numpy as np  # Import numpy
+import ray
 from pydantic import ValidationError
 
-from src.config import (
-    TrainConfig,
-    EnvConfig,
-    MCTSConfig,
-    ModelConfig,
-    PersistenceConfig,
-)
-from src.nn import NeuralNetwork
-from src.rl import ExperienceBuffer, Trainer, SelfPlayWorker, SelfPlayResult
-from src.data import DataManager
-from src.stats import StatsCollectorActor
 from src.environment import GameState
+from src.rl import SelfPlayResult, SelfPlayWorker
 from src.utils import format_eta
-from src.utils.types import StatsCollectorData, Experience, PERBatchSample
+from src.utils.types import Experience, PERBatchSample, StatsCollectorData
 from src.visualization.ui import ProgressBar
-from src.utils.sumtree import SumTree
-import numpy as np  # Import numpy
 
 # Import TrainingComponents type hint
 from .components import TrainingComponents
@@ -51,7 +38,7 @@ class TrainingLoop:
     def __init__(
         self,
         components: "TrainingComponents",
-        visual_state_queue: Optional[queue.Queue[Optional[Dict[int, Any]]]] = None,
+        visual_state_queue: queue.Queue[dict[int, Any] | None] | None = None,
     ):
         self.nn = components.nn
         self.buffer = components.buffer
@@ -74,17 +61,17 @@ class TrainingLoop:
         self.stop_requested = threading.Event()
         self.training_complete = False
         self.target_steps_reached = False
-        self.training_exception: Optional[Exception] = None
+        self.training_exception: Exception | None = None
         self.last_visual_update_time = 0.0
         self.last_stats_fetch_time = 0.0
         self.latest_stats_data: StatsCollectorData = {}
 
-        self.train_step_progress: Optional[ProgressBar] = None
-        self.buffer_fill_progress: Optional[ProgressBar] = None
+        self.train_step_progress: ProgressBar | None = None
+        self.buffer_fill_progress: ProgressBar | None = None
 
-        self.workers: List[Optional[ray.actor.ActorHandle]] = []
-        self.worker_tasks: Dict[ray.ObjectRef, int] = {}
-        self.active_worker_indices: Set[int] = set()
+        self.workers: list[ray.actor.ActorHandle | None] = []
+        self.worker_tasks: dict[ray.ObjectRef, int] = {}
+        self.active_worker_indices: set[int] = set()
 
         logger.info("TrainingLoop initialized.")
 
@@ -260,7 +247,7 @@ class TrainingLoop:
         self.last_visual_update_time = current_time
 
         # Fetch latest worker states from the collector actor
-        latest_worker_states: Dict[int, GameState] = {}
+        latest_worker_states: dict[int, GameState] = {}
         try:
             states_ref = self.stats_collector_actor.get_latest_worker_states.remote()
             latest_worker_states = ray.get(states_ref, timeout=VIS_STATE_FETCH_TIMEOUT)
@@ -279,7 +266,7 @@ class TrainingLoop:
         self._fetch_latest_stats()
 
         # Extract per-worker step stats from the fetched metrics data
-        worker_step_stats: Dict[int, Dict[str, Any]] = {}
+        worker_step_stats: dict[int, dict[str, Any]] = {}
         active_worker_ids_copy = self.active_worker_indices.copy()
         for worker_id in active_worker_ids_copy:
             worker_stats = {}
@@ -309,7 +296,7 @@ class TrainingLoop:
                 worker_step_stats[worker_id] = worker_stats
 
         # Assemble the data dictionary for the queue
-        visual_data: Dict[int, Any] = {}
+        visual_data: dict[int, Any] = {}
 
         # Add worker states (already copies from the actor)
         for worker_id, state in latest_worker_states.items():
@@ -360,8 +347,8 @@ class TrainingLoop:
             logger.error(f"Error putting state dict in visual queue: {qe}")
 
     def _validate_experiences(
-        self, experiences: List[Experience]
-    ) -> Tuple[List[Experience], int]:
+        self, experiences: list[Experience]
+    ) -> tuple[list[Experience], int]:
         """Validates the structure and content of experiences."""
         valid_experiences = []
         invalid_count = 0
@@ -482,13 +469,13 @@ class TrainingLoop:
         """Runs one training step."""
         if not self.buffer.is_ready():
             return False
-        per_sample: Optional[PERBatchSample] = self.buffer.sample(
+        per_sample: PERBatchSample | None = self.buffer.sample(
             self.train_config.BATCH_SIZE, current_train_step=self.global_step
         )
         if not per_sample:
             return False
 
-        train_result: Optional[Tuple[Dict[str, float], np.ndarray]] = (
+        train_result: tuple[dict[str, float], np.ndarray] | None = (
             self.trainer.train_step(per_sample)
         )
         if train_result:

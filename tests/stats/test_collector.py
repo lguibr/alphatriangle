@@ -1,10 +1,10 @@
 # File: tests/stats/test_collector.py
+import logging  # <-- Import the logging module
+from collections import deque
+
+import cloudpickle  # Use cloudpickle for state serialization test
 import pytest
 import ray
-import time
-from collections import deque
-import cloudpickle  # Use cloudpickle for state serialization test
-import logging  # <-- Import the logging module
 
 from src.stats import StatsCollectorActor
 

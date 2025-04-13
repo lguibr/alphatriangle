@@ -1,7 +1,4 @@
-from typing import Tuple, Optional, List, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    pass
 
 
 class Triangle:
@@ -13,15 +10,15 @@ class Triangle:
         self.is_up = is_up
         self.is_death = is_death
         self.is_occupied = is_death
-        self.color: Optional[Tuple[int, int, int]] = None
+        self.color: tuple[int, int, int] | None = None
 
-        self.neighbor_left: Optional["Triangle"] = None
-        self.neighbor_right: Optional["Triangle"] = None
-        self.neighbor_vert: Optional["Triangle"] = None
+        self.neighbor_left: Triangle | None = None
+        self.neighbor_right: Triangle | None = None
+        self.neighbor_vert: Triangle | None = None
 
     def get_points(
         self, ox: float, oy: float, cw: float, ch: float
-    ) -> List[Tuple[float, float]]:
+    ) -> list[tuple[float, float]]:
         """Calculates vertex points for drawing, relative to origin (ox, oy)."""
         x = ox + self.col * (cw * 0.75)
         y = oy + self.row * ch

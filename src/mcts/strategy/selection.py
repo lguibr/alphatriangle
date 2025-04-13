@@ -1,13 +1,12 @@
 # File: src/mcts/strategy/selection.py
-import math
-import numpy as np
 import logging
-import random
-from typing import TYPE_CHECKING, Tuple, Optional
+import math
 
-from ..core.node import Node
+import numpy as np
 
 from src.config import MCTSConfig
+
+from ..core.node import Node
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ def calculate_puct_score(
     child_node: Node,
     parent_visit_count: int,
     config: MCTSConfig,
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     """Calculates the PUCT score and its components for a child node."""
     q_value = child_node.value_estimate
     prior = child_node.prior_probability
@@ -104,7 +103,7 @@ def select_child_node(node: Node, config: MCTSConfig) -> Node:
         raise SelectionError(f"Cannot select child from node {node} with no children.")
 
     best_score = -float("inf")
-    best_child: Optional[Node] = None
+    best_child: Node | None = None
     child_scores_log = []
 
     if logger.isEnabledFor(logging.DEBUG):
@@ -151,7 +150,7 @@ def select_child_node(node: Node, config: MCTSConfig) -> Node:
             child_scores_log.sort(key=get_score_from_log, reverse=True)
         except Exception as sort_err:
             logger.warning(f"Could not sort child score logs: {sort_err}")
-        logger.debug(f"    [Select] All Child Scores Considered (Top 5):")
+        logger.debug("    [Select] All Child Scores Considered (Top 5):")
         for log_line in child_scores_log[:5]:  # Log only top 5 scores
             logger.debug(f"      {log_line}")
 
@@ -174,7 +173,7 @@ def select_child_node(node: Node, config: MCTSConfig) -> Node:
     return best_child
 
 
-def traverse_to_leaf(root_node: Node, config: MCTSConfig) -> Tuple[Node, int]:
+def traverse_to_leaf(root_node: Node, config: MCTSConfig) -> tuple[Node, int]:
     """
     Traverses the tree from root to a leaf node using PUCT selection.
     A leaf is defined as a node that is not expanded OR is terminal.

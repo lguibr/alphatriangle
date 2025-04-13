@@ -1,14 +1,13 @@
 import logging
+
 from pydantic import ValidationError
 
 from .env_config import EnvConfig
+from .mcts_config import MCTSConfig
 from .model_config import ModelConfig
+from .persistence_config import PersistenceConfig
 from .train_config import TrainConfig
 from .vis_config import VisConfig
-from .persistence_config import PersistenceConfig
-from .app_config import APP_NAME
-
-from .mcts_config import MCTSConfig
 
 logger = logging.getLogger(__name__)
 

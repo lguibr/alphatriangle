@@ -1,10 +1,11 @@
-from typing import Dict, Tuple, Protocol, TYPE_CHECKING, Mapping
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Protocol
 
 from src.utils.types import PolicyValueOutput
 
 if TYPE_CHECKING:
     from src.environment import GameState
-    from src.utils.types import ActionType, StateType
+    from src.utils.types import ActionType
 
 ActionPolicyMapping = Mapping["ActionType", float]
 

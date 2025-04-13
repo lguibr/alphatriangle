@@ -1,20 +1,16 @@
-import random
 import logging
-import numpy as np
+import random
 from collections import deque
-from typing import List, Optional, Tuple
 
+import numpy as np
+
+from ...config import TrainConfig
+from ...utils.sumtree import SumTree
 from ...utils.types import (
     Experience,
     ExperienceBatch,
-    PolicyTargetMapping,
     PERBatchSample,
-    StateType,
 )
-from ...config import TrainConfig
-
-from ...utils.sumtree import SumTree
-
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +58,7 @@ class ExperienceBuffer:
         else:
             self.buffer.append(experience)
 
-    def add_batch(self, experiences: List[Experience]):
+    def add_batch(self, experiences: list[Experience]):
         """Adds a batch of experiences. Uses max priority if PER is enabled."""
         if self.use_per:
             max_p = self.tree.max_priority
@@ -80,8 +76,8 @@ class ExperienceBuffer:
         return beta
 
     def sample(
-        self, batch_size: int, current_train_step: Optional[int] = None
-    ) -> Optional[PERBatchSample]:
+        self, batch_size: int, current_train_step: int | None = None
+    ) -> PERBatchSample | None:
         """
         Samples a batch of experiences.
         Uses prioritized sampling if PER is enabled, otherwise uniform.
@@ -177,7 +173,7 @@ class ExperienceBuffer:
             )
             priorities = np.maximum(priorities, self.per_epsilon)
 
-        for idx, p in zip(tree_indices, priorities):
+        for idx, p in zip(tree_indices, priorities, strict=False):
             if not (0 <= idx < len(self.tree.tree)):
                 logger.error(f"Invalid tree index {idx} provided for priority update.")
                 continue

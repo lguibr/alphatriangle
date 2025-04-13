@@ -1,11 +1,9 @@
 # File: src/utils/helpers.py
-import torch
-import numpy as np
-import random
-import os
-import math
-from typing import Optional, Tuple
 import logging
+import random
+
+import numpy as np
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +46,7 @@ def set_random_seeds(seed: int = 42):
     logger.info(f"Set random seeds to {seed}")
 
 
-def format_eta(seconds: Optional[float]) -> str:
+def format_eta(seconds: float | None) -> str:
     """Formats seconds into a human-readable HH:MM:SS or MM:SS string."""
     if seconds is None or not np.isfinite(seconds) or seconds < 0:
         return "N/A"
@@ -67,8 +65,8 @@ def format_eta(seconds: Optional[float]) -> str:
 
 
 def normalize_color_for_matplotlib(
-    color_tuple_0_255: Tuple[int, int, int],
-) -> Tuple[float, float, float]:
+    color_tuple_0_255: tuple[int, int, int],
+) -> tuple[float, float, float]:
     """Converts RGB tuple (0-255) to Matplotlib format (0.0-1.0)."""
     if isinstance(color_tuple_0_255, tuple) and len(color_tuple_0_255) == 3:
         # Ensure values are within 0-255 before dividing

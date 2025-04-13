@@ -1,24 +1,26 @@
 # File: src/visualization/core/dashboard_renderer.py
-import pygame
 import logging
 import math
-import ray
-from typing import TYPE_CHECKING, Dict, Optional, Any, List, Tuple
 from collections import deque
+from typing import TYPE_CHECKING, Any, Optional
 
-from . import colors, layout
-from .game_renderer import GameRenderer
-from ..ui import ProgressBar
-from ..drawing import hud as hud_drawing
+import pygame
+
+from src.environment import GameState
+from src.stats import StatsCollectorData  # Keep this import
 
 # Import Plotter directly from its module
 from src.stats.plotter import Plotter
-from src.stats import StatsCollectorData  # Keep this import
-from src.environment import GameState
+
+from ..drawing import hud as hud_drawing
+from ..ui import ProgressBar
+from . import colors, layout
+from .game_renderer import GameRenderer
 
 if TYPE_CHECKING:
-    from ...config import VisConfig, EnvConfig, ModelConfig  # Add ModelConfig
     from src.stats import StatsCollectorActor
+
+    from ...config import EnvConfig, ModelConfig, VisConfig  # Add ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ class DashboardRenderer:
         screen: pygame.Surface,
         vis_config: "VisConfig",
         env_config: "EnvConfig",
-        fonts: Dict[str, Optional[pygame.font.Font]],
+        fonts: dict[str, pygame.font.Font | None],
         stats_collector_actor: Optional["StatsCollectorActor"] = None,  # Keep handle
         model_config: Optional["ModelConfig"] = None,  # Add model_config
     ):
@@ -45,8 +47,8 @@ class DashboardRenderer:
         self.fonts = fonts
         self.stats_collector_actor = stats_collector_actor  # Store handle
         self.model_config = model_config  # Store model config
-        self.layout_rects: Optional[Dict[str, pygame.Rect]] = None
-        self.worker_sub_rects: Dict[int, pygame.Rect] = {}
+        self.layout_rects: dict[str, pygame.Rect] | None = None
+        self.worker_sub_rects: dict[int, pygame.Rect] = {}
         self.last_worker_grid_size = (0, 0)
         self.last_num_workers = 0
 
@@ -64,7 +66,7 @@ class DashboardRenderer:
         self.model_info_height = 60  # Reserve space for model info text
         self.model_info_padding = 5
 
-        self._layout_calculated_for_size: Tuple[int, int] = (0, 0)
+        self._layout_calculated_for_size: tuple[int, int] = (0, 0)
         self.ensure_layout()
 
     def ensure_layout(self):
@@ -98,7 +100,7 @@ class DashboardRenderer:
         return self.layout_rects
 
     def _calculate_worker_sub_layout(
-        self, worker_grid_area: pygame.Rect, worker_ids: List[int]
+        self, worker_grid_area: pygame.Rect, worker_ids: list[int]
     ):
         """Calculates the grid layout within the worker_grid_area."""
         area_w, area_h = worker_grid_area.size
@@ -186,7 +188,7 @@ class DashboardRenderer:
             self.screen.blit(surf, (x_offset, y))
             return y + line_height
 
-        current_y = render_line(f"Model Config:", y_offset)
+        current_y = render_line("Model Config:", y_offset)
         current_y = render_line(
             f"  CNN Filters: {self.model_config.CONV_FILTERS}", current_y
         )
@@ -200,7 +202,7 @@ class DashboardRenderer:
                 current_y,
             )
         else:
-            current_y = render_line(f"  Transformer: Disabled", current_y)
+            current_y = render_line("  Transformer: Disabled", current_y)
         # Only render next line if space permits
         if current_y + line_height <= area_rect.bottom - 5:
             current_y = render_line(
@@ -215,8 +217,8 @@ class DashboardRenderer:
 
     def render(
         self,
-        worker_states: Dict[int, GameState],
-        global_stats: Optional[Dict[str, Any]] = None,
+        worker_states: dict[int, GameState],
+        global_stats: dict[str, Any] | None = None,
     ):
         """Renders the entire training dashboard."""
         self.screen.fill(colors.DARK_GRAY)
@@ -272,7 +274,7 @@ class DashboardRenderer:
             # Render Plots
             plot_surface = None
             if plots_rect and plots_rect.width > 0 and plots_rect.height > 0:
-                stats_data_for_plot: Optional[StatsCollectorData] = global_stats.get(
+                stats_data_for_plot: StatsCollectorData | None = global_stats.get(
                     "stats_data"
                 )
 

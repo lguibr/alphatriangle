@@ -1,23 +1,22 @@
 # File: src/stats/plotter.py
-import pygame
-from typing import Dict, Optional, Deque, Tuple, List
-from collections import deque
-import matplotlib
-import time
-from io import BytesIO
 import logging
+import time
+from collections import deque
+from io import BytesIO
+
+import matplotlib
 import numpy as np
+import pygame
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from .collector import StatsCollectorData
-
 # Import normalize_color_for_matplotlib from the new location
 from src.utils.helpers import normalize_color_for_matplotlib
-from .plot_utils import render_single_plot  # Keep this import
-
 from src.visualization.core import colors as vis_colors
+
+from .collector import StatsCollectorData
+from .plot_utils import render_single_plot  # Keep this import
 
 logger = logging.getLogger(__name__)
 
@@ -26,22 +25,22 @@ class Plotter:
     """Handles creation and caching of the multi-plot Matplotlib surface."""
 
     def __init__(self, plot_update_interval: float = 0.5):
-        self.plot_surface_cache: Optional[pygame.Surface] = None
+        self.plot_surface_cache: pygame.Surface | None = None
         self.last_plot_update_time: float = 0.0
         self.plot_update_interval: float = plot_update_interval
-        self.rolling_window_sizes: List[int] = [10, 50, 100, 500, 1000, 5000]
+        self.rolling_window_sizes: list[int] = [10, 50, 100, 500, 1000, 5000]
         self.colors = self._init_colors()
 
-        self.fig: Optional[plt.Figure] = None
-        self.axes: Optional[np.ndarray] = None
-        self.last_target_size: Tuple[int, int] = (0, 0)
-        self.last_data_hash: Optional[int] = None
+        self.fig: plt.Figure | None = None
+        self.axes: np.ndarray | None = None
+        self.last_target_size: tuple[int, int] = (0, 0)
+        self.last_data_hash: int | None = None
 
         logger.info(
             f"[Plotter] Initialized with update interval: {self.plot_update_interval}s"
         )
 
-    def _init_colors(self) -> Dict[str, Tuple[float, float, float]]:
+    def _init_colors(self) -> dict[str, tuple[float, float, float]]:
         """Initializes plot colors using vis_colors."""
         return {
             "SelfPlay/Episode_Score": normalize_color_for_matplotlib(vis_colors.YELLOW),
@@ -134,13 +133,13 @@ class Plotter:
                 ("MCTS/Avg_Tree_Depth", "Tree Depth", False),
             ]
 
-            data_values: Dict[str, List[float]] = {}
-            data_steps: Dict[str, List[int]] = {}
+            data_values: dict[str, list[float]] = {}
+            data_steps: dict[str, list[int]] = {}
             has_any_data = False
             for key, _, _ in plot_defs:
                 dq = plot_data.get(key, deque())
                 if dq:
-                    steps, values = zip(*dq)
+                    steps, values = zip(*dq, strict=False)
                     data_values[key] = list(values)
                     data_steps[key] = list(steps)
                     if values:
@@ -212,7 +211,7 @@ class Plotter:
 
     def _render_figure_to_surface(
         self, target_width: int, target_height: int
-    ) -> Optional[pygame.Surface]:
+    ) -> pygame.Surface | None:
         """Renders the current Matplotlib figure to a Pygame surface."""
         if self.fig is None:
             logger.warning("[Plotter] Cannot render figure, not initialized.")
@@ -250,7 +249,7 @@ class Plotter:
 
     def get_plot_surface(
         self, plot_data: StatsCollectorData, target_width: int, target_height: int
-    ) -> Optional[pygame.Surface]:
+    ) -> pygame.Surface | None:
         """Returns the cached plot surface or creates/updates one if needed."""
         current_time = time.time()
         has_data = any(

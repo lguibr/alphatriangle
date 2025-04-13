@@ -1,5 +1,5 @@
+
 import numpy as np
-from typing import Tuple
 
 from .types import Experience
 
@@ -43,7 +43,7 @@ class SumTree:
             tree_idx = (tree_idx - 1) // 2
             self.tree[tree_idx] += change
 
-    def get_leaf(self, value: float) -> Tuple[int, float, Experience]:
+    def get_leaf(self, value: float) -> tuple[int, float, Experience]:
         """Finds the leaf node corresponding to a given value (for sampling)."""
         parent_idx = 0
         while True:

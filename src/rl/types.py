@@ -1,17 +1,14 @@
 # File: src/rl/types.py
-from typing import List, Tuple, Dict, Any, TYPE_CHECKING
-from pydantic import BaseModel, ConfigDict, Field, model_validator, ValidationError
-import numpy as np
 import logging
 
+import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 from src.utils.types import (
-    Experience,
-    StateType,  # Import StateType for validation check
+    Experience,  # Import StateType for validation check
 )
 
 # Import GameState only for type checking if needed, but it's removed from the model now
-if TYPE_CHECKING:
-    from src.environment import GameState
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +20,7 @@ class SelfPlayResult(BaseModel):
 
     model_config = arbitrary_types_config
 
-    episode_experiences: List[Experience]
+    episode_experiences: list[Experience]
     final_score: float
     episode_steps: int
     # final_game_state: GameState # REMOVED - No longer returned directly

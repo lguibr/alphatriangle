@@ -1,17 +1,16 @@
 # File: src/stats/plot_utils.py
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator, FuncFormatter
-from typing import List, Tuple, Optional
 import logging
 
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.ticker import FuncFormatter, MaxNLocator
+
 # Import normalize_color_for_matplotlib from the new location
-from src.utils.helpers import normalize_color_for_matplotlib
 
 logger = logging.getLogger(__name__)
 
 
-def calculate_rolling_average(data: List[float], window: int) -> List[float]:
+def calculate_rolling_average(data: list[float], window: int) -> list[float]:
     """Calculates the rolling average with handling for edges."""
     if not data or window <= 0:
         return []
@@ -28,8 +27,8 @@ def calculate_rolling_average(data: List[float], window: int) -> List[float]:
 
 
 def calculate_trend_line(
-    steps: List[int], values: List[float]
-) -> Tuple[List[int], List[float]]:
+    steps: list[int], values: list[float]
+) -> tuple[list[int], list[float]]:
     """Calculates a simple linear trend line."""
     if len(steps) < 2:
         return [], []
@@ -60,14 +59,14 @@ def format_value(value: float) -> str:
 
 def render_single_plot(
     ax: plt.Axes,
-    steps: List[int],
-    values: List[float],
+    steps: list[int],
+    values: list[float],
     label: str,
-    color: Tuple[float, float, float],
-    placeholder_color: Tuple[float, float, float],
-    rolling_window_sizes: List[int],
+    color: tuple[float, float, float],
+    placeholder_color: tuple[float, float, float],
+    rolling_window_sizes: list[int],
     show_placeholder: bool = False,
-    placeholder_text: Optional[str] = None,
+    placeholder_text: str | None = None,
     y_log_scale: bool = False,
 ):
     """Renders a single metric plot onto a Matplotlib Axes object."""

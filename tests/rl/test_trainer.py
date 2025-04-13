@@ -9,17 +9,8 @@ from src.nn import NeuralNetwork
 from src.config import TrainConfig, EnvConfig, ModelConfig
 from src.utils.types import Experience, StateType, PERBatchSample
 
-# REMOVED: from ..mcts.conftest import ( # Import shared fixtures
-#     mock_env_config,
-#     mock_model_config,
-#     mock_train_config,
-#     # mock_nn_interface, # Remove this - create it locally
-#     mock_experience,
-#     mock_state_type,
-#     filled_mock_buffer, # Use filled buffer fixture
-# )
-# Import only needed fixtures from mcts conftest
-from tests.mcts.conftest import mock_experience, mock_state_type
+# REMOVED: Import only needed fixtures from mcts conftest
+# from tests.mcts.conftest import mock_experience, mock_state_type
 
 # --- Fixtures ---
 
@@ -53,13 +44,15 @@ def train_config_per(mock_train_config: TrainConfig) -> TrainConfig:
 
 @pytest.fixture
 def nn_interface(
-    model_config: ModelConfig, env_config: EnvConfig, train_config_uniform: TrainConfig
+    mock_model_config: ModelConfig,
+    env_config: EnvConfig,
+    train_config_uniform: TrainConfig,
 ) -> NeuralNetwork:
     """Provides a NeuralNetwork instance for testing, configured for uniform buffer."""
     # Use train_config_uniform here, or make it parameterizable if needed
     device = torch.device("cpu")  # Use CPU for testing
     nn_interface_instance = NeuralNetwork(
-        model_config, env_config, train_config_uniform, device
+        mock_model_config, env_config, train_config_uniform, device
     )
     # Ensure model is on CPU for testing consistency
     nn_interface_instance.model.to(device)
@@ -87,6 +80,7 @@ def trainer_per(
     return Trainer(nn_interface, train_config_per, env_config)
 
 
+# Use mock_experience implicitly from tests/conftest.py
 @pytest.fixture
 def buffer_uniform(
     train_config_uniform: TrainConfig, mock_experience: Experience
@@ -100,6 +94,7 @@ def buffer_uniform(
     return buffer
 
 
+# Use mock_experience implicitly from tests/conftest.py
 @pytest.fixture
 def buffer_per(
     train_config_per: TrainConfig, mock_experience: Experience
@@ -124,6 +119,7 @@ def test_trainer_initialization(trainer_uniform: Trainer):
     assert hasattr(trainer_uniform, "scheduler")
 
 
+# Use mock_experience implicitly from tests/conftest.py
 def test_prepare_batch(trainer_uniform: Trainer, mock_experience: Experience):
     """Test the internal _prepare_batch method."""
     batch_size = trainer_uniform.train_config.BATCH_SIZE

@@ -1,12 +1,14 @@
 # File: src/app.py
-import pygame
-import sys
 import logging
-from . import config, utils
 
-from . import visualization
-from . import environment
-from . import interaction  # Import the interaction module
+import pygame
+
+from . import (
+    config,
+    environment,
+    interaction,  # Import the interaction module
+    visualization,
+)
 
 logger = logging.getLogger(__name__)
 

@@ -1,9 +1,9 @@
+import math
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import List, Tuple, Optional
-from src.config import ModelConfig, EnvConfig
-import math
+
+from src.config import EnvConfig, ModelConfig
 
 
 def conv_block(
@@ -225,7 +225,7 @@ class AlphaTriangleNet(nn.Module):
 
     def forward(
         self, grid_state: torch.Tensor, other_features: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass through the network.
         Returns: (policy_logits, value)

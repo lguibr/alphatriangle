@@ -1,13 +1,13 @@
 # File: tests/nn/test_network.py
+from unittest.mock import MagicMock, patch
+
+import numpy as np
 import pytest
 import torch
-import numpy as np
-from unittest.mock import patch, MagicMock
 
-from src.nn import NeuralNetwork, AlphaTriangleNet
-from src.config import ModelConfig, EnvConfig, TrainConfig
-from src.environment import GameState
-from src.utils.types import StateType, PolicyValueOutput
+from src.config import EnvConfig, ModelConfig, TrainConfig
+from src.nn import AlphaTriangleNet, NeuralNetwork
+from src.utils.types import StateType
 
 # REMOVED: from ..mcts.conftest import mock_env_config, mock_model_config, mock_train_config, MockGameState # Import shared fixtures
 from tests.mcts.conftest import MockGameState  # Import only MockGameState

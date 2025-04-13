@@ -1,21 +1,20 @@
 # File: tests/mcts/test_selection.py
-import pytest
-import numpy as np
 import math
 
-# Import necessary components and fixtures
-from src.mcts.strategy import selection
-from src.mcts.core.node import Node
-from .conftest import (  # Import from conftest (local fixtures)
-    root_node_mock_state,
-    expanded_node_mock_state,
-    MockGameState,
-    EnvConfig,  # Keep EnvConfig type hint if needed
-    deep_expanded_node_mock_state,  # Import modified fixture
-)
+import numpy as np
+import pytest
 
 # Import session-scoped fixtures implicitly via pytest injection
 from src.config import MCTSConfig  # Keep MCTSConfig type hint if needed
+from src.mcts.core.node import Node
+
+# Import necessary components and fixtures
+from src.mcts.strategy import selection
+
+from .conftest import (  # Import from conftest (local fixtures)
+    EnvConfig,  # Keep EnvConfig type hint if needed
+    MockGameState,
+)
 
 
 # --- Test PUCT Calculation ---

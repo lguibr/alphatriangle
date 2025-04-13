@@ -1,21 +1,16 @@
 # File: tests/environment/test_shape_logic.py
-import pytest
 import random
-from typing import List, Tuple, Set
 
 from src.environment.core.game_state import GameState
-from src.environment.grid.grid_data import GridData
-from src.config import EnvConfig
-from src.structs import Shape, Triangle, SHAPE_COLORS  # Import SHAPE_COLORS
 
 # Correct the import name here
 from src.environment.shapes.logic import (
-    generate_random_shape,
-    refill_shape_slots,
-    is_shape_connected,
-    get_neighbors,
     PREDEFINED_SHAPE_TEMPLATES,  # Use the correct name
+    get_neighbors,
+    is_shape_connected,
+    refill_shape_slots,
 )
+from src.structs import Shape  # Import SHAPE_COLORS
 
 
 def test_refill_shape_slots_empty(game_state: GameState):
@@ -47,7 +42,7 @@ def test_is_shape_connected():
     assert is_shape_connected(single), "Single triangle should be connected"
 
     # Empty list
-    empty: List[Tuple[int, int, bool]] = []
+    empty: list[tuple[int, int, bool]] = []
     assert is_shape_connected(empty), "Empty list should be connected"
 
     # More complex connected shape

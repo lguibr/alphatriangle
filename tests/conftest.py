@@ -2,7 +2,17 @@
 # Top-level conftest for sharing session-scoped fixtures
 import pytest
 import torch
+import torch.optim as optim  # Added for mock_optimizer
+import numpy as np  # Added for mock_state_type
+import random  # Added for mock_experience
+from collections import deque  # Added for filled_mock_buffer
+
 from src.config import EnvConfig, ModelConfig, TrainConfig, MCTSConfig
+
+# Added imports for moved fixtures
+from src.utils.types import StateType, Experience
+from src.nn import NeuralNetwork, AlphaTriangleNet
+from src.rl import ExperienceBuffer, Trainer
 
 
 @pytest.fixture(scope="session")
@@ -58,3 +68,94 @@ def mock_mcts_config() -> MCTSConfig:
         dirichlet_epsilon=0.25,
         max_search_depth=10,
     )
+
+
+# --- Fixtures Moved from tests/mcts/conftest.py ---
+
+
+@pytest.fixture(scope="session")  # Make session-scoped if appropriate
+def mock_state_type(
+    mock_model_config: ModelConfig, mock_env_config: EnvConfig
+) -> StateType:
+    """Creates a mock StateType dictionary with correct shapes."""
+    grid_shape = (
+        mock_model_config.GRID_INPUT_CHANNELS,
+        mock_env_config.ROWS,
+        mock_env_config.COLS,
+    )
+    other_shape = (mock_model_config.OTHER_NN_INPUT_FEATURES_DIM,)
+    return {
+        "grid": np.random.rand(*grid_shape).astype(np.float32),
+        "other_features": np.random.rand(*other_shape).astype(np.float32),
+    }
+
+
+@pytest.fixture(scope="session")  # Make session-scoped if appropriate
+def mock_experience(
+    mock_state_type: StateType, mock_env_config: EnvConfig
+) -> Experience:
+    """Creates a mock Experience tuple."""
+    policy_target = (
+        {a: 1.0 / mock_env_config.ACTION_DIM for a in range(mock_env_config.ACTION_DIM)}
+        if mock_env_config.ACTION_DIM > 0
+        else {0: 1.0}
+    )
+    value_target = random.uniform(-1, 1)
+    return (mock_state_type, policy_target, value_target)
+
+
+@pytest.fixture(scope="session")  # Make session-scoped if appropriate
+def mock_nn_interface(
+    mock_model_config: ModelConfig,
+    mock_env_config: EnvConfig,
+    mock_train_config: TrainConfig,
+) -> NeuralNetwork:
+    """Provides a NeuralNetwork instance with a mock model for testing."""
+    device = torch.device("cpu")  # Use CPU for testing
+    nn_interface = NeuralNetwork(
+        mock_model_config, mock_env_config, mock_train_config, device
+    )
+    # Optionally replace internal model with a simpler mock if needed,
+    # but using the actual AlphaTriangleNet with simple config is often better.
+    return nn_interface
+
+
+@pytest.fixture(scope="session")  # Make session-scoped if appropriate
+def mock_trainer(
+    mock_nn_interface: NeuralNetwork,
+    mock_train_config: TrainConfig,
+    mock_env_config: EnvConfig,
+) -> Trainer:
+    """Provides a Trainer instance."""
+    return Trainer(mock_nn_interface, mock_train_config, mock_env_config)
+
+
+@pytest.fixture(scope="session")  # Make session-scoped if appropriate
+def mock_optimizer(mock_trainer: Trainer) -> optim.Optimizer:
+    """Provides the optimizer from the mock_trainer."""
+    return mock_trainer.optimizer
+
+
+@pytest.fixture  # Buffer should likely be function-scoped unless state doesn't matter
+def mock_experience_buffer(mock_train_config: TrainConfig) -> ExperienceBuffer:
+    """Provides an ExperienceBuffer instance."""
+    return ExperienceBuffer(mock_train_config)
+
+
+@pytest.fixture  # Buffer should likely be function-scoped unless state doesn't matter
+def filled_mock_buffer(
+    mock_experience_buffer: ExperienceBuffer, mock_experience: Experience
+) -> ExperienceBuffer:
+    """Provides a buffer filled with some mock experiences."""
+    for i in range(mock_experience_buffer.min_size_to_train + 5):
+        # Create slightly different experiences
+        state_copy = {k: v.copy() for k, v in mock_experience[0].items()}
+        # Ensure grid is writeable before modifying
+        if not state_copy["grid"].flags.writeable:
+            state_copy["grid"] = state_copy["grid"].copy()
+        state_copy["grid"] += (
+            np.random.randn(*state_copy["grid"].shape).astype(np.float32) * 0.1
+        )
+        exp_copy = (state_copy, mock_experience[1], random.uniform(-1, 1))
+        mock_experience_buffer.add(exp_copy)
+    return mock_experience_buffer

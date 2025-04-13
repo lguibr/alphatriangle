@@ -1,6 +1,6 @@
-import pygame
 import logging
-from typing import Dict, Optional
+
+import pygame
 
 logger = logging.getLogger(__name__)
 
@@ -8,7 +8,7 @@ DEFAULT_FONT_NAME = None
 FALLBACK_FONT_NAME = "arial,freesans"
 
 
-def load_single_font(name: Optional[str], size: int) -> Optional[pygame.font.Font]:
+def load_single_font(name: str | None, size: int) -> pygame.font.Font | None:
     """Loads a single font, handling potential errors."""
     try:
         font = pygame.font.SysFont(name, size)
@@ -28,8 +28,8 @@ def load_single_font(name: Optional[str], size: int) -> Optional[pygame.font.Fon
 
 
 def load_fonts(
-    font_sizes: Optional[Dict[str, int]] = None,
-) -> Dict[str, Optional[pygame.font.Font]]:
+    font_sizes: dict[str, int] | None = None,
+) -> dict[str, pygame.font.Font | None]:
     """Loads standard game fonts."""
     if font_sizes is None:
         font_sizes = {
@@ -39,7 +39,7 @@ def load_fonts(
             "title": 48,
         }
 
-    fonts: Dict[str, Optional[pygame.font.Font]] = {}
+    fonts: dict[str, pygame.font.Font | None] = {}
     required_fonts = ["score", "help"]
 
     logger.info("Loading fonts...")

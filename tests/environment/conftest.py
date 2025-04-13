@@ -1,7 +1,8 @@
 # File: tests/environment/conftest.py
+
 import pytest
-import random
-from src.environment import GameState, EnvConfig
+
+from src.environment import EnvConfig, GameState
 from src.structs import Shape  # Import Shape
 
 
@@ -38,7 +39,7 @@ def game_state_with_fixed_shapes(default_env_config: EnvConfig) -> GameState:
         ),  # Domino (matches grid at 0,0 and 0,1)
     ]
     # This fixture now guarantees NUM_SHAPE_SLOTS is 3
-    assert gs.env_config.NUM_SHAPE_SLOTS == len(fixed_shapes)
+    assert len(fixed_shapes) == gs.env_config.NUM_SHAPE_SLOTS
 
     for i in range(len(fixed_shapes)):
         gs.shapes[i] = fixed_shapes[i]

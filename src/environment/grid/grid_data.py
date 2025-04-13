@@ -1,21 +1,21 @@
 # File: src/environment/grid/grid_data.py
-import numpy as np
-from typing import List, Tuple, Set, Dict, Optional
 import logging
+
+import numpy as np
+
+# Import Triangle from structs
+from src.structs import Triangle
 
 from ...config import EnvConfig
 
 # Import logic functions needed within this file
 from . import logic as GridLogic
 
-# Import Triangle from structs
-from src.structs import Triangle
-
 logger = logging.getLogger(__name__)
 
 
 # --- Line Precomputation (Moved here to break circular import) ---
-def _precompute_lines(config: EnvConfig) -> List[List[Tuple[int, int]]]:
+def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
     """
     Generates all potential horizontal and diagonal lines based on grid geometry.
     Returns a list of lines, where each line is a list of (row, col) tuples.
@@ -25,7 +25,7 @@ def _precompute_lines(config: EnvConfig) -> List[List[Tuple[int, int]]]:
     min_len = config.MIN_LINE_LENGTH
 
     # Create a temporary grid to easily access triangles by (r, c)
-    temp_grid: List[List[Optional[Triangle]]] = [
+    temp_grid: list[list[Triangle | None]] = [
         [None for _ in range(cols)] for _ in range(rows)
     ]
     playable_mask = np.zeros((rows, cols), dtype=bool)
@@ -58,7 +58,7 @@ def _precompute_lines(config: EnvConfig) -> List[List[Tuple[int, int]]]:
     temp_grid_data = TempGridHolder(rows, cols, temp_grid)
     GridLogic.link_neighbors(temp_grid_data)  # Link neighbors on temp grid
 
-    visited_in_line: Set[Tuple[int, int, str]] = set()  # (r, c, direction)
+    visited_in_line: set[tuple[int, int, str]] = set()  # (r, c, direction)
 
     for r_start in range(rows):
         for c_start in range(cols):
@@ -142,7 +142,7 @@ class GridData:
         self.rows = config.ROWS
         self.cols = config.COLS
         self.config = config
-        self.triangles: List[List[Triangle]] = self._create(config)
+        self.triangles: list[list[Triangle]] = self._create(config)
         GridLogic.link_neighbors(self)  # Use logic from logic.py
 
         self._occupied_np = np.array(
@@ -152,15 +152,15 @@ class GridData:
             [[t.is_death for t in r] for r in self.triangles], dtype=bool
         )
 
-        self.potential_lines: Set[frozenset[Triangle]] = set()
-        self._triangle_to_lines_map: Dict[Triangle, Set[frozenset[Triangle]]] = {}
+        self.potential_lines: set[frozenset[Triangle]] = set()
+        self._triangle_to_lines_map: dict[Triangle, set[frozenset[Triangle]]] = {}
         self._initialize_lines_and_index()  # Call internal method
         # Changed log level from INFO to DEBUG
         logger.debug(
             f"GridData initialized ({self.rows}x{self.cols}). Found {len(self.potential_lines)} potential lines."
         )
 
-    def _create(self, config: EnvConfig) -> List[List[Triangle]]:
+    def _create(self, config: EnvConfig) -> list[list[Triangle]]:
         """
         Initializes the grid, marking death cells based on COLS_PER_ROW.
         COLS_PER_ROW defines the number of *playable* cells, centered horizontally.
@@ -203,7 +203,7 @@ class GridData:
         potential_lines_coords = _precompute_lines(self.config)
 
         for line_coords in potential_lines_coords:
-            line_triangles: Set[Triangle] = set()
+            line_triangles: set[Triangle] = set()
             valid_line = True
             for r, c in line_coords:
                 if self.valid(r, c):
@@ -267,7 +267,7 @@ class GridData:
         new_grid.potential_lines = set()
         new_grid._triangle_to_lines_map = {}
         # Create a mapping from old triangle hash to new triangle object
-        old_to_new_tri_map: Dict[int, Triangle] = {}
+        old_to_new_tri_map: dict[int, Triangle] = {}
         for r in range(self.rows):
             for c in range(self.cols):
                 old_tri = self.triangles[r][c]
@@ -276,7 +276,7 @@ class GridData:
 
         # Rebuild potential_lines and _triangle_to_lines_map using new triangles
         for old_frozen_line in self.potential_lines:
-            new_line_triangles: Set[Triangle] = set()
+            new_line_triangles: set[Triangle] = set()
             valid_new_line = True
             for old_tri in old_frozen_line:
                 new_tri = old_to_new_tri_map.get(hash(old_tri))

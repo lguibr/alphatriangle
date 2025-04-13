@@ -1,9 +1,10 @@
-import pygame
 from typing import TYPE_CHECKING
 
-from ..core import colors, coord_mapper
+import pygame
 
 from src.structs import Triangle
+
+from ..core import colors, coord_mapper
 
 if TYPE_CHECKING:
     from src.config import EnvConfig

@@ -1,17 +1,15 @@
-import random
-from typing import List, Tuple, Optional
 
 
 class Shape:
     """Represents a polyomino-like shape made of triangles."""
 
     def __init__(
-        self, triangles: List[Tuple[int, int, bool]], color: Tuple[int, int, int]
+        self, triangles: list[tuple[int, int, bool]], color: tuple[int, int, int]
     ):
-        self.triangles: List[Tuple[int, int, bool]] = triangles
-        self.color: Tuple[int, int, int] = color
+        self.triangles: list[tuple[int, int, bool]] = triangles
+        self.color: tuple[int, int, int] = color
 
-    def bbox(self) -> Tuple[int, int, int, int]:
+    def bbox(self) -> tuple[int, int, int, int]:
         """Calculates bounding box (min_r, min_c, max_r, max_c) in relative coords."""
         if not self.triangles:
             return (0, 0, 0, 0)

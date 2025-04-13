@@ -8,8 +8,8 @@ from src.config import TrainConfig
 from src.utils.types import Experience, StateType, PERBatchSample
 from src.utils.sumtree import SumTree  # Import SumTree
 
-# Import only needed fixtures from mcts conftest
-from tests.mcts.conftest import mock_experience, mock_state_type
+# REMOVED: Import only needed fixtures from mcts conftest
+# from tests.mcts.conftest import mock_experience, mock_state_type
 
 # --- Fixtures ---
 
@@ -50,10 +50,10 @@ def per_buffer(per_train_config: TrainConfig) -> ExperienceBuffer:
     return ExperienceBuffer(per_train_config)
 
 
-# Use shared mock_experience fixture
-@pytest.fixture
-def experience(mock_experience: Experience) -> Experience:
-    return mock_experience
+# Use shared mock_experience fixture implicitly from tests/conftest.py
+# REMOVED: @pytest.fixture
+# REMOVED: def experience(mock_experience: Experience) -> Experience:
+# REMOVED:    return mock_experience
 
 
 # --- Uniform Buffer Tests ---
@@ -67,54 +67,61 @@ def test_uniform_buffer_init(uniform_buffer: ExperienceBuffer):
     assert not uniform_buffer.is_ready()
 
 
-def test_uniform_buffer_add(uniform_buffer: ExperienceBuffer, experience: Experience):
-    assert len(uniform_buffer) == 0
-    uniform_buffer.add(experience)
-    assert len(uniform_buffer) == 1
-    assert uniform_buffer.buffer[0] == experience
-
-
-def test_uniform_buffer_add_batch(
-    uniform_buffer: ExperienceBuffer, experience: Experience
+# Use mock_experience directly injected by pytest
+def test_uniform_buffer_add(
+    uniform_buffer: ExperienceBuffer, mock_experience: Experience
 ):
-    batch = [experience] * 5
+    assert len(uniform_buffer) == 0
+    uniform_buffer.add(mock_experience)
+    assert len(uniform_buffer) == 1
+    assert uniform_buffer.buffer[0] == mock_experience
+
+
+# Use mock_experience directly injected by pytest
+def test_uniform_buffer_add_batch(
+    uniform_buffer: ExperienceBuffer, mock_experience: Experience
+):
+    batch = [mock_experience] * 5
     uniform_buffer.add_batch(batch)
     assert len(uniform_buffer) == 5
 
 
+# Use mock_experience directly injected by pytest
 def test_uniform_buffer_capacity(
-    uniform_buffer: ExperienceBuffer, experience: Experience
+    uniform_buffer: ExperienceBuffer, mock_experience: Experience
 ):
     for i in range(uniform_buffer.capacity + 10):
         # Create slightly different experiences
-        state_copy = {k: v.copy() + i for k, v in experience[0].items()}
-        exp_copy = (state_copy, experience[1], experience[2] + i)
+        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
     assert len(uniform_buffer) == uniform_buffer.capacity
     # Check if the first added element is gone
-    first_added_val = experience[2] + 0
+    first_added_val = mock_experience[2] + 0
     assert not any(exp[2] == first_added_val for exp in uniform_buffer.buffer)
     # Check if the last added element is present
-    last_added_val = experience[2] + uniform_buffer.capacity + 9
+    last_added_val = mock_experience[2] + uniform_buffer.capacity + 9
     assert any(exp[2] == last_added_val for exp in uniform_buffer.buffer)
 
 
+# Use mock_experience directly injected by pytest
 def test_uniform_buffer_is_ready(
-    uniform_buffer: ExperienceBuffer, experience: Experience
+    uniform_buffer: ExperienceBuffer, mock_experience: Experience
 ):
     assert not uniform_buffer.is_ready()
     for _ in range(uniform_buffer.min_size_to_train):
-        uniform_buffer.add(experience)
+        uniform_buffer.add(mock_experience)
     assert uniform_buffer.is_ready()
 
 
+# Use mock_experience directly injected by pytest
 def test_uniform_buffer_sample(
-    uniform_buffer: ExperienceBuffer, experience: Experience
+    uniform_buffer: ExperienceBuffer, mock_experience: Experience
 ):
     # Fill buffer until ready
     for i in range(uniform_buffer.min_size_to_train):
-        state_copy = {k: v.copy() + i for k, v in experience[0].items()}
-        exp_copy = (state_copy, experience[1], experience[2] + i)
+        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
 
     sample = uniform_buffer.sample(uniform_buffer.config.BATCH_SIZE)
@@ -154,10 +161,11 @@ def test_per_buffer_init(per_buffer: ExperienceBuffer):
     assert per_buffer.tree.max_priority == 1.0  # Initial max priority
 
 
-def test_per_buffer_add(per_buffer: ExperienceBuffer, experience: Experience):
+# Use mock_experience directly injected by pytest
+def test_per_buffer_add(per_buffer: ExperienceBuffer, mock_experience: Experience):
     assert len(per_buffer) == 0
     initial_max_p = per_buffer.tree.max_priority
-    per_buffer.add(experience)
+    per_buffer.add(mock_experience)
     assert len(per_buffer) == 1
     # Check if added with initial max priority
     # Find the tree index corresponding to the added data
@@ -167,36 +175,42 @@ def test_per_buffer_add(per_buffer: ExperienceBuffer, experience: Experience):
     ) % per_buffer.capacity
     tree_idx = data_idx + per_buffer.capacity - 1
     assert per_buffer.tree.tree[tree_idx] == initial_max_p
-    assert per_buffer.tree.data[data_idx] == experience
+    assert per_buffer.tree.data[data_idx] == mock_experience
 
 
-def test_per_buffer_add_batch(per_buffer: ExperienceBuffer, experience: Experience):
-    batch = [experience] * 5
+# Use mock_experience directly injected by pytest
+def test_per_buffer_add_batch(
+    per_buffer: ExperienceBuffer, mock_experience: Experience
+):
+    batch = [mock_experience] * 5
     per_buffer.add_batch(batch)
     assert len(per_buffer) == 5
 
 
-def test_per_buffer_capacity(per_buffer: ExperienceBuffer, experience: Experience):
+# Use mock_experience directly injected by pytest
+def test_per_buffer_capacity(per_buffer: ExperienceBuffer, mock_experience: Experience):
     for i in range(per_buffer.capacity + 10):
-        state_copy = {k: v.copy() + i for k, v in experience[0].items()}
-        exp_copy = (state_copy, experience[1], experience[2] + i)
+        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)  # Adds with current max priority
     assert len(per_buffer) == per_buffer.capacity
     # Cannot easily check which element was overwritten without tracking indices
 
 
-def test_per_buffer_is_ready(per_buffer: ExperienceBuffer, experience: Experience):
+# Use mock_experience directly injected by pytest
+def test_per_buffer_is_ready(per_buffer: ExperienceBuffer, mock_experience: Experience):
     assert not per_buffer.is_ready()
     for _ in range(per_buffer.min_size_to_train):
-        per_buffer.add(experience)
+        per_buffer.add(mock_experience)
     assert per_buffer.is_ready()
 
 
-def test_per_buffer_sample(per_buffer: ExperienceBuffer, experience: Experience):
+# Use mock_experience directly injected by pytest
+def test_per_buffer_sample(per_buffer: ExperienceBuffer, mock_experience: Experience):
     # Fill buffer until ready
     for i in range(per_buffer.min_size_to_train):
-        state_copy = {k: v.copy() + i for k, v in experience[0].items()}
-        exp_copy = (state_copy, experience[1], experience[2] + i)
+        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
 
     # Need current_step for beta calculation
@@ -215,7 +229,10 @@ def test_per_buffer_sample(per_buffer: ExperienceBuffer, experience: Experience)
     )  # Weights are normalized
 
 
-def test_per_buffer_sample_requires_step(per_buffer: ExperienceBuffer):
+# Use mock_experience directly injected by pytest
+def test_per_buffer_sample_requires_step(
+    per_buffer: ExperienceBuffer, mock_experience: Experience
+):
     # Fill buffer
     for _ in range(per_buffer.min_size_to_train):
         per_buffer.add(mock_experience)
@@ -223,14 +240,15 @@ def test_per_buffer_sample_requires_step(per_buffer: ExperienceBuffer):
         per_buffer.sample(per_buffer.config.BATCH_SIZE)
 
 
+# Use mock_experience directly injected by pytest
 def test_per_buffer_update_priorities(
-    per_buffer: ExperienceBuffer, experience: Experience
+    per_buffer: ExperienceBuffer, mock_experience: Experience
 ):
     # Add some items
     num_items = per_buffer.min_size_to_train
     for i in range(num_items):
-        state_copy = {k: v.copy() + i for k, v in experience[0].items()}
-        exp_copy = (state_copy, experience[1], experience[2] + i)
+        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
 
     # Sample to get indices
@@ -265,9 +283,7 @@ def test_per_buffer_update_priorities(
     # Increase tolerance for floating point comparison
     assert np.allclose(
         actual_updated_priorities, expected_final_priorities, rtol=1e-4, atol=1e-4
-    ), (
-        f"Mismatch between actual tree priorities {actual_updated_priorities} and expected {expected_final_priorities} for unique indices {unique_indices}"
-    )
+    ), f"Mismatch between actual tree priorities {actual_updated_priorities} and expected {expected_final_priorities} for unique indices {unique_indices}"
 
 
 def test_per_buffer_beta_annealing(per_buffer: ExperienceBuffer):

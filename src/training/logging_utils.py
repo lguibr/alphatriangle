@@ -1,18 +1,16 @@
 # File: src/training/logging_utils.py
+import io  # Import io module
 import logging
 import os
 import sys
-import io  # Import io module
-from typing import TextIO, Optional, List
-
-from src.config import PersistenceConfig
-import mlflow  # Import mlflow here
-import numpy as np  # Import numpy here
-import torch  # Import torch here
-from collections import deque  # Import deque here
 
 # Import TrainingComponents for type hinting
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TextIO
+
+import mlflow  # Import mlflow here
+import numpy as np  # Import numpy here
+
+from src.config import PersistenceConfig
 
 if TYPE_CHECKING:
     from .components import TrainingComponents
@@ -26,7 +24,7 @@ class Tee:
     """
 
     def __init__(
-        self, *streams: TextIO, main_stream_for_fileno: Optional[TextIO] = None
+        self, *streams: TextIO, main_stream_for_fileno: TextIO | None = None
     ):
         self.streams = streams
         # Store the stream whose fileno should be reported (usually original stderr/stdout)

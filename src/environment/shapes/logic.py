@@ -1,10 +1,11 @@
 # File: src/environment/shapes/logic.py
-import random
 import logging
-from typing import List, Tuple, Set, TYPE_CHECKING
+import random
+from typing import TYPE_CHECKING
+
+from src.structs import SHAPE_COLORS, Shape
 
 from .templates import PREDEFINED_SHAPE_TEMPLATES
-from src.structs import Shape, Triangle, SHAPE_COLORS
 
 if TYPE_CHECKING:
     from ..core.game_state import GameState
@@ -31,7 +32,7 @@ def refill_shape_slots(game_state: "GameState", rng: random.Random):
         logger.debug(f"Refilled {refilled_count} shape slots.")
 
 
-def get_neighbors(r: int, c: int, is_up: bool) -> List[Tuple[int, int]]:
+def get_neighbors(r: int, c: int, is_up: bool) -> list[tuple[int, int]]:
     """Gets potential neighbor coordinates for connectivity check."""
     neighbors = []
     # Horizontal neighbors
@@ -42,12 +43,12 @@ def get_neighbors(r: int, c: int, is_up: bool) -> List[Tuple[int, int]]:
     return neighbors
 
 
-def is_shape_connected(triangles: List[Tuple[int, int, bool]]) -> bool:
+def is_shape_connected(triangles: list[tuple[int, int, bool]]) -> bool:
     """Checks if all triangles in a shape definition are connected."""
     if not triangles or len(triangles) <= 1:
         return True
 
-    adj: dict[Tuple[int, int], List[Tuple[int, int]]] = {}
+    adj: dict[tuple[int, int], list[tuple[int, int]]] = {}
     triangle_coords = set((r, c) for r, c, _ in triangles)
 
     for r, c, is_up in triangles:

@@ -5,8 +5,8 @@ Contains the core components for training an agent using self-play and MCTS.
 """
 
 # Core RL classes (Trainer, Buffer are still relevant)
-from .core.trainer import Trainer
 from .core.buffer import ExperienceBuffer
+from .core.trainer import Trainer
 
 # Self-play functionality (Ray actor)
 from .self_play.worker import SelfPlayWorker

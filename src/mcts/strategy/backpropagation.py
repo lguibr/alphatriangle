@@ -12,7 +12,7 @@ def backpropagate_value(leaf_node: "Node", value: float) -> int:
     Propagates the simulation value back up the tree from the leaf node.
     Returns the depth of the backpropagation path (number of nodes updated).
     """
-    current_node: "Node" | None = leaf_node
+    current_node: Node | None = leaf_node
     path_str = []
     depth = 0
     logger.debug(

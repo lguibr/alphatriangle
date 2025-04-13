@@ -1,19 +1,15 @@
-import numpy as np
-from typing import TYPE_CHECKING
+import logging
 
+import numpy as np
+
+from src.config import ModelConfig
 from src.environment import GameState
 from src.utils.types import StateType
-from src.config import EnvConfig, ModelConfig
 
 from . import grid_features
 
-from src.structs import Triangle
-import logging
-
 logger = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    pass
 
 
 class GameStateFeatures:

@@ -1,7 +1,7 @@
 from __future__ import annotations
-import math
+
 import logging
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.environment import GameState
@@ -15,16 +15,16 @@ class Node:
 
     def __init__(
         self,
-        state: "GameState",
-        parent: Optional[Node] = None,
-        action_taken: Optional["ActionType"] = None,
+        state: GameState,
+        parent: Node | None = None,
+        action_taken: ActionType | None = None,
         prior_probability: float = 0.0,
     ):
         self.state = state
         self.parent = parent
         self.action_taken = action_taken
 
-        self.children: Dict["ActionType", Node] = {}
+        self.children: dict[ActionType, Node] = {}
 
         self.visit_count: int = 0
         self.total_action_value: float = 0.0

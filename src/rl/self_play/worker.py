@@ -1,27 +1,25 @@
 # File: src/rl/self_play/worker.py
 import logging
 import random
+import time
+from typing import TYPE_CHECKING
+
 import numpy as np
 import ray
-import torch
-import time
-from typing import List, Tuple, Optional, Generator, Any, Dict, TYPE_CHECKING
 
-from src.environment import GameState, EnvConfig
+from src.config import MCTSConfig, ModelConfig, TrainConfig
+from src.environment import EnvConfig, GameState
+from src.features import extract_state_features
 from src.mcts import (
+    MCTSExecutionError,
     Node,
+    get_policy_target,
     run_mcts_simulations,
     select_action_based_on_visits,
-    get_policy_target,
-    MCTSExecutionError,
 )
 from src.nn import NeuralNetwork
-
-from src.config import ModelConfig, TrainConfig, MCTSConfig
 from src.utils import get_device, set_random_seeds
-from src.features import extract_state_features
-
-from src.utils.types import Experience, ActionType, PolicyTargetMapping, StateType
+from src.utils.types import Experience, PolicyTargetMapping, StateType
 
 from ..types import SelfPlayResult
 
@@ -51,8 +49,8 @@ class SelfPlayWorker:
         train_config: TrainConfig,
         # Add stats_collector_actor handle
         stats_collector_actor: "StatsCollectorActor",
-        initial_weights: Optional[Dict] = None,
-        seed: Optional[int] = None,
+        initial_weights: dict | None = None,
+        seed: int | None = None,
         worker_device_str: str = "cpu",
     ):
         self.actor_id = actor_id
@@ -66,7 +64,7 @@ class SelfPlayWorker:
         self.worker_device_str = worker_device_str
 
         # Configure logging for the worker process
-        worker_log_level = logging.DEBUG
+        worker_log_level = logging.INFO
         log_format = (
             f"%(asctime)s [%(levelname)s] [W{self.actor_id}] %(name)s: %(message)s"
         )
@@ -99,11 +97,11 @@ class SelfPlayWorker:
         )
         logger.debug("Worker init complete.")
 
-    def set_weights(self, weights: Dict):
+    def set_weights(self, weights: dict):
         """Updates the neural network weights."""
         try:
             self.nn_evaluator.set_weights(weights)
-            logger.debug(f"Weights updated.")
+            logger.debug("Weights updated.")
         except Exception as e:
             logger.error(f"Failed to set weights: {e}", exc_info=True)
 
@@ -159,15 +157,15 @@ class SelfPlayWorker:
         episode_seed = self.seed + random.randint(0, 1000)
         game = GameState(self.env_config, initial_seed=episode_seed)
 
-        raw_experiences: List[Tuple[StateType, PolicyTargetMapping, float]] = []
-        step_root_visits: List[int] = []
-        step_tree_depths: List[int] = []
-        step_simulations: List[int] = []
+        raw_experiences: list[tuple[StateType, PolicyTargetMapping, float]] = []
+        step_root_visits: list[int] = []
+        step_tree_depths: list[int] = []
+        step_simulations: list[int] = []
 
         logger.info(f"Starting episode with seed {episode_seed}")
         self._report_current_state(game)  # Report initial state
 
-        root_node: Optional[Node] = Node(state=game.copy())
+        root_node: Node | None = Node(state=game.copy())
 
         while not game.is_over():
             step_start_time = time.monotonic()
@@ -309,7 +307,7 @@ class SelfPlayWorker:
             f"Episode finished. Outcome: {final_outcome}, Steps: {game.current_step}"
         )
 
-        processed_experiences: List[Experience] = [
+        processed_experiences: list[Experience] = [
             (state_type, policy, final_outcome)
             for state_type, policy, _ in raw_experiences
         ]

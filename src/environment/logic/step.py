@@ -1,11 +1,12 @@
 # File: src/environment/logic/step.py
 import logging
 import random
-from typing import TYPE_CHECKING, Set, Tuple
+from typing import TYPE_CHECKING
+
+from src.structs import Triangle
 
 from ..grid import logic as GridLogic
 from ..shapes import logic as ShapeLogic  # Import ShapeLogic namespace
-from src.structs import Triangle
 
 if TYPE_CHECKING:
     from ..core.game_state import GameState
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def calculate_reward(
-    placed_count: int, cleared_lines_set: Set[frozenset[Triangle]]
+    placed_count: int, cleared_lines_set: set[frozenset[Triangle]]
 ) -> float:
     """
     Calculates the reward based on placed triangles and cleared lines.
@@ -68,7 +69,7 @@ def execute_placement(
         return -10.0  # Negative reward for trying invalid move
 
     # Place the shape
-    newly_occupied_triangles: Set[Triangle] = set()
+    newly_occupied_triangles: set[Triangle] = set()
     placed_count = 0
     for dr, dc, is_up in shape.triangles:
         tri_r, tri_c = r + dr, c + dc

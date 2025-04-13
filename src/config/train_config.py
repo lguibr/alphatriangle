@@ -1,6 +1,7 @@
 # File: src/config/train_config.py
 import time
-from typing import Optional, Literal
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -14,10 +15,10 @@ class TrainConfig(BaseModel):
         # More descriptive default run name
         default_factory=lambda: f"train_{time.strftime('%Y%m%d_%H%M%S')}"
     )
-    LOAD_CHECKPOINT_PATH: Optional[str] = Field(
+    LOAD_CHECKPOINT_PATH: str | None = Field(
         None
     )  # Explicit path overrides auto-resume
-    LOAD_BUFFER_PATH: Optional[str] = Field(None)  # Explicit path overrides auto-resume
+    LOAD_BUFFER_PATH: str | None = Field(None)  # Explicit path overrides auto-resume
     AUTO_RESUME_LATEST: bool = Field(
         True
     )  # Resume from latest previous run if no explicit path
@@ -28,7 +29,7 @@ class TrainConfig(BaseModel):
 
     # --- Training Loop ---
     # Increased steps for longer training (e.g., overnight)
-    MAX_TRAINING_STEPS: Optional[int] = Field(default=200_000, ge=1)
+    MAX_TRAINING_STEPS: int | None = Field(default=200_000, ge=1)
 
     # --- Workers & Batching ---
     # More workers for faster data generation (adjust based on CPU cores)
@@ -49,13 +50,13 @@ class TrainConfig(BaseModel):
     OPTIMIZER_TYPE: Literal["Adam", "AdamW", "SGD"] = Field("AdamW")
     LEARNING_RATE: float = Field(1e-4, gt=0)  # Common starting point
     WEIGHT_DECAY: float = Field(1e-4, ge=0)  # Slightly higher weight decay
-    GRADIENT_CLIP_VALUE: Optional[float] = Field(default=1.0)  # Keep gradient clipping
+    GRADIENT_CLIP_VALUE: float | None = Field(default=1.0)  # Keep gradient clipping
 
     # --- LR Scheduler ---
-    LR_SCHEDULER_TYPE: Optional[Literal["StepLR", "CosineAnnealingLR"]] = Field(
+    LR_SCHEDULER_TYPE: Literal["StepLR", "CosineAnnealingLR"] | None = Field(
         default="CosineAnnealingLR"
     )
-    LR_SCHEDULER_T_MAX: Optional[int] = Field(
+    LR_SCHEDULER_T_MAX: int | None = Field(
         default=None  # Set automatically based on MAX_TRAINING_STEPS
     )
     LR_SCHEDULER_ETA_MIN: float = Field(1e-6, ge=0)  # End LR
@@ -76,7 +77,7 @@ class TrainConfig(BaseModel):
     PER_ALPHA: float = Field(0.6, ge=0)  # Standard value
     PER_BETA_INITIAL: float = Field(0.4, ge=0, le=1.0)  # Standard value
     PER_BETA_FINAL: float = Field(1.0, ge=0, le=1.0)  # Anneal to 1.0
-    PER_BETA_ANNEAL_STEPS: Optional[int] = Field(
+    PER_BETA_ANNEAL_STEPS: int | None = Field(
         None  # Set automatically based on MAX_TRAINING_STEPS
     )
     PER_EPSILON: float = Field(1e-5, gt=0)  # Small value to avoid zero priority
@@ -135,7 +136,7 @@ class TrainConfig(BaseModel):
 
     @field_validator("GRADIENT_CLIP_VALUE")
     @classmethod
-    def check_gradient_clip(cls, v: Optional[float]) -> Optional[float]:
+    def check_gradient_clip(cls, v: float | None) -> float | None:
         if v is not None and v <= 0:
             raise ValueError("GRADIENT_CLIP_VALUE must be positive if set.")
         return v

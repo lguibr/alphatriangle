@@ -3,10 +3,10 @@
 Statistics collection and plotting module.
 """
 
-from .collector import StatsCollectorActor
+from src.utils.types import StatsCollectorData
 
 from . import plot_utils
-from src.utils.types import StatsCollectorData
+from .collector import StatsCollectorActor
 
 __all__ = [
     "StatsCollectorActor",

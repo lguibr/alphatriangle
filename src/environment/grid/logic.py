@@ -1,13 +1,10 @@
 # File: src/environment/grid/logic.py
 import logging
-import numpy as np
-from typing import TYPE_CHECKING, List, Tuple, Set
-import random
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ...structs import Shape, Triangle
     from .grid_data import GridData
-    from ...structs import Triangle, Shape
-    from ...config import EnvConfig
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +81,8 @@ def can_place(grid_data: "GridData", shape: "Shape", r: int, c: int) -> bool:
 
 
 def check_and_clear_lines(
-    grid_data: "GridData", newly_occupied_triangles: Set["Triangle"]
-) -> Tuple[int, Set["Triangle"], Set[frozenset["Triangle"]]]:
+    grid_data: "GridData", newly_occupied_triangles: set["Triangle"]
+) -> tuple[int, set["Triangle"], set[frozenset["Triangle"]]]:
     """
     Checks for completed lines involving the newly occupied triangles and clears them.
 
@@ -94,13 +91,13 @@ def check_and_clear_lines(
         - Set of unique triangles that were cleared.
         - Set of the actual cleared lines (as frozensets of triangles).
     """
-    lines_to_check: Set[frozenset["Triangle"]] = set()
+    lines_to_check: set[frozenset[Triangle]] = set()
     for tri in newly_occupied_triangles:
         if tri in grid_data._triangle_to_lines_map:
             lines_to_check.update(grid_data._triangle_to_lines_map[tri])
 
-    cleared_lines_set: Set[frozenset["Triangle"]] = set()
-    triangles_cleared: Set["Triangle"] = set()
+    cleared_lines_set: set[frozenset[Triangle]] = set()
+    triangles_cleared: set[Triangle] = set()
 
     for line in lines_to_check:
         if all(tri.is_occupied for tri in line):

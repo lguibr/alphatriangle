@@ -1,13 +1,14 @@
-import pygame
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING
 
-from ..core import colors, coord_mapper
+import pygame
 
 from src.structs import Triangle
 
+from ..core import colors, coord_mapper
+
 if TYPE_CHECKING:
-    from src.environment import GridData
     from src.config import EnvConfig
+    from src.environment import GridData
 
 
 def draw_grid_background(surface: pygame.Surface, bg_color: tuple) -> None:
@@ -55,7 +56,7 @@ def draw_grid_indices(
     surface: pygame.Surface,
     grid_data: "GridData",
     config: "EnvConfig",
-    fonts: Dict[str, Optional[pygame.font.Font]],
+    fonts: dict[str, pygame.font.Font | None],
 ) -> None:
     """Draws the index number inside each triangle, including death cells."""
     if surface.get_width() <= 0 or surface.get_height() <= 0:

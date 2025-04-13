@@ -1,21 +1,16 @@
 # File: src/environment/core/game_state.py
-from typing import List, Optional, Tuple, Dict, Any
-import numpy as np
 import logging
 import random
 
+from src.structs import Shape
+
 from ...config import EnvConfig
 from ...utils.types import ActionType
-
-from ..grid.grid_data import GridData
-from ..grid import logic as GridLogic
-
 from .. import shapes  # Import the shapes module itself
-from .action_codec import encode_action, decode_action
+from ..grid.grid_data import GridData
 from ..logic.actions import get_valid_actions
 from ..logic.step import execute_placement
-
-from src.structs import Shape
+from .action_codec import decode_action
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +22,7 @@ class GameState:
     """
 
     def __init__(
-        self, config: Optional[EnvConfig] = None, initial_seed: Optional[int] = None
+        self, config: EnvConfig | None = None, initial_seed: int | None = None
     ):
         self.env_config = config if config else EnvConfig()
         self._rng = (
@@ -35,7 +30,7 @@ class GameState:
         )
 
         self.grid_data: GridData = None  # type: ignore
-        self.shapes: List[Optional[Shape]] = []
+        self.shapes: list[Shape | None] = []
         self.game_score: float = 0.0
         self.game_over: bool = False
         self.triangles_cleared_this_episode: int = 0
@@ -63,7 +58,7 @@ class GameState:
             )
             self.game_over = True
 
-    def step(self, action_index: ActionType) -> Tuple[float, bool]:
+    def step(self, action_index: ActionType) -> tuple[float, bool]:
         """
         Performs one game step.
         Returns:
@@ -85,7 +80,7 @@ class GameState:
 
         return reward, self.game_over
 
-    def valid_actions(self) -> List[ActionType]:
+    def valid_actions(self) -> list[ActionType]:
         """Returns a list of valid encoded action indices."""
         return get_valid_actions(self)
 

@@ -1,22 +1,22 @@
 import logging
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from ..core.action_codec import encode_action
 from ..grid import logic as GridLogic
 
 if TYPE_CHECKING:
-    from ..core.game_state import GameState
     from ...utils.types import ActionType
+    from ..core.game_state import GameState
 
 logger = logging.getLogger(__name__)
 
 
-def get_valid_actions(state: "GameState") -> List["ActionType"]:
+def get_valid_actions(state: "GameState") -> list["ActionType"]:
     """
     Calculates and returns a list of all valid encoded action indices
     for the current game state.
     """
-    valid_actions: List["ActionType"] = []
+    valid_actions: list[ActionType] = []
     for shape_idx, shape in enumerate(state.shapes):
         if shape is None:
             continue

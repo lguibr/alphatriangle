@@ -1,6 +1,6 @@
-import pygame
-from typing import Tuple, Dict, Optional
 import logging
+
+import pygame
 
 from ...config import VisConfig
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 def calculate_interactive_layout(
     screen_width: int, screen_height: int, vis_config: VisConfig
-) -> Dict[str, pygame.Rect]:
+) -> dict[str, pygame.Rect]:
     """
     Calculates layout rectangles for interactive modes (play/debug).
     Places grid on the left and preview on the right.
@@ -47,7 +47,7 @@ def calculate_training_layout(
     screen_height: int,
     vis_config: VisConfig,
     bottom_margin: int = 0,
-) -> Dict[str, pygame.Rect]:
+) -> dict[str, pygame.Rect]:
     """
     Calculates layout rectangles for training visualization mode.
     Splits screen between worker grid (top) and stats area (bottom).

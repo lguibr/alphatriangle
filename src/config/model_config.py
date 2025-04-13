@@ -1,5 +1,6 @@
 # File: src/config/model_config.py
-from typing import List, Tuple, Union, Literal
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -15,10 +16,10 @@ class ModelConfig(BaseModel):
 
     # --- CNN Architecture Parameters ---
     # Increased filters for more feature extraction capacity
-    CONV_FILTERS: List[int] = Field(default=[64, 128])
-    CONV_KERNEL_SIZES: List[Union[int, Tuple[int, int]]] = Field(default=[3, 3])
-    CONV_STRIDES: List[Union[int, Tuple[int, int]]] = Field(default=[1, 1])
-    CONV_PADDING: List[Union[int, Tuple[int, int], str]] = Field(default=[1, 1])
+    CONV_FILTERS: list[int] = Field(default=[64, 128])
+    CONV_KERNEL_SIZES: list[int | tuple[int, int]] = Field(default=[3, 3])
+    CONV_STRIDES: list[int | tuple[int, int]] = Field(default=[1, 1])
+    CONV_PADDING: list[int | tuple[int, int] | str] = Field(default=[1, 1])
 
     # Added residual blocks for deeper representation learning
     NUM_RESIDUAL_BLOCKS: int = Field(4, ge=0)
@@ -34,9 +35,9 @@ class ModelConfig(BaseModel):
 
     # --- Fully Connected Layers ---
     # Increased dimensions for shared and head layers
-    FC_DIMS_SHARED: List[int] = Field(default=[256])
-    POLICY_HEAD_DIMS: List[int] = Field(default=[256])  # Output dim added automatically
-    VALUE_HEAD_DIMS: List[int] = Field(default=[256, 1])  # Output dim must be 1
+    FC_DIMS_SHARED: list[int] = Field(default=[256])
+    POLICY_HEAD_DIMS: list[int] = Field(default=[256])  # Output dim added automatically
+    VALUE_HEAD_DIMS: list[int] = Field(default=[256, 1])  # Output dim must be 1
 
     # --- Other Hyperparameters ---
     ACTIVATION_FUNCTION: Literal["ReLU", "GELU", "SiLU", "Tanh", "Sigmoid"] = Field(
@@ -64,7 +65,7 @@ class ModelConfig(BaseModel):
 
     @field_validator("VALUE_HEAD_DIMS")
     @classmethod
-    def check_value_head_last_dim(cls, v: List[int]) -> List[int]:
+    def check_value_head_last_dim(cls, v: list[int]) -> list[int]:
         if not v:
             raise ValueError("VALUE_HEAD_DIMS cannot be empty.")
         if v[-1] != 1:
@@ -77,7 +78,7 @@ class ModelConfig(BaseModel):
     def check_residual_filter_match(self) -> "ModelConfig":
         # Check if the input to the first residual block matches the last conv filter
         if self.NUM_RESIDUAL_BLOCKS > 0 and self.CONV_FILTERS:
-            if self.RESIDUAL_BLOCK_FILTERS != self.CONV_FILTERS[-1]:
+            if self.CONV_FILTERS[-1] != self.RESIDUAL_BLOCK_FILTERS:
                 # This warning is now handled by the projection layer in the model if needed
                 # print(
                 #     f"Warning: RESIDUAL_BLOCK_FILTERS ({self.RESIDUAL_BLOCK_FILTERS}) does not match last CONV_FILTER ({self.CONV_FILTERS[-1]}). Ensure the model handles this transition (e.g., with a 1x1 conv)."

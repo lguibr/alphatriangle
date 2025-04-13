@@ -1,16 +1,13 @@
 import logging
 import time
-import numpy as np
-from typing import TYPE_CHECKING, List, Tuple, Set, Dict, Optional
 
-from ..strategy import selection, expansion, backpropagation
-from .node import Node
+import numpy as np
 
 from src.config import MCTSConfig
-from .types import ActionPolicyValueEvaluator, ActionPolicyMapping, PolicyValueOutput
 
-if TYPE_CHECKING:
-    from ...environment import GameState
+from ..strategy import backpropagation, expansion, selection
+from .node import Node
+from .types import ActionPolicyValueEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -111,8 +108,8 @@ def run_mcts_simulations(
     )
     sim_count = 0
     while sim_count < config.num_simulations:
-        leaves_to_evaluate: List[Node] = []
-        paths_to_backprop: List[Tuple[Node, float]] = []
+        leaves_to_evaluate: list[Node] = []
+        paths_to_backprop: list[tuple[Node, float]] = []
         start_time_batch_select = time.monotonic()
         num_collected_for_batch = 0
         while (
@@ -121,7 +118,7 @@ def run_mcts_simulations(
         ):
             current_sim_idx = sim_count
             sim_count += 1
-            leaf_node: Optional[Node] = None
+            leaf_node: Node | None = None
             try:
                 logger.debug(
                     f"  [MCTS Select] Starting Sim {current_sim_idx + 1} Selection..."

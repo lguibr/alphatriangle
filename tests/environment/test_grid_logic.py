@@ -1,22 +1,21 @@
 # File: tests/environment/test_grid_logic.py
 # File: tests/environment/test_grid_logic.py
-import pytest
-import numpy as np
-from typing import Set, List, Tuple
 
-from src.environment.grid import logic as GridLogic
-from src.environment.core.game_state import GameState
-from src.environment.grid.grid_data import GridData
+import pytest
+
 from src.config import EnvConfig
+from src.environment.core.game_state import GameState
+from src.environment.grid import logic as GridLogic
+from src.environment.grid.grid_data import GridData
 from src.structs import Shape, Triangle
 
 
 # --- Test Helpers ---
 def occupy_line(
-    grid_data: GridData, line_indices: List[int], config: EnvConfig
-) -> Set[Triangle]:
+    grid_data: GridData, line_indices: list[int], config: EnvConfig
+) -> set[Triangle]:
     """Helper to occupy triangles for a given line index list."""
-    occupied_tris: Set[Triangle] = set()
+    occupied_tris: set[Triangle] = set()
     for idx in line_indices:
         r, c = divmod(idx, config.COLS)
         if grid_data.valid(r, c):
@@ -28,7 +27,7 @@ def occupy_line(
     return occupied_tris
 
 
-def get_line_indices(grid_data: GridData, line_fset: frozenset[Triangle]) -> List[int]:
+def get_line_indices(grid_data: GridData, line_fset: frozenset[Triangle]) -> list[int]:
     """Helper to get grid indices from a frozenset of triangles."""
     indices = []
     config = grid_data.config
@@ -78,7 +77,7 @@ def test_line_precomputation(game_state: GameState):
     grid_data = game_state.grid_data
     assert len(grid_data.potential_lines) > 0
 
-    precomputed_lines_indices: List[List[int]] = []
+    precomputed_lines_indices: list[list[int]] = []
     for line_fset in grid_data.potential_lines:
         precomputed_lines_indices.append(get_line_indices(grid_data, line_fset))
 

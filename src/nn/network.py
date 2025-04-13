@@ -1,15 +1,16 @@
+import logging
+from collections.abc import Mapping
+
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
-import os
-import logging
-from typing import List, Tuple, Optional, Mapping, Dict, Any
 
-from src.config import ModelConfig, EnvConfig, TrainConfig
+from src.config import EnvConfig, ModelConfig, TrainConfig
 from src.environment import GameState
-from src.utils.types import ActionType, PolicyValueOutput, StateType
-from .model import AlphaTriangleNet
 from src.features import extract_state_features
+from src.utils.types import ActionType, PolicyValueOutput, StateType
+
+from .model import AlphaTriangleNet
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class NeuralNetwork:
         self.action_dim = env_config.ACTION_DIM
         self.model.eval()
 
-    def _state_to_tensors(self, state: GameState) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _state_to_tensors(self, state: GameState) -> tuple[torch.Tensor, torch.Tensor]:
         """Extracts features from GameState and converts them to tensors."""
         state_dict: StateType = extract_state_features(state, self.model_config)
         grid_tensor = torch.from_numpy(state_dict["grid"]).unsqueeze(0).to(self.device)
@@ -56,8 +57,8 @@ class NeuralNetwork:
         return grid_tensor, other_features_tensor
 
     def _batch_states_to_tensors(
-        self, states: List[GameState]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        self, states: list[GameState]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Extracts features from a batch of GameStates and converts to batched tensors."""
         if not states:
             grid_shape = (
@@ -151,7 +152,7 @@ class NeuralNetwork:
             ) from e
 
     @torch.inference_mode()
-    def evaluate_batch(self, states: List[GameState]) -> List[PolicyValueOutput]:
+    def evaluate_batch(self, states: list[GameState]) -> list[PolicyValueOutput]:
         """Evaluates a batch of states. Raises NetworkEvaluationError on issues."""
         if not states:
             return []
@@ -180,7 +181,7 @@ class NeuralNetwork:
             policy_probs = policy_probs_tensor.cpu().numpy()
             values = value.squeeze(1).cpu().numpy()
 
-            results: List[PolicyValueOutput] = []
+            results: list[PolicyValueOutput] = []
             for batch_idx in range(len(states)):
                 probs_i = np.maximum(policy_probs[batch_idx], 0)
                 prob_sum_i = np.sum(probs_i)
@@ -207,11 +208,11 @@ class NeuralNetwork:
         logger.debug(f"  Batch evaluation finished. Returning {len(results)} results.")
         return results
 
-    def get_weights(self) -> Dict[str, torch.Tensor]:
+    def get_weights(self) -> dict[str, torch.Tensor]:
         """Returns the model's state dictionary, moved to CPU."""
         return {k: v.cpu() for k, v in self.model.state_dict().items()}
 
-    def set_weights(self, weights: Dict[str, torch.Tensor]):
+    def set_weights(self, weights: dict[str, torch.Tensor]):
         """Loads the model's state dictionary from the provided weights."""
         try:
             weights_on_device = {k: v.to(self.device) for k, v in weights.items()}

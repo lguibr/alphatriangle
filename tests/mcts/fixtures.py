@@ -1,12 +1,13 @@
 # File: tests/mcts/fixtures.py
+from collections.abc import Mapping
+
 import pytest
-import numpy as np
-from typing import Dict, List, Tuple, Mapping, Optional
+
+from src.config import MCTSConfig
 
 # Import necessary classes from the source code
-from src.environment import GameState, EnvConfig
+from src.environment import EnvConfig
 from src.mcts.core.node import Node
-from src.config import MCTSConfig
 from src.utils.types import ActionType, PolicyValueOutput
 
 
@@ -19,8 +20,8 @@ class MockGameState:
         current_step: int = 0,
         is_terminal: bool = False,
         outcome: float = 0.0,
-        valid_actions: Optional[List[ActionType]] = None,
-        env_config: Optional[EnvConfig] = None,
+        valid_actions: list[ActionType] | None = None,
+        env_config: EnvConfig | None = None,
     ):
         self.current_step = current_step
         self._is_over = is_terminal
@@ -37,7 +38,7 @@ class MockGameState:
             raise ValueError("Cannot get outcome of non-terminal state.")
         return self._outcome
 
-    def valid_actions(self) -> List[ActionType]:
+    def valid_actions(self) -> list[ActionType]:
         return self._valid_actions
 
     def copy(self) -> "MockGameState":
@@ -50,7 +51,7 @@ class MockGameState:
             self.env_config,
         )
 
-    def step(self, action: ActionType) -> Tuple[float, float, bool]:
+    def step(self, action: ActionType) -> tuple[float, float, bool]:
         # Mock step: advances step, returns dummy values, becomes terminal sometimes
         if action not in self._valid_actions:
             raise ValueError(f"Invalid action {action} for mock state.")
@@ -80,15 +81,15 @@ class MockNetworkEvaluator:
 
     def __init__(
         self,
-        default_policy: Optional[Mapping[ActionType, float]] = None,
+        default_policy: Mapping[ActionType, float] | None = None,
         default_value: float = 0.5,
         action_dim: int = 3,  # Default action dim
     ):
         self._default_policy = default_policy
         self._default_value = default_value
         self._action_dim = action_dim
-        self.evaluation_history: List[MockGameState] = []
-        self.batch_evaluation_history: List[List[MockGameState]] = []
+        self.evaluation_history: list[MockGameState] = []
+        self.batch_evaluation_history: list[list[MockGameState]] = []
 
     def _get_policy(self, state: MockGameState) -> Mapping[ActionType, float]:
         if self._default_policy is not None:
@@ -99,7 +100,7 @@ class MockNetworkEvaluator:
             return {}
         prob = 1.0 / len(valid_actions)
         # Return policy only for valid actions
-        return {a: prob for a in valid_actions}
+        return dict.fromkeys(valid_actions, prob)
 
     def evaluate(self, state: MockGameState) -> PolicyValueOutput:
         self.evaluation_history.append(state)
@@ -111,12 +112,12 @@ class MockNetworkEvaluator:
                 policy = {a: p / policy_sum for a, p in policy.items()}
 
         # Create full policy map for the action dimension
-        full_policy = {a: 0.0 for a in range(self._action_dim)}
+        full_policy = dict.fromkeys(range(self._action_dim), 0.0)
         full_policy.update(policy)
 
         return full_policy, self._default_value
 
-    def evaluate_batch(self, states: List[MockGameState]) -> List[PolicyValueOutput]:
+    def evaluate_batch(self, states: list[MockGameState]) -> list[PolicyValueOutput]:
         self.batch_evaluation_history.append(states)
         results = []
         for state in states:

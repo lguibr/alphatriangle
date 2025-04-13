@@ -7,12 +7,11 @@
 # == Modifying them can have unintended consequences on gameplay and agent  ==
 # == training.                                                              ==
 # ==============================================================================
-from typing import List, Tuple
 
 # List of predefined shape templates. Each template is a list of relative triangle coordinates (dr, dc, is_up).
 # Coordinates are relative to the shape's origin (typically the top-leftmost triangle).
 # is_up = True for upward-pointing triangle, False for downward-pointing.
-PREDEFINED_SHAPE_TEMPLATES: List[List[Tuple[int, int, bool]]] = [
+PREDEFINED_SHAPE_TEMPLATES: list[list[tuple[int, int, bool]]] = [
     [  # Shape 1
         (
             0,

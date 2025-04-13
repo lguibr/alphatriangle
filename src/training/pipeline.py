@@ -1,33 +1,23 @@
 # File: src/training/pipeline.py
 import logging
-import time
-import ray
-import mlflow
 import os
-import json
-from typing import Optional, Dict, Any, List
-import torch
 import queue
+import time
 from collections import deque  # Import deque
+from typing import Any
+
+import mlflow
+import ray
+import torch
 
 from src.config import (
-    TrainConfig,
-    EnvConfig,
-    PersistenceConfig,
-    ModelConfig,
-    MCTSConfig,
     APP_NAME,
 )
-
 from src.utils.sumtree import SumTree
-from src.nn import NeuralNetwork
-from src.rl import ExperienceBuffer, Trainer
-from src.data import DataManager, LoadedTrainingState
-from src.stats import StatsCollectorActor
-from src.utils import format_eta, get_device, set_random_seeds
+
 from .components import TrainingComponents
+from .logging_utils import log_configs_to_mlflow
 from .loop import TrainingLoop
-from .logging_utils import log_configs_to_mlflow, log_metrics_to_mlflow
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +33,7 @@ class TrainingPipeline:
         self,
         components: TrainingComponents,
         visual_mode: bool = False,
-        visual_state_queue: Optional[queue.Queue[Optional[Dict[int, Any]]]] = None,
+        visual_state_queue: queue.Queue[dict[int, Any] | None] | None = None,
     ):
         self.components = components
         self.visual_mode = visual_mode
@@ -51,7 +41,7 @@ class TrainingPipeline:
 
         self.ray_initialized = False
         self.mlflow_run_active = False
-        self.training_loop: Optional[TrainingLoop] = None
+        self.training_loop: TrainingLoop | None = None
         self.start_time = time.time()
 
         logger.info(f"TrainingPipeline initialized. Visual Mode: {visual_mode}")

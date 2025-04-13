@@ -4,7 +4,8 @@ import numpy as np
 from typing import Dict, List, Tuple, Mapping, Optional
 import random
 import torch
-import torch.optim as optim
+
+# REMOVED: import torch.optim as optim
 
 # Import necessary classes from the source code
 import sys
@@ -17,16 +18,19 @@ if src_path not in sys.path:
 from src.environment import GameState, EnvConfig
 from src.mcts.core.node import Node
 
-# ADDED: Import ModelConfig and TrainConfig here as they are used in fixtures below
-from src.config import MCTSConfig, ModelConfig, TrainConfig
+# REMOVED: Import ModelConfig and TrainConfig here as they are used in fixtures below
+# from src.config import MCTSConfig, ModelConfig, TrainConfig
+from src.config import (
+    MCTSConfig,
+)  # Keep MCTSConfig if needed locally, but it's top-level now
 from src.utils.types import (
     ActionType,
     PolicyValueOutput,
-    StateType,
-    Experience,
-)  # Added StateType, Experience
-from src.nn import NeuralNetwork, AlphaTriangleNet  # Added NN imports
-from src.rl import ExperienceBuffer, Trainer  # Added RL imports
+    # REMOVED: StateType, Experience,
+)
+
+# REMOVED: from src.nn import NeuralNetwork, AlphaTriangleNet
+# REMOVED: from src.rl import ExperienceBuffer, Trainer
 
 
 # --- Mock GameState ---
@@ -318,94 +322,3 @@ def deep_expanded_node_mock_state(
             grandchild.prior_probability = 0.05
 
     return root
-
-
-# --- Fixtures for NN/RL Tests (Defined here for potential use in MCTS tests if needed) ---
-
-
-@pytest.fixture
-def mock_state_type(
-    mock_model_config: ModelConfig, mock_env_config: EnvConfig
-) -> StateType:
-    """Creates a mock StateType dictionary with correct shapes."""
-    grid_shape = (
-        mock_model_config.GRID_INPUT_CHANNELS,
-        mock_env_config.ROWS,
-        mock_env_config.COLS,
-    )
-    other_shape = (mock_model_config.OTHER_NN_INPUT_FEATURES_DIM,)
-    return {
-        "grid": np.random.rand(*grid_shape).astype(np.float32),
-        "other_features": np.random.rand(*other_shape).astype(np.float32),
-    }
-
-
-@pytest.fixture
-def mock_experience(
-    mock_state_type: StateType, mock_env_config: EnvConfig
-) -> Experience:
-    """Creates a mock Experience tuple."""
-    policy_target = (
-        {a: 1.0 / mock_env_config.ACTION_DIM for a in range(mock_env_config.ACTION_DIM)}
-        if mock_env_config.ACTION_DIM > 0
-        else {0: 1.0}
-    )
-    value_target = random.uniform(-1, 1)
-    return (mock_state_type, policy_target, value_target)
-
-
-@pytest.fixture
-def mock_nn_interface(
-    mock_model_config: ModelConfig,
-    mock_env_config: EnvConfig,
-    mock_train_config: TrainConfig,
-) -> NeuralNetwork:
-    """Provides a NeuralNetwork instance with a mock model for testing."""
-    device = torch.device("cpu")  # Use CPU for testing
-    nn_interface = NeuralNetwork(
-        mock_model_config, mock_env_config, mock_train_config, device
-    )
-    # Optionally replace internal model with a simpler mock if needed,
-    # but using the actual AlphaTriangleNet with simple config is often better.
-    return nn_interface
-
-
-@pytest.fixture
-def mock_trainer(
-    mock_nn_interface: NeuralNetwork,
-    mock_train_config: TrainConfig,
-    mock_env_config: EnvConfig,
-) -> Trainer:
-    """Provides a Trainer instance."""
-    return Trainer(mock_nn_interface, mock_train_config, mock_env_config)
-
-
-@pytest.fixture
-def mock_optimizer(mock_trainer: Trainer) -> optim.Optimizer:
-    """Provides the optimizer from the mock_trainer."""
-    return mock_trainer.optimizer
-
-
-@pytest.fixture
-def mock_experience_buffer(mock_train_config: TrainConfig) -> ExperienceBuffer:
-    """Provides an ExperienceBuffer instance."""
-    return ExperienceBuffer(mock_train_config)
-
-
-@pytest.fixture
-def filled_mock_buffer(
-    mock_experience_buffer: ExperienceBuffer, mock_experience: Experience
-) -> ExperienceBuffer:
-    """Provides a buffer filled with some mock experiences."""
-    for i in range(mock_experience_buffer.min_size_to_train + 5):
-        # Create slightly different experiences
-        state_copy = {k: v.copy() for k, v in mock_experience[0].items()}
-        # Ensure grid is writeable before modifying
-        if not state_copy["grid"].flags.writeable:
-            state_copy["grid"] = state_copy["grid"].copy()
-        state_copy["grid"] += (
-            np.random.randn(*state_copy["grid"].shape).astype(np.float32) * 0.1
-        )
-        exp_copy = (state_copy, mock_experience[1], random.uniform(-1, 1))
-        mock_experience_buffer.add(exp_copy)
-    return mock_experience_buffer

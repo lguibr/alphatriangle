@@ -1,8 +1,9 @@
 # File: tests/nn/test_model.py
 import pytest
 import torch
+
+from src.config import EnvConfig, ModelConfig
 from src.nn import AlphaTriangleNet
-from src.config import ModelConfig, EnvConfig
 
 # REMOVED: from ..mcts.conftest import mock_env_config, mock_model_config # Import shared fixtures
 

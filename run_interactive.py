@@ -2,10 +2,9 @@
 # This script is now primarily for legacy execution or direct debugging.
 # The recommended way to run is via the 'alphatriangle' command-line tool.
 
-import sys
-import os
 import argparse
-import logging
+import os
+import sys
 
 # Ensure the src directory is in the Python path
 script_dir = os.path.dirname(os.path.abspath(__file__))

@@ -1,24 +1,24 @@
 # File: tests/environment/test_step.py
-import pytest
 import random
-from typing import Set, Tuple, List
 from time import sleep
-from src.environment.logic.step import execute_placement, calculate_reward
-from src.environment.grid import logic as GridLogic  # Import GridLogic for setup
-from src.environment.core.game_state import GameState
-from src.environment.grid.grid_data import GridData
+
+import pytest
+
 from src.config import EnvConfig
+from src.environment.core.game_state import GameState
+from src.environment.grid import logic as GridLogic  # Import GridLogic for setup
+from src.environment.grid.grid_data import GridData
+from src.environment.logic.step import calculate_reward, execute_placement
 from src.structs import Shape, Triangle
-from src.environment import shapes as ShapeLogic  # Import ShapeLogic for refill check
 
 # Fixtures are now implicitly injected from tests/environment/conftest.py
 
 
 def occupy_line(
-    grid_data: GridData, line_indices: List[int], config: EnvConfig
-) -> Set[Triangle]:
+    grid_data: GridData, line_indices: list[int], config: EnvConfig
+) -> set[Triangle]:
     """Helper to occupy triangles for a given line index list."""
-    occupied_tris: Set[Triangle] = set()
+    occupied_tris: set[Triangle] = set()
     for idx in line_indices:
         r, c = divmod(idx, config.COLS)
         if grid_data.valid(r, c):
@@ -33,7 +33,7 @@ def occupy_line(
 def test_calculate_reward_placement_only(simple_shape: Shape):
     """Test reward calculation when only placing a shape (no lines cleared)."""
     placed_count = len(simple_shape.triangles)
-    cleared_lines_set: Set[frozenset[Triangle]] = set()
+    cleared_lines_set: set[frozenset[Triangle]] = set()
     reward = calculate_reward(placed_count, cleared_lines_set)
     assert reward == pytest.approx(float(placed_count))  # +1 per triangle
 
@@ -44,7 +44,7 @@ def test_calculate_reward_single_line_clear(simple_shape: Shape):
     # Simulate a cleared line of 9 triangles
     # Create dummy triangles for the set structure
     line_tris = {Triangle(0, i, False) for i in range(9)}
-    cleared_lines_set: Set[frozenset[Triangle]] = {frozenset(line_tris)}
+    cleared_lines_set: set[frozenset[Triangle]] = {frozenset(line_tris)}
     expected_line_reward = len(line_tris) * 2.0
     expected_total_reward = float(placed_count) + expected_line_reward
 
@@ -64,7 +64,7 @@ def test_calculate_reward_multi_line_clear(simple_shape: Shape):
         Triangle(i, 0, True) for i in range(1, 5)
     }  # Share (0,0,F)
 
-    cleared_lines_set: Set[frozenset[Triangle]] = {
+    cleared_lines_set: set[frozenset[Triangle]] = {
         frozenset(line1_tris),
         frozenset(line2_tris),
     }

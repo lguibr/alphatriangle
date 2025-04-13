@@ -1,16 +1,15 @@
 # File: src/training/runners.py
-import sys
-import os
 import logging
-import traceback
-import torch
-import mlflow
-import ray
+import os
 import queue
+import sys
 import threading
 import time
+import traceback
+from typing import Any
+
+import mlflow
 import pygame
-from typing import Optional, Dict, Any
 
 # Ensure the src directory is in the Python path *if running directly*
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,27 +17,27 @@ project_root = os.path.dirname(os.path.dirname(script_dir))  # Go up two levels
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from src import config, utils, visualization, environment  # utils is imported here
-from src.training import TrainingPipeline, TrainingComponents
-from src.training.logging_utils import (
-    setup_file_logging,
-    get_root_logger,
-    Tee,
-)
+from src import config, environment, utils, visualization  # utils is imported here
+from src.data import DataManager
 from src.nn import NeuralNetwork
 from src.rl import ExperienceBuffer, Trainer
-from src.data import DataManager
 from src.stats import StatsCollectorActor
+from src.training import TrainingComponents, TrainingPipeline
+from src.training.logging_utils import (
+    Tee,
+    get_root_logger,
+    setup_file_logging,
+)
 
 # Queue for pipeline to send combined state dict {worker_id: state, -1: global_stats}
 # Define it here so it's accessible by the visual runner function
-visual_state_queue: queue.Queue[Optional[Dict[int, Any]]] = queue.Queue(maxsize=5)
+visual_state_queue: queue.Queue[dict[int, Any] | None] = queue.Queue(maxsize=5)
 
 
 def _setup_training_components(
     train_config_override: config.TrainConfig,
     persist_config_override: config.PersistenceConfig,
-) -> Optional[TrainingComponents]:
+) -> TrainingComponents | None:
     """Initializes and returns the TrainingComponents bundle."""
     logger = logging.getLogger(__name__)
     try:
@@ -203,7 +202,7 @@ def run_training_visual_mode(
     logger = logging.getLogger(__name__)
     main_thread_exception = None
     train_thread = None
-    pipeline: Optional[TrainingPipeline] = None
+    pipeline: TrainingPipeline | None = None
     exit_code = 1
     original_stdout = sys.stdout
     original_stderr = sys.stderr
@@ -287,8 +286,8 @@ def run_training_visual_mode(
             components.model_config,
         )
 
-        current_worker_states: Dict[int, environment.GameState] = {}
-        current_global_stats: Dict[str, Any] = {}
+        current_worker_states: dict[int, environment.GameState] = {}
+        current_global_stats: dict[str, Any] = {}
         has_received_data = False
 
         # --- Visualization Loop (Main Thread) ---
@@ -424,9 +423,7 @@ def run_training_visual_mode(
 
         # Determine final exit code
         if pipeline and pipeline.training_loop:
-            if main_thread_exception:
-                exit_code = 1
-            elif pipeline.training_loop.training_exception:
+            if main_thread_exception or pipeline.training_loop.training_exception:
                 exit_code = 1
             elif pipeline.training_loop.training_complete:
                 exit_code = 0

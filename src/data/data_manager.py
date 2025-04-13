@@ -1,33 +1,31 @@
 # File: src/data/data_manager.py
+import json
+import logging
 import os
 import shutil
-import logging
-import glob
+from collections import deque
+from typing import TYPE_CHECKING, Any
+
 import cloudpickle
-import torch
-import ray
-import re
-import json
 import mlflow
 import numpy as np
-from typing import TYPE_CHECKING, Optional, Tuple, Dict, Any, List
-from collections import deque
+import ray
+import torch
 from pydantic import ValidationError
-from pathlib import Path  # Import Path
-
-from .schemas import CheckpointData, BufferData, LoadedTrainingState
-from src.utils.types import Experience, StateType
 
 from src.utils.sumtree import SumTree
 
+from .schemas import BufferData, CheckpointData, LoadedTrainingState
+
 if TYPE_CHECKING:
+    from torch.optim import Optimizer
+
+    from src.config import PersistenceConfig, TrainConfig
     from src.nn import NeuralNetwork
     from src.rl.core.buffer import (
         ExperienceBuffer,
     )
-    from src.config import PersistenceConfig, TrainConfig, MCTSConfig
     from src.stats import StatsCollectorActor
-    from torch.optim import Optimizer
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +80,8 @@ class DataManager:
 
     def get_checkpoint_path(
         self,
-        run_name: Optional[str] = None,
-        step: Optional[int] = None,
+        run_name: str | None = None,
+        step: int | None = None,
         is_latest: bool = False,
         is_best: bool = False,
         is_final: bool = False,
@@ -111,8 +109,8 @@ class DataManager:
 
     def get_buffer_path(
         self,
-        run_name: Optional[str] = None,
-        step: Optional[int] = None,
+        run_name: str | None = None,
+        step: int | None = None,
         is_final: bool = False,
     ) -> str:
         """Constructs the path for the replay buffer file."""
@@ -128,7 +126,7 @@ class DataManager:
             filename = self.persist_config.BUFFER_FILENAME
         return os.path.join(buffer_dir, filename)
 
-    def find_latest_run_dir(self, current_run_name: str) -> Optional[str]:
+    def find_latest_run_dir(self, current_run_name: str) -> str | None:
         """Finds the most recent *previous* run directory based on name sorting."""
         runs_root_dir = os.path.join(
             self.persist_config.ROOT_DATA_DIR, self.persist_config.RUNS_DIR_NAME
@@ -157,7 +155,7 @@ class DataManager:
             logger.error(f"Error finding latest run directory: {e}", exc_info=True)
             return None
 
-    def _determine_checkpoint_to_load(self) -> Optional[str]:
+    def _determine_checkpoint_to_load(self) -> str | None:
         """Determines the absolute path of the checkpoint file to load."""
         load_path_config = self.train_config.LOAD_CHECKPOINT_PATH
         auto_resume = self.train_config.AUTO_RESUME_LATEST
@@ -199,8 +197,8 @@ class DataManager:
         return checkpoint_to_load
 
     def _determine_buffer_to_load(
-        self, checkpoint_run_name: Optional[str]
-    ) -> Optional[str]:
+        self, checkpoint_run_name: str | None
+    ) -> str | None:
         """
         Determines the buffer file path to load.
         Prioritizes explicit path, then the run corresponding to the loaded checkpoint,
@@ -263,7 +261,7 @@ class DataManager:
         """
         loaded_state = LoadedTrainingState()
         checkpoint_to_load = self._determine_checkpoint_to_load()
-        checkpoint_run_name: Optional[str] = None
+        checkpoint_run_name: str | None = None
 
         # --- Load Checkpoint (Model + Optimizer + Stats) ---
         if checkpoint_to_load:
@@ -522,8 +520,8 @@ class DataManager:
 
     def _log_artifacts(
         self,
-        checkpoint_path: Optional[str],
-        buffer_path: Optional[str],
+        checkpoint_path: str | None,
+        buffer_path: str | None,
         run_name: str,
         is_best: bool,
     ):
@@ -562,7 +560,7 @@ class DataManager:
         except Exception as e:
             logger.error(f"Failed to log artifacts to MLflow: {e}", exc_info=True)
 
-    def save_run_config(self, configs: Dict[str, Any]):
+    def save_run_config(self, configs: dict[str, Any]):
         """Saves the combined configuration dictionary as a JSON artifact."""
         try:
             config_path = self.config_path

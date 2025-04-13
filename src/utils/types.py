@@ -1,13 +1,8 @@
-from typing import Dict, Any, List, Tuple, Mapping, Optional, Deque
-
-from typing_extensions import TypedDict
-import numpy as np
-
-from typing import TYPE_CHECKING
 from collections import deque
+from collections.abc import Mapping
 
-if TYPE_CHECKING:
-    from src.environment import GameState
+import numpy as np
+from typing_extensions import TypedDict
 
 
 class StateType(TypedDict):
@@ -25,20 +20,20 @@ PolicyTargetMapping = Mapping[ActionType, float]
 # Experience tuple stored in buffer
 # NOW stores the extracted StateType (features) instead of the raw GameState object.
 # Kept as Tuple for performance in buffer operations.
-Experience = Tuple[StateType, PolicyTargetMapping, float]
+Experience = tuple[StateType, PolicyTargetMapping, float]
 
 # Batch of experiences for training
-ExperienceBatch = List[Experience]
+ExperienceBatch = list[Experience]
 
 # Output type from the neural network's evaluate method
 # (Policy Mapping, Value Estimate)
 # Kept as Tuple for performance.
-PolicyValueOutput = Tuple[Mapping[ActionType, float], float]
+PolicyValueOutput = tuple[Mapping[ActionType, float], float]
 
 # Type alias for the data structure holding collected statistics
 # Maps metric name to a deque of (step, value) tuples
 # Kept as Dict[Deque] internally in StatsCollectorActor, type alias is sufficient here.
-StatsCollectorData = Dict[str, Deque[Tuple[int, float]]]
+StatsCollectorData = dict[str, deque[tuple[int, float]]]
 
 # --- Pydantic Models for Data Transfer ---
 # SelfPlayResult moved to src/rl/types.py to resolve circular import

@@ -1,15 +1,13 @@
 # File: tests/environment/test_actions.py
-import pytest
-import random
-from typing import Set, List, Tuple
 
-from src.environment.logic import actions as ActionLogic
-from src.environment.logic import step as StepLogic  # Keep for placement tests
-from src.environment.grid import logic as GridLogic
-from src.environment.core.game_state import GameState
-from src.environment.core.action_codec import encode_action, decode_action
+import pytest
+
 from src.config import EnvConfig
-from src.structs import Shape, Triangle
+from src.environment.core.action_codec import decode_action
+from src.environment.core.game_state import GameState
+from src.environment.grid import logic as GridLogic
+from src.environment.logic import actions as ActionLogic
+from src.structs import Shape
 
 # Fixtures are now implicitly injected from tests/environment/conftest.py
 

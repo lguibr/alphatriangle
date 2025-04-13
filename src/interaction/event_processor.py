@@ -1,8 +1,8 @@
-import pygame
 import logging
-from typing import TYPE_CHECKING, Generator, Any
+from collections.abc import Generator
+from typing import TYPE_CHECKING, Any
 
-from src import visualization
+import pygame
 
 if TYPE_CHECKING:
     from src.visualization.core.visualizer import Visualizer

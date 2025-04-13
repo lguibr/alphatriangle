@@ -1,8 +1,7 @@
-from typing import List, Tuple
 
 
 def is_point_in_polygon(
-    point: Tuple[float, float], polygon: List[Tuple[float, float]]
+    point: tuple[float, float], polygon: list[tuple[float, float]]
 ) -> bool:
     """
     Checks if a point is inside a polygon using the ray casting algorithm.

@@ -1,16 +1,17 @@
 # File: src/visualization/core/game_renderer.py
-import pygame
 import logging
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, Any
+from typing import TYPE_CHECKING, Any
 
-from . import colors, layout, coord_mapper
-from ..drawing import grid as grid_drawing
-from ..drawing import previews as preview_drawing
+import pygame
 
 from src.environment import GameState
 
+from ..drawing import grid as grid_drawing
+from ..drawing import previews as preview_drawing
+from . import colors
+
 if TYPE_CHECKING:
-    from ...config import VisConfig, EnvConfig
+    from ...config import EnvConfig, VisConfig
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ class GameRenderer:
         self,
         vis_config: "VisConfig",
         env_config: "EnvConfig",
-        fonts: Dict[str, Optional[pygame.font.Font]],
+        fonts: dict[str, pygame.font.Font | None],
     ):
         self.vis_config = vis_config
         self.env_config = env_config
@@ -41,9 +42,9 @@ class GameRenderer:
         target_surface: pygame.Surface,
         area_rect: pygame.Rect,
         worker_id: int,
-        game_state: Optional[GameState],
+        game_state: GameState | None,
         # Add worker_step_stats parameter
-        worker_step_stats: Optional[Dict[str, Any]] = None,
+        worker_step_stats: dict[str, Any] | None = None,
     ):
         """
         Renders the game state of a single worker into the specified area_rect

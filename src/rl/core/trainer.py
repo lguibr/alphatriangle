@@ -1,23 +1,17 @@
+import logging
+
+import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import _LRScheduler
-import logging
-import numpy as np
-from typing import List, Dict, Optional, Tuple
 
-from src.config import TrainConfig, EnvConfig, ModelConfig
+from src.config import EnvConfig, TrainConfig
 from src.nn import NeuralNetwork
-
 from src.utils.types import (
     ExperienceBatch,
-    PolicyTargetMapping,
-    ActionType,
-    StateType,
     PERBatchSample,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +52,7 @@ class Trainer:
                 f"Unsupported optimizer type: {self.train_config.OPTIMIZER_TYPE}"
             )
 
-    def _create_scheduler(self, optimizer: optim.Optimizer) -> Optional[_LRScheduler]:
+    def _create_scheduler(self, optimizer: optim.Optimizer) -> _LRScheduler | None:
         """Creates the learning rate scheduler based on TrainConfig."""
         scheduler_type = self.train_config.LR_SCHEDULER_TYPE
         if not scheduler_type or scheduler_type.lower() == "none":
@@ -90,7 +84,7 @@ class Trainer:
 
     def _prepare_batch(
         self, batch: ExperienceBatch
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Converts a batch of experiences (containing StateType) into tensors.
         No feature extraction needed here anymore.
@@ -140,7 +134,7 @@ class Trainer:
 
     def train_step(
         self, per_sample: PERBatchSample
-    ) -> Optional[Tuple[Dict[str, float], np.ndarray]]:
+    ) -> tuple[dict[str, float], np.ndarray] | None:
         """
         Performs a single training step on the given batch from PER buffer.
         Returns loss info dictionary and TD errors for priority updates.

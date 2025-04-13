@@ -1,10 +1,11 @@
 # File: src/stats/collector.py
 import logging
-import ray
-from collections import deque
-from typing import Dict, List, Tuple, Optional, Deque, Any, TYPE_CHECKING
-import numpy as np
 import time  # Import time
+from collections import deque
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
+import ray
 
 from src.utils.types import StatsCollectorData
 
@@ -21,12 +22,12 @@ class StatsCollectorActor:
     Ray actor for collecting time-series statistics and latest worker game states.
     """
 
-    def __init__(self, max_history: Optional[int] = 1000):
+    def __init__(self, max_history: int | None = 1000):
         self.max_history = max_history
         self._data: StatsCollectorData = {}
         # Store the latest GameState reported by each worker
-        self._latest_worker_states: Dict[int, "GameState"] = {}
-        self._last_state_update_time: Dict[int, float] = {}  # Track update times
+        self._latest_worker_states: dict[int, GameState] = {}
+        self._last_state_update_time: dict[int, float] = {}  # Track update times
 
         print(f"[StatsCollectorActor] Initialized with max_history={max_history}.")
         logger.info(f"Initialized with max_history={max_history}.")
@@ -56,7 +57,7 @@ class StatsCollectorActor:
                 f"Could not log metric '{metric_name}'. Invalid step/value: {e}"
             )
 
-    def log_batch(self, metrics: Dict[str, Tuple[float, int]]):
+    def log_batch(self, metrics: dict[str, tuple[float, int]]):
         """Logs a batch of metrics."""
         logger.debug(
             f"Log batch received with {len(metrics)} metrics: {list(metrics.keys())}"
@@ -84,7 +85,7 @@ class StatsCollectorActor:
             f"Updated game state for worker {worker_id} (Step: {game_state.current_step})"
         )
 
-    def get_latest_worker_states(self) -> Dict[int, "GameState"]:
+    def get_latest_worker_states(self) -> dict[int, "GameState"]:
         """Returns a shallow copy of the latest worker states dictionary."""
         # Return a copy to prevent external modification of the internal dict
         logger.debug(
@@ -100,7 +101,7 @@ class StatsCollectorActor:
         # Return copies of deques to prevent external modification
         return {k: dq.copy() for k, dq in self._data.items()}
 
-    def get_metric_data(self, metric_name: str) -> Optional[Deque[Tuple[int, float]]]:
+    def get_metric_data(self, metric_name: str) -> deque[tuple[int, float]] | None:
         """Returns a copy of the data deque for a specific metric."""
         dq = self._data.get(metric_name)
         return dq.copy() if dq else None
@@ -112,7 +113,7 @@ class StatsCollectorActor:
         self._last_state_update_time = {}
         logger.info("Data and worker states cleared.")
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         """Returns the internal state for saving."""
         # --- CHANGE: Convert deques to lists for serialization ---
         serializable_metrics = {key: list(dq) for key, dq in self._data.items()}
@@ -133,7 +134,7 @@ class StatsCollectorActor:
         )
         return state
 
-    def set_state(self, state: Dict[str, Any]):
+    def set_state(self, state: dict[str, Any]):
         """Restores the internal state from saved data."""
         self.max_history = state.get("max_history", self.max_history)
         loaded_metrics_list = state.get("_metrics_data_list", {})

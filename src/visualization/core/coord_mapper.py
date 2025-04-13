@@ -1,19 +1,13 @@
-import math
-from typing import Tuple, Optional, List, Dict
 import pygame
 
 from ...config import EnvConfig
-
 from ...structs import Triangle
-
 from ...utils.geometry import is_point_in_polygon
-
-from ..drawing import utils as drawing_utils
 
 
 def _calculate_render_params(
     width: int, height: int, config: EnvConfig
-) -> Tuple[float, float, float, float]:
+) -> tuple[float, float, float, float]:
     """Calculates scale (cw, ch) and offset (ox, oy) for rendering the grid."""
     rows, cols = config.ROWS, config.COLS
     cols_eff = cols * 0.75 + 0.25 if cols > 0 else 1
@@ -29,8 +23,8 @@ def _calculate_render_params(
 
 
 def get_grid_coords_from_screen(
-    screen_pos: Tuple[int, int], grid_area_rect: pygame.Rect, config: EnvConfig
-) -> Optional[Tuple[int, int]]:
+    screen_pos: tuple[int, int], grid_area_rect: pygame.Rect, config: EnvConfig
+) -> tuple[int, int] | None:
     """Maps screen coordinates (relative to screen) to grid row/column."""
     if not grid_area_rect or not grid_area_rect.collidepoint(screen_pos):
         return None
@@ -66,8 +60,8 @@ def get_grid_coords_from_screen(
 
 
 def get_preview_index_from_screen(
-    screen_pos: Tuple[int, int], preview_rects: Dict[int, pygame.Rect]
-) -> Optional[int]:
+    screen_pos: tuple[int, int], preview_rects: dict[int, pygame.Rect]
+) -> int | None:
     """Maps screen coordinates to a shape preview index."""
     if not preview_rects:
         return None

@@ -2,10 +2,10 @@
 # This script is now primarily for legacy execution or direct debugging.
 # The recommended way to run is via the 'alphatriangle train' command.
 
-import sys
-import os
 import argparse
 import logging
+import os
+import sys
 
 # Ensure the src directory is in the Python path
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,8 +15,8 @@ if project_root not in sys.path:
 
 # Import the function that now contains the core logic
 try:
+    from src.config import PersistenceConfig, TrainConfig
     from src.training.runners import run_training_visual_mode
-    from src.config import TrainConfig, PersistenceConfig
 except ImportError as e:
     print(f"ImportError: {e}")
     print(
