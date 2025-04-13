@@ -1,0 +1,6 @@
+venv/
+.venv/
+.resumed.txt
+__pycache__/
+.alphatriangle_data/
+*.egg-info/

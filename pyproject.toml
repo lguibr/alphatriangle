@@ -1,0 +1,102 @@
+# File: pyproject.toml
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alphatriangle"
+version = "0.1.0" # Initial version
+authors = [
+    { name="Luis Guilherme P. M.", email="lgpelin92@gmail.com" }, # CHANGE THIS
+]
+description = "AlphaZero implementation for a triangle puzzle game."
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Games/Entertainment :: Puzzle Games",
+    "Development Status :: 3 - Alpha",
+]
+dependencies = [
+    "pygame>=2.1.0",
+    "numpy>=1.20.0",
+    "torch>=1.10.0",
+    "torchvision>=0.11.0",
+    "cloudpickle>=2.0.0",
+    "numba>=0.55.0",
+    "mlflow>=1.20.0",
+    "matplotlib>=3.5.0",
+    "ray>=2.8.0",
+    "pydantic>=2.0.0",
+    "typing_extensions>=4.0.0",
+    "typer[all]>=0.9.0", # Added typer for CLI
+]
+
+[project.urls]
+"Homepage" = "https://github.com/your_username/alphatriangle" # CHANGE THIS
+"Bug Tracker" = "https://github.com/your_username/alphatriangle/issues" # CHANGE THIS
+
+[project.scripts]
+# --- CHANGE THIS LINE ---
+alphatriangle = "cli:app"
+# --- END CHANGE ---
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.txt", "*.md", "*.json"] # Include non-code files
+
+# --- Tool Configurations (Optional but Recommended) ---
+
+[tool.ruff]
+line-length = 88
+select = ["E", "W", "F", "I", "UP", "B", "C4", "ARG", "SIM", "TCH", "PTH", "NPY"]
+ignore = ["E501"] # Ignore line length errors if needed selectively
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true # Start with true, gradually reduce
+# Add specific module ignores if necessary
+# [[tool.mypy.overrides]]
+# module = "some_missing_types_module.*"
+# ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --cov=src --cov-report=term-missing"
+testpaths = [
+    "tests",
+]
+
+[tool.coverage.run]
+omit = [
+    "src/cli.py", # Exclude CLI from coverage for now
+    "src/visualization/*", # Exclude visualization for now
+    "src/app.py",
+    "run_*.py",
+    "src/training/logging_utils.py", # Logging utils can be hard to cover fully
+    "src/config/*", # Config models are mostly declarative
+    "src/data/schemas.py",
+    "src/structs/*",
+    "src/utils/types.py",
+    "src/mcts/core/types.py",
+    "src/rl/types.py",
+    "*/__init__.py",
+    "*/README.md",
+]
+
+[tool.coverage.report]
+fail_under = 70 # Set a reasonable initial coverage target
+show_missing = true
