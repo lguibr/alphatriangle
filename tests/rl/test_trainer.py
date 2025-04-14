@@ -9,7 +9,6 @@ from src.nn import NeuralNetwork
 from src.rl import ExperienceBuffer, Trainer
 from src.utils.types import Experience, PERBatchSample, StateType
 
-
 # --- Fixtures ---
 
 

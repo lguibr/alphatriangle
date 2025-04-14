@@ -2,7 +2,6 @@
 import math
 from typing import Any
 
-import numpy as np
 import pytest
 
 # Import session-scoped fixtures implicitly via pytest injection

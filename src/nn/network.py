@@ -1,6 +1,7 @@
 # File: src/nn/network.py
 import logging
-from typing import TYPE_CHECKING, Mapping  # Keep Mapping here for now
+from collections.abc import Mapping  # Keep Mapping here for now
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch

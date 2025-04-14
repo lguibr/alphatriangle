@@ -1,6 +1,5 @@
 # File: src/nn/model.py
 import math
-from typing import Type
 
 import torch
 import torch.nn as nn
@@ -15,7 +14,7 @@ def conv_block(
     stride: int | tuple[int, int],
     padding: int | tuple[int, int] | str,
     use_batch_norm: bool,
-    activation: Type[nn.Module],
+    activation: type[nn.Module],
 ) -> nn.Sequential:
     """Creates a standard convolutional block."""
     layers: list[nn.Module] = [  # Explicitly type the list
@@ -38,7 +37,7 @@ class ResidualBlock(nn.Module):
     """Standard Residual Block."""
 
     def __init__(
-        self, channels: int, use_batch_norm: bool, activation: Type[nn.Module]
+        self, channels: int, use_batch_norm: bool, activation: type[nn.Module]
     ):
         super().__init__()
         self.conv1 = conv_block(channels, channels, 3, 1, 1, use_batch_norm, activation)
@@ -92,7 +91,7 @@ class AlphaTriangleNet(nn.Module):
         self.env_config = env_config
         self.action_dim = env_config.ACTION_DIM
 
-        activation_cls: Type[nn.Module] = getattr(nn, model_config.ACTIVATION_FUNCTION)
+        activation_cls: type[nn.Module] = getattr(nn, model_config.ACTIVATION_FUNCTION)
 
         # --- CNN Body ---
         conv_layers: list[nn.Module] = []  # Explicitly type the list

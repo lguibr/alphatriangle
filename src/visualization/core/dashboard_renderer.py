@@ -277,7 +277,7 @@ class DashboardRenderer:
             plot_surface = None
             if plots_rect and plots_rect.width > 0 and plots_rect.height > 0:
                 # Use TYPE_CHECKING import for StatsCollectorData type hint
-                stats_data_for_plot: "StatsCollectorData" | None = global_stats.get(
+                stats_data_for_plot: StatsCollectorData | None = global_stats.get(
                     "stats_data"
                 )
 

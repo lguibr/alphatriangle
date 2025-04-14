@@ -72,7 +72,7 @@ class Trainer:
             logger.info(f"  StepLR params: step_size={step_size}, gamma={gamma}")
             # Cast return type
             return cast(
-                _LRScheduler,
+                "_LRScheduler",
                 optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma),
             )
         elif scheduler_type == "cosineannealinglr":
@@ -86,7 +86,7 @@ class Trainer:
             logger.info(f"  CosineAnnealingLR params: T_max={t_max}, eta_min={eta_min}")
             # Cast return type
             return cast(
-                _LRScheduler,
+                "_LRScheduler",
                 optim.lr_scheduler.CosineAnnealingLR(
                     optimizer, T_max=t_max, eta_min=eta_min
                 ),

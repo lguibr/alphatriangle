@@ -125,7 +125,7 @@ class GameStateFeatures:
         # Ensure return type is ndarray and handle potential NaNs
         # Explicitly cast to satisfy mypy's no-any-return
         return cast(
-            np.ndarray, np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+            "np.ndarray", np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
         )
 
     def get_combined_other_features(self) -> np.ndarray:
