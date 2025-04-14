@@ -1,6 +1,3 @@
-# File: src/environment/core/action_codec.py
-# File: src/environment/core/action_codec.py
-
 from ...config import EnvConfig
 from ...utils.types import ActionType
 
@@ -23,7 +20,7 @@ def encode_action(shape_idx: int, r: int, c: int, config: EnvConfig) -> ActionTy
 def decode_action(action_index: ActionType, config: EnvConfig) -> tuple[int, int, int]:
     """Decodes an integer action into (shape_idx, r, c)."""
     # Cast ACTION_DIM to int for comparison
-    action_dim_int = int(config.ACTION_DIM)
+    action_dim_int = int(config.ACTION_DIM)  # type: ignore[call-overload]
     if not (0 <= action_index < action_dim_int):
         raise ValueError(
             f"Invalid action index: {action_index}, must be < {action_dim_int}"

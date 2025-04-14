@@ -128,7 +128,7 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
     Raises PolicyGenerationError if target cannot be generated.
     """
     # Cast ACTION_DIM to int
-    action_dim = int(root_node.state.env_config.ACTION_DIM)
+    action_dim = int(root_node.state.env_config.ACTION_DIM)  # type: ignore[call-overload]
     full_target = dict.fromkeys(range(action_dim), 0.0)
 
     if not root_node.children or root_node.visit_count == 0:

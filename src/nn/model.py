@@ -72,8 +72,8 @@ class PositionalEncoding(nn.Module):
         # Corrected slicing for odd d_model
         if d_model % 2 != 0:
             # Check if div_term has elements before slicing
-            if div_term.shape[0] > 0:
-                pe[:, 0, 1::2] = torch.cos(position * div_term[:-1])
+            if div_term.numel() > 0:
+                pe[:, 0, 1::2] = torch.cos(position * div_term[:-1])  # type: ignore[index]
             # Handle case where d_model is 1 (div_term is empty) - unlikely but safe
             # else: pass or handle appropriately if needed
         else:
@@ -101,7 +101,7 @@ class AlphaTriangleNet(nn.Module):
         self.model_config = model_config
         self.env_config = env_config
         # Cast ACTION_DIM to int
-        self.action_dim = int(env_config.ACTION_DIM)
+        self.action_dim = int(env_config.ACTION_DIM)  # type: ignore[call-overload]
 
         activation_cls: type[nn.Module] = getattr(nn, model_config.ACTIVATION_FUNCTION)
 

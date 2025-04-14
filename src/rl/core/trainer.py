@@ -108,7 +108,7 @@ class Trainer:
         other_features = []
         value_targets = []
         # Cast ACTION_DIM to int
-        action_dim_int = int(self.env_config.ACTION_DIM)
+        action_dim_int = int(self.env_config.ACTION_DIM)  # type: ignore[call-overload]
         policy_target_tensor = torch.zeros(
             (batch_size, action_dim_int),
             dtype=torch.float32,
@@ -195,7 +195,7 @@ class Trainer:
                 policy_probs * torch.log(policy_probs + 1e-9), dim=1
             )
             # Cast entropy to float
-            entropy = float(entropy_term.mean().item())  # Cast tensor item to float
+            entropy = float(entropy_term.mean().item())  # type: ignore[assignment]
             entropy_loss = -self.train_config.ENTROPY_BONUS_WEIGHT * entropy_term.mean()
 
         total_loss = (
