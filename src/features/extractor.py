@@ -12,7 +12,6 @@ from . import grid_features
 
 # Import GameState only for type checking
 if TYPE_CHECKING:
-
     from ..environment import GameState
 
 

@@ -1,6 +1,3 @@
-
-
-
 class Triangle:
     """Represents a single triangular cell on the grid."""
 

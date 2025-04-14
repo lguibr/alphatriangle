@@ -1,4 +1,3 @@
-
 SHAPE_COLORS: list[tuple[int, int, int]] = [
     (220, 40, 40),  # Red
     (60, 60, 220),  # Blue

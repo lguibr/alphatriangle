@@ -85,9 +85,9 @@ def test_model_forward_pass(
     assert value.dtype == torch.float32
 
     # Check value range (should be within [-1, 1] due to Tanh)
-    assert torch.all(value >= -1.0) and torch.all(
-        value <= 1.0
-    ), f"Value out of range [-1, 1]: {value}"
+    assert torch.all(value >= -1.0) and torch.all(value <= 1.0), (
+        f"Value out of range [-1, 1]: {value}"
+    )
 
 
 @pytest.mark.parametrize(

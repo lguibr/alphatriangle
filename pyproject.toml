@@ -43,15 +43,18 @@ dependencies = [
 "Bug Tracker" = "https://github.com/your_username/alphatriangle/issues" # CHANGE THIS
 
 [project.scripts]
-# --- CHANGE THIS LINE ---
-alphatriangle = "cli:app"
+# Keep this pointing to the installed package name
+alphatriangle = "alphatriangle.cli:app"
+
+# --- CHANGE: Remove ALL explicit package discovery ---
+# Rely on setuptools defaults and editable install mechanism
+# Remove [tool.setuptools] and [tool.setuptools.packages.find] sections
 # --- END CHANGE ---
 
-[tool.setuptools.packages.find]
-where = ["src"]
 
 [tool.setuptools.package-data]
-"*" = ["*.txt", "*.md", "*.json"] # Include non-code files
+# Keep this if you need non-code files included
+"*" = ["*.txt", "*.md", "*.json"]
 
 # --- Tool Configurations (Optional but Recommended) ---
 

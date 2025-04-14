@@ -351,7 +351,9 @@ def test_per_buffer_update_priorities(
     # Increase tolerance for floating point comparison
     assert np.allclose(
         actual_updated_priorities, expected_final_priorities, rtol=1e-4, atol=1e-4
-    ), f"Mismatch between actual tree priorities {actual_updated_priorities} and expected {expected_final_priorities} for unique indices {unique_indices}"
+    ), (
+        f"Mismatch between actual tree priorities {actual_updated_priorities} and expected {expected_final_priorities} for unique indices {unique_indices}"
+    )
 
 
 def test_per_buffer_beta_annealing(per_buffer: ExperienceBuffer):

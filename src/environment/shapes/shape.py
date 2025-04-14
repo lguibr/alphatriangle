@@ -1,5 +1,3 @@
-
-
 class Shape:
     """Represents a polyomino-like shape made of triangles."""
 

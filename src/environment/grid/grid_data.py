@@ -12,7 +12,6 @@ from . import logic as GridLogic
 logger = logging.getLogger(__name__)
 
 
-
 # --- Line Precomputation (Moved here to break circular import) ---
 def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
     """
