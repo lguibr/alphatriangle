@@ -466,4 +466,3 @@ def run_training_visual_mode(
 
         logger.info(f"Visual training finished with exit code {exit_code}.")
     return exit_code
-s
