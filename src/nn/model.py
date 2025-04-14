@@ -49,7 +49,7 @@ class ResidualBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # Added return type hint
         residual = x
-        out = self.conv1(x)
+        out: torch.Tensor = self.conv1(x)  # Add type hint
         out = self.conv2(out)
         out = self.bn2(out)
         out += residual
@@ -62,8 +62,8 @@ class PositionalEncoding(nn.Module):
 
     def __init__(self, d_model: int, max_len: int = 5000):
         super().__init__()
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(
+        position: torch.Tensor = torch.arange(max_len).unsqueeze(1)
+        div_term: torch.Tensor = torch.exp(
             torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)
         )
         pe = torch.zeros(max_len, 1, d_model)
@@ -71,9 +71,11 @@ class PositionalEncoding(nn.Module):
         # Ensure the second slice doesn't go out of bounds if d_model is odd
         # Corrected slicing for odd d_model
         if d_model % 2 != 0:
-            pe[:, 0, 1::2] = torch.cos(
-                position * div_term[:-1]
-            )  # Use div_term[:-1] for odd
+            # Check if div_term has elements before slicing
+            if div_term.shape[0] > 0:
+                pe[:, 0, 1::2] = torch.cos(position * div_term[:-1])
+            # Handle case where d_model is 1 (div_term is empty) - unlikely but safe
+            # else: pass or handle appropriately if needed
         else:
             pe[:, 0, 1::2] = torch.cos(position * div_term)
 

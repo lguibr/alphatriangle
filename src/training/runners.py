@@ -332,23 +332,17 @@ def run_training_visual_mode(
                         and k >= 0
                         and isinstance(v, environment.GameState)
                     }
-                    # Update global stats with any remaining items (shouldn't be any ideally)
-                    # Check if visual_data still contains non-worker items after pop
+                    # Check for any remaining items (should ideally be empty)
                     remaining_items = {
                         k: v
                         for k, v in visual_data.items()
                         if k != -1 and k not in current_worker_states
                     }
                     if remaining_items:
+                        # Log remaining items but DO NOT merge into global_stats
                         logger.warning(
                             f"Unexpected items remaining in visual_data after processing: {remaining_items.keys()}"
                         )
-                        # Optionally merge them into global stats if they are dicts
-                        if isinstance(remaining_items, dict):
-                            # Ensure current_global_stats is a dict before updating
-                            if not isinstance(current_global_stats, dict):
-                                current_global_stats = {}
-                            current_global_stats.update(remaining_items)
 
                 else:
                     logger.warning(
@@ -472,3 +466,4 @@ def run_training_visual_mode(
 
         logger.info(f"Visual training finished with exit code {exit_code}.")
     return exit_code
+s

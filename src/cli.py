@@ -22,16 +22,16 @@ except ImportError:
     # Fallback for running directly from source root (e.g., during development)
     # This might be needed if the editable install isn't perfect or running scripts directly
     try:
-        from config import MCTSConfig, print_config_info_and_validate
+        # Import necessary modules/classes directly for fallback
+        from config import MCTSConfig
         from config import PersistenceConfig as ConfigPersistenceConfig
         from config import TrainConfig as ConfigTrainConfig
         from training.runners import (
             run_training_headless_mode,
             run_training_visual_mode,
         )
-        from utils import set_random_seeds
 
-        # Re-assign to expected names if needed, or adjust usage below
+        # Import the modules themselves to access functions via aliases
         config = __import__("config")
         utils = __import__("utils")
         Application = __import__("app", fromlist=["Application"]).Application
@@ -106,6 +106,7 @@ def run_interactive_mode(mode: str, seed: int, log_level: str):
     # Pydantic models with defaults can be instantiated without args
     mcts_config = MCTSConfig()
     # Pass MCTSConfig instance to validation
+    # Use the config alias imported in the try block
     config.print_config_info_and_validate(mcts_config)
 
     try:
