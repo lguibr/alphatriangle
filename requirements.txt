@@ -13,3 +13,4 @@ typing_extensions>=4.0.0 # Added for Pydantic TypedDict compatibility on Python 
 pytest>=7.0.0 # Added for unit testing
 pytest-mock>=3.0.0 # Added for mocking in tests
 typer[all]>=0.9.0 # Added for CLI
+pytest-cov>=3.0.0 # Added for coverage reporting
