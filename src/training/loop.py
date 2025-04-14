@@ -1,19 +1,21 @@
 # File: src/training/loop.py
+# File: src/training/loop.py
 import logging
 import queue
 import threading
 import time
 from typing import TYPE_CHECKING, Any
 
-import numpy as np  # Import numpy
+import numpy as np
 import ray
 from pydantic import ValidationError
 
-from src.environment import GameState
-from src.rl import SelfPlayResult, SelfPlayWorker
-from src.utils import format_eta
-from src.utils.types import Experience, PERBatchSample, StatsCollectorData
-from src.visualization.ui import ProgressBar
+# Use relative imports
+from ..environment import GameState
+from ..rl import SelfPlayResult, SelfPlayWorker
+from ..utils import format_eta
+from ..utils.types import Experience, PERBatchSample, StatsCollectorData
+from ..visualization.ui import ProgressBar
 
 # Import TrainingComponents only for type hinting
 if TYPE_CHECKING:

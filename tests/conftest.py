@@ -1,18 +1,29 @@
 # File: tests/conftest.py
+# File: tests/conftest.py
 # Top-level conftest for sharing session-scoped fixtures
 import random
+from typing import cast
 
 import numpy as np
 import pytest
 import torch
-import torch.optim as optim  # Added for mock_optimizer
+import torch.optim as optim
 
-from src.config import EnvConfig, MCTSConfig, ModelConfig, TrainConfig
+# Use relative imports for src components if running tests from project root
+# or absolute imports if package is installed
+try:
+    # Try absolute imports first (for installed package)
+    from alphatriangle.config import EnvConfig, MCTSConfig, ModelConfig, TrainConfig
+    from alphatriangle.nn import NeuralNetwork
+    from alphatriangle.rl import ExperienceBuffer, Trainer
+    from alphatriangle.utils.types import Experience, StateType
+except ImportError:
+    # Fallback to relative imports (for running tests directly)
+    from src.config import EnvConfig, MCTSConfig, ModelConfig, TrainConfig
+    from src.nn import NeuralNetwork
+    from src.rl import ExperienceBuffer, Trainer
+    from src.utils.types import Experience, StateType
 
-# Added imports for moved fixtures
-from src.nn import NeuralNetwork
-from src.rl import ExperienceBuffer, Trainer
-from src.utils.types import Experience, StateType
 
 # Use default NumPy random number generator
 rng = np.random.default_rng()
@@ -25,12 +36,15 @@ def mock_env_config() -> EnvConfig:
     rows = 3
     cols = 3
     cols_per_row = [cols] * rows
+    # Pydantic models with defaults can be instantiated without args
+    # if all required fields have defaults or are computed.
+    # Let's provide them explicitly for clarity in tests.
     return EnvConfig(
         ROWS=rows,
         COLS=cols,
         COLS_PER_ROW=cols_per_row,
         NUM_SHAPE_SLOTS=1,
-        MIN_LINE_LENGTH=3,  # Provide default
+        MIN_LINE_LENGTH=3,
     )
 
 
@@ -38,6 +52,10 @@ def mock_env_config() -> EnvConfig:
 def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
     """Provides a default ModelConfig compatible with mock_env_config (session-scoped)."""
     # Simple CNN config for testing
+    # Pydantic models with defaults can be instantiated without args
+    # if all required fields have defaults or are computed.
+    # Let's provide them explicitly for clarity in tests.
+    action_dim_int = int(mock_env_config.ACTION_DIM)
     return ModelConfig(
         GRID_INPUT_CHANNELS=1,
         CONV_FILTERS=[4],
@@ -45,31 +63,31 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
         CONV_STRIDES=[1],
         CONV_PADDING=[1],
         NUM_RESIDUAL_BLOCKS=0,
-        RESIDUAL_BLOCK_FILTERS=4,  # Provide default
+        RESIDUAL_BLOCK_FILTERS=4,
         USE_TRANSFORMER=False,
-        TRANSFORMER_DIM=16,  # Provide default
-        TRANSFORMER_HEADS=2,  # Provide default
-        TRANSFORMER_LAYERS=0,  # Provide default
-        TRANSFORMER_FC_DIM=32,  # Provide default
+        TRANSFORMER_DIM=16,
+        TRANSFORMER_HEADS=2,
+        TRANSFORMER_LAYERS=0,
+        TRANSFORMER_FC_DIM=32,
         FC_DIMS_SHARED=[8],
-        # ACTION_DIM is already int
-        POLICY_HEAD_DIMS=[mock_env_config.ACTION_DIM],
+        POLICY_HEAD_DIMS=[action_dim_int],  # Use casted int
         VALUE_HEAD_DIMS=[1],
-        OTHER_NN_INPUT_FEATURES_DIM=10,  # Simplified feature dim for testing
-        ACTIVATION_FUNCTION="ReLU",  # Provide default
-        USE_BATCH_NORM=True,  # Provide default
+        OTHER_NN_INPUT_FEATURES_DIM=10,
+        ACTIVATION_FUNCTION="ReLU",
+        USE_BATCH_NORM=True,
     )
 
 
 @pytest.fixture(scope="session")
 def mock_train_config() -> TrainConfig:
     """Provides a default TrainConfig for tests (session-scoped)."""
+    # Pydantic models with defaults can be instantiated without args
+    # if all required fields have defaults or are computed.
     return TrainConfig(
         BATCH_SIZE=4,
         BUFFER_CAPACITY=100,
         MIN_BUFFER_SIZE_TO_TRAIN=10,
-        USE_PER=False,  # Default to uniform for simpler tests unless specified
-        # Provide defaults for other required fields
+        USE_PER=False,
         LOAD_CHECKPOINT_PATH=None,
         LOAD_BUFFER_PATH=None,
         AUTO_RESUME_LATEST=False,
@@ -91,13 +109,14 @@ def mock_train_config() -> TrainConfig:
         PER_BETA_FINAL=1.0,
         PER_BETA_ANNEAL_STEPS=100,
         PER_EPSILON=1e-5,
-        MAX_TRAINING_STEPS=200,  # Set a finite value for tests
+        MAX_TRAINING_STEPS=200,
     )
 
 
 @pytest.fixture(scope="session")
 def mock_mcts_config() -> MCTSConfig:
     """Provides a default MCTSConfig for tests (session-scoped)."""
+    # Pydantic models with defaults can be instantiated without args
     return MCTSConfig(
         num_simulations=10,
         puct_coefficient=1.5,
@@ -135,14 +154,16 @@ def mock_experience(
     mock_state_type: StateType, mock_env_config: EnvConfig
 ) -> Experience:
     """Creates a mock Experience tuple."""
-    # ACTION_DIM is already int
-    action_dim = mock_env_config.ACTION_DIM
+    # Cast ACTION_DIM to int
+    action_dim = int(mock_env_config.ACTION_DIM)
     policy_target = (
         dict.fromkeys(range(action_dim), 1.0 / action_dim)
         if action_dim > 0
         else {0: 1.0}
     )
     value_target = random.uniform(-1, 1)
+    # Cast StateType to Any temporarily to satisfy Experience type hint if needed
+    # (though StateType should match the TypedDict definition)
     return (mock_state_type, policy_target, value_target)
 
 

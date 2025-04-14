@@ -1,9 +1,18 @@
 # File: tests/nn/test_model.py
+# File: tests/nn/test_model.py
 import pytest
 import torch
 
-from src.config import EnvConfig, ModelConfig
-from src.nn import AlphaTriangleNet
+# Use relative imports for src components if running tests from project root
+# or absolute imports if package is installed
+try:
+    # Try absolute imports first (for installed package)
+    from alphatriangle.config import EnvConfig, ModelConfig
+    from alphatriangle.nn import AlphaTriangleNet
+except ImportError:
+    # Fallback to relative imports (for running tests directly)
+    from src.config import EnvConfig, ModelConfig
+    from src.nn import AlphaTriangleNet
 
 
 # Use shared fixtures implicitly via pytest injection
@@ -28,7 +37,8 @@ def test_model_initialization(
 ):
     """Test if the model initializes without errors."""
     assert model is not None
-    assert model.action_dim == env_config.ACTION_DIM
+    # Cast ACTION_DIM to int for comparison
+    assert model.action_dim == int(env_config.ACTION_DIM)
     # Add more checks based on config if needed (e.g., transformer presence)
     assert model.model_config.USE_TRANSFORMER == model_config.USE_TRANSFORMER
     if model_config.USE_TRANSFORMER:
@@ -45,6 +55,8 @@ def test_model_forward_pass(
     device = torch.device("cpu")  # Test on CPU
     model.to(device)
     model.eval()  # Set to eval mode
+    # Cast ACTION_DIM to int
+    action_dim_int = int(env_config.ACTION_DIM)
 
     # Create dummy input tensors
     grid_shape = (
@@ -64,7 +76,7 @@ def test_model_forward_pass(
     # Check output shapes
     assert policy_logits.shape == (
         batch_size,
-        env_config.ACTION_DIM,
+        action_dim_int,
     ), f"Policy logits shape mismatch: {policy_logits.shape}"
     assert value.shape == (batch_size, 1), f"Value shape mismatch: {value.shape}"
 
@@ -83,6 +95,8 @@ def test_model_forward_pass(
 )
 def test_model_forward_transformer_toggle(use_transformer: bool, env_config: EnvConfig):
     """Test forward pass with transformer enabled/disabled."""
+    # Cast ACTION_DIM to int
+    action_dim_int = int(env_config.ACTION_DIM)
     # Create a specific model config for this test, providing all required fields
     model_config_test = ModelConfig(
         GRID_INPUT_CHANNELS=1,
@@ -91,19 +105,18 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
         CONV_STRIDES=[1, 1],
         CONV_PADDING=[1, 1],
         NUM_RESIDUAL_BLOCKS=0,
-        RESIDUAL_BLOCK_FILTERS=8,  # Provide default even if blocks=0
+        RESIDUAL_BLOCK_FILTERS=8,
         USE_TRANSFORMER=use_transformer,
-        TRANSFORMER_DIM=16,  # Make different from CNN output
+        TRANSFORMER_DIM=16,
         TRANSFORMER_HEADS=2,
         TRANSFORMER_LAYERS=1,
         TRANSFORMER_FC_DIM=32,
         FC_DIMS_SHARED=[16],
-        # ACTION_DIM is already int
-        POLICY_HEAD_DIMS=[env_config.ACTION_DIM],
+        POLICY_HEAD_DIMS=[action_dim_int],  # Use casted int
         VALUE_HEAD_DIMS=[1],
         OTHER_NN_INPUT_FEATURES_DIM=10,
-        ACTIVATION_FUNCTION="ReLU",  # Provide default
-        USE_BATCH_NORM=True,  # Provide default
+        ACTIVATION_FUNCTION="ReLU",
+        USE_BATCH_NORM=True,
     )
     model = AlphaTriangleNet(model_config_test, env_config)
     batch_size = 2
@@ -124,5 +137,5 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
     with torch.no_grad():
         policy_logits, value = model(dummy_grid, dummy_other)
 
-    assert policy_logits.shape == (batch_size, env_config.ACTION_DIM)
+    assert policy_logits.shape == (batch_size, action_dim_int)
     assert value.shape == (batch_size, 1)

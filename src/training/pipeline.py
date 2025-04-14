@@ -1,23 +1,28 @@
 # File: src/training/pipeline.py
+# File: src/training/pipeline.py
 import logging
 import queue
 import time
-from collections import deque  # Import deque
-from pathlib import Path  # Import Path
-from typing import Any
+from collections import deque
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import mlflow
 import ray
 import torch
 
-from src.config import (
+# Use relative imports
+from ..config import (
     APP_NAME,
 )
-from src.utils.sumtree import SumTree
-
+from ..utils.sumtree import SumTree
 from .components import TrainingComponents
 from .logging_utils import log_configs_to_mlflow
 from .loop import TrainingLoop
+
+if TYPE_CHECKING:
+    from ..environment import GameState
+
 
 logger = logging.getLogger(__name__)
 

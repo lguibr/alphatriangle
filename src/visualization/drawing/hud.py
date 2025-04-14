@@ -1,11 +1,15 @@
 # File: src/visualization/drawing/hud.py
-from typing import Any
+# File: src/visualization/drawing/hud.py
+from typing import TYPE_CHECKING, Any
 
 import pygame
 
-from src.visualization.ui import ProgressBar  # Import ProgressBar for type check
-
+# Use relative imports
+from ..ui import ProgressBar
 from ..core import colors
+
+if TYPE_CHECKING:
+    from ...environment import GameState
 
 
 def render_hud(

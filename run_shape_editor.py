@@ -1,20 +1,29 @@
 # File: run_shape_editor.py
-import contextlib  # Import contextlib
+# File: run_shape_editor.py
+import contextlib
 import logging
 import random
 import sys
-from pathlib import Path  # Import Path
+from pathlib import Path
 
 import pygame
 
-# Imports from your project structure should be at the top
-from src import config, environment, structs, visualization
-
-# Ensure the src directory is in the Python path
-script_dir = Path(__file__).resolve().parent
-src_dir = script_dir / "src"
-if str(src_dir) not in sys.path:
-    sys.path.insert(0, str(src_dir))
+# Use absolute imports assuming the package is installed or src is in PYTHONPATH
+try:
+    from alphatriangle import config, environment, structs, visualization
+except ImportError:
+    # Fallback for running directly from source root
+    print(
+        "ImportError: Could not import alphatriangle modules. "
+        "Ensure the package is installed (`pip install -e .`) or run from the project root.",
+        file=sys.stderr,
+    )
+    # Attempt relative imports as a last resort for direct execution
+    try:
+        from src import config, environment, structs, visualization
+    except ImportError as e_rel:
+        print(f"Relative import failed: {e_rel}", file=sys.stderr)
+        sys.exit(1)
 
 
 # Basic logging setup
@@ -28,6 +37,7 @@ class ShapeEditor:
     """Manages the state and rendering for the interactive shape editor."""
 
     def __init__(self):
+        # Pydantic models with defaults can be instantiated without args
         self.vis_config = config.VisConfig()
         self.env_config = config.EnvConfig()
 
@@ -351,7 +361,7 @@ class ShapeEditor:
                     temp_shape,
                     (int(draw_topleft_x), int(draw_topleft_y)),  # Cast to int
                     cell_size,
-                    is_selected=False,
+                    _is_selected=False,
                     origin_offset=(-min_r, -min_c),
                 )
 

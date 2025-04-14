@@ -1,35 +1,47 @@
 # File: src/cli.py
+# File: src/cli.py
 import logging
 import sys
-from pathlib import Path  # Import Path
 from typing import Annotated
 
 import typer
 
-# Move imports to the top
+# Use absolute imports based on the package structure defined in pyproject.toml
+# Assumes 'src' is the package root directory for editable installs,
+# or the package 'alphatriangle' is installed.
 try:
-    from src import config
-    from src.app import Application
-    from src.config import MCTSConfig  # Import Pydantic MCTSConfig
-    from src.training.runners import (
+    # Try importing assuming 'alphatriangle' is the installed package name
+    from alphatriangle import config, utils
+    from alphatriangle.app import Application
+    from alphatriangle.config import MCTSConfig  # Import Pydantic MCTSConfig
+    from alphatriangle.training.runners import (
         run_training_headless_mode,
         run_training_visual_mode,
     )
-    from src.utils import set_random_seeds
-except ImportError as e:
-    print(f"ImportError in cli.py: {e}")
-    print("This might happen if the package is not installed correctly or")
-    print("if running the script directly without the project root in PYTHONPATH.")
-    sys.exit(1)
+except ImportError:
+    # Fallback for running directly from source root (e.g., during development)
+    # This might be needed if the editable install isn't perfect or running scripts directly
+    try:
+        from config import MCTSConfig, print_config_info_and_validate
+        from config import PersistenceConfig as ConfigPersistenceConfig
+        from config import TrainConfig as ConfigTrainConfig
+        from training.runners import (
+            run_training_headless_mode,
+            run_training_visual_mode,
+        )
+        from utils import set_random_seeds
 
+        # Re-assign to expected names if needed, or adjust usage below
+        config = __import__("config")
+        utils = __import__("utils")
+        Application = __import__("app", fromlist=["Application"]).Application
 
-# Ensure the src directory is in the Python path *if running directly*,
-# but this shouldn't be necessary when installed as a package.
-# Keep it for potential direct script execution during development.
-script_dir = Path(__file__).parent
-project_root = script_dir.parent  # Go up one level
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+    except ImportError as e_dev:
+        print(f"ImportError in cli.py: {e_dev}")
+        print("Could not import modules.")
+        print("Ensure the package is installed (`pip install -e .`)")
+        print("or run the command from the project root directory.")
+        sys.exit(1)
 
 
 app = typer.Typer(
@@ -88,10 +100,10 @@ def run_interactive_mode(mode: str, seed: int, log_level: str):
     setup_logging(log_level)
     logger = logging.getLogger(__name__)  # Get logger after setup
     logger.info(f"Running in {mode.capitalize()} mode...")
-    set_random_seeds(seed)
+    utils.set_random_seeds(seed)
 
     # Instantiate MCTSConfig needed for validation function
-    # Provide default values by calling constructor without args
+    # Pydantic models with defaults can be instantiated without args
     mcts_config = MCTSConfig()
     # Pass MCTSConfig instance to validation
     config.print_config_info_and_validate(mcts_config)
@@ -106,7 +118,7 @@ def run_interactive_mode(mode: str, seed: int, log_level: str):
             "1. You are running from the project root directory (if developing)."
         )
         logger.error(
-            "2. The package is installed correctly (`pip install .` or `pip install alphatriangle`)."
+            "2. The package is installed correctly (`pip install -e .` or `pip install alphatriangle`)."
         )
         logger.error(
             "3. Dependencies are installed (`pip install -r requirements.txt`)."
@@ -155,8 +167,11 @@ def train(
 
     # --- Configuration Overrides ---
     # Create default configs first by calling constructors without args
-    train_config_override = config.TrainConfig()
-    persist_config_override = config.PersistenceConfig()
+    # Use the potentially aliased names if fallback import was used
+    TrainConfig = getattr(config, "TrainConfig", ConfigTrainConfig)
+    PersistenceConfig = getattr(config, "PersistenceConfig", ConfigPersistenceConfig)
+    train_config_override = TrainConfig()
+    persist_config_override = PersistenceConfig()
 
     # Apply overrides from CLI options if they were added
     # if run_name:

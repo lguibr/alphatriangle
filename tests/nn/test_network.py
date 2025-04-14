@@ -1,14 +1,25 @@
 # File: tests/nn/test_network.py
+# File: tests/nn/test_network.py
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import torch
 
-from src.config import EnvConfig, ModelConfig, TrainConfig
-from src.environment import GameState  # Import real GameState
-from src.nn import AlphaTriangleNet, NeuralNetwork
-from src.utils.types import StateType
+# Use relative imports for src components if running tests from project root
+# or absolute imports if package is installed
+try:
+    # Try absolute imports first (for installed package)
+    from alphatriangle.config import EnvConfig, ModelConfig, TrainConfig
+    from alphatriangle.environment import GameState
+    from alphatriangle.nn import AlphaTriangleNet, NeuralNetwork
+    from alphatriangle.utils.types import StateType
+except ImportError:
+    # Fallback to relative imports (for running tests directly)
+    from src.config import EnvConfig, ModelConfig, TrainConfig
+    from src.environment import GameState
+    from src.nn import AlphaTriangleNet, NeuralNetwork
+    from src.utils.types import StateType
 
 # Use module-level rng from tests/conftest.py
 from tests.conftest import rng
@@ -80,7 +91,9 @@ def test_nn_initialization(nn_interface: NeuralNetwork, device: torch.device):
 
 
 # --- Test Feature Extraction Integration (using mock) ---
+# --- CHANGE: Patch target changed from 'alphatriangle...' to 'src...' ---
 @patch("src.nn.network.extract_state_features")
+# --- END CHANGE ---
 def test_state_to_tensors(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
@@ -102,7 +115,9 @@ def test_state_to_tensors(
     assert other_t.shape[1] == nn_interface.model_config.OTHER_NN_INPUT_FEATURES_DIM
 
 
+# --- CHANGE: Patch target changed from 'alphatriangle...' to 'src...' ---
 @patch("src.nn.network.extract_state_features")
+# --- END CHANGE ---
 def test_batch_states_to_tensors(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
@@ -134,7 +149,9 @@ def test_batch_states_to_tensors(
 
 
 # --- Test Evaluation Methods ---
+# --- CHANGE: Patch target changed from 'alphatriangle...' to 'src...' ---
 @patch("src.nn.network.extract_state_features")
+# --- END CHANGE ---
 def test_evaluate_single(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
@@ -144,12 +161,14 @@ def test_evaluate_single(
 ):
     """Test the evaluate method for a single state."""
     mock_extract.return_value = mock_state_type_nn
+    # Cast ACTION_DIM to int
+    action_dim_int = int(env_config.ACTION_DIM)
 
     policy_map, value = nn_interface.evaluate(mock_game_state)
 
     assert isinstance(policy_map, dict)
     assert isinstance(value, float)
-    assert len(policy_map) == env_config.ACTION_DIM
+    assert len(policy_map) == action_dim_int
     assert all(
         isinstance(k, int) and isinstance(v, float) for k, v in policy_map.items()
     )
@@ -159,7 +178,9 @@ def test_evaluate_single(
     assert -1.0 <= value <= 1.0
 
 
+# --- CHANGE: Patch target changed from 'alphatriangle...' to 'src...' ---
 @patch("src.nn.network.extract_state_features")
+# --- END CHANGE ---
 def test_evaluate_batch(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
@@ -176,6 +197,8 @@ def test_evaluate_batch(
         {k: v.copy() + i * 0.1 for k, v in mock_state_type_nn.items()}
         for i in range(batch_size)
     ]
+    # Cast ACTION_DIM to int
+    action_dim_int = int(env_config.ACTION_DIM)
 
     results = nn_interface.evaluate_batch(mock_states)
 
@@ -184,7 +207,7 @@ def test_evaluate_batch(
     for policy_map, value in results:
         assert isinstance(policy_map, dict)
         assert isinstance(value, float)
-        assert len(policy_map) == env_config.ACTION_DIM
+        assert len(policy_map) == action_dim_int
         assert all(
             isinstance(k, int) and isinstance(v, float) for k, v in policy_map.items()
         )

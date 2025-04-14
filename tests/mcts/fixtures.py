@@ -1,14 +1,21 @@
 # File: tests/mcts/fixtures.py
+# File: tests/mcts/fixtures.py
 from collections.abc import Mapping
 
 import pytest
 
-from src.config import MCTSConfig
-
-# Import necessary classes from the source code
-from src.environment import EnvConfig
-from src.mcts.core.node import Node
-from src.utils.types import ActionType, PolicyValueOutput
+# Use relative imports for src components if running tests from project root
+# or absolute imports if package is installed
+try:
+    # Try absolute imports first (for installed package)
+    from alphatriangle.config import MCTSConfig, EnvConfig
+    from alphatriangle.mcts.core.node import Node
+    from alphatriangle.utils.types import ActionType, PolicyValueOutput
+except ImportError:
+    # Fallback to relative imports (for running tests directly)
+    from src.config import MCTSConfig, EnvConfig
+    from src.mcts.core.node import Node
+    from src.utils.types import ActionType, PolicyValueOutput
 
 
 # --- Mock GameState ---
@@ -27,17 +34,12 @@ class MockGameState:
         self._is_over = is_terminal
         self._outcome = outcome
         # Use a default EnvConfig if none provided, needed for action dim
-        self.env_config = (
-            env_config
-            if env_config
-            # Provide default values for EnvConfig by calling constructor without args
-            else EnvConfig()
-        )
+        # Pydantic models with defaults can be instantiated without args
+        self.env_config = env_config if env_config else EnvConfig()
+        # Cast ACTION_DIM to int
+        action_dim_int = int(self.env_config.ACTION_DIM)
         self._valid_actions = (
-            valid_actions
-            if valid_actions is not None
-            # ACTION_DIM is already int
-            else list(range(self.env_config.ACTION_DIM))
+            valid_actions if valid_actions is not None else list(range(action_dim_int))
         )
 
     def is_over(self) -> bool:
@@ -140,39 +142,32 @@ class MockNetworkEvaluator:
 @pytest.fixture
 def mock_env_config() -> EnvConfig:
     """Provides a default EnvConfig for tests."""
-    # Simple 3x3 grid for easier testing
-    # Call constructor without args to use defaults
+    # Pydantic models with defaults can be instantiated without args
     return EnvConfig()
 
 
 @pytest.fixture
 def mock_mcts_config() -> MCTSConfig:
     """Provides a default MCTSConfig for tests."""
-    return MCTSConfig(
-        num_simulations=10,  # Fewer sims for testing
-        puct_coefficient=1.0,
-        temperature_initial=1.0,
-        temperature_final=0.1,
-        temperature_anneal_steps=5,
-        dirichlet_alpha=0.3,
-        dirichlet_epsilon=0.25,
-        max_search_depth=10,
-    )
+    # Pydantic models with defaults can be instantiated without args
+    return MCTSConfig()
 
 
 @pytest.fixture
 def mock_evaluator(mock_env_config: EnvConfig) -> MockNetworkEvaluator:
     """Provides a MockNetworkEvaluator instance."""
-    # ACTION_DIM is already int
-    return MockNetworkEvaluator(action_dim=mock_env_config.ACTION_DIM)
+    # Cast ACTION_DIM to int
+    action_dim_int = int(mock_env_config.ACTION_DIM)
+    return MockNetworkEvaluator(action_dim=action_dim_int)
 
 
 @pytest.fixture
 def root_node_mock_state(mock_env_config: EnvConfig) -> Node:
     """Provides a root Node with a MockGameState."""
+    # Cast ACTION_DIM to int
+    action_dim_int = int(mock_env_config.ACTION_DIM)
     state = MockGameState(
-        # ACTION_DIM is already int
-        valid_actions=list(range(mock_env_config.ACTION_DIM)),
+        valid_actions=list(range(action_dim_int)),
         env_config=mock_env_config,
     )
     # Cast MockGameState to Any temporarily to satisfy Node's type hint
@@ -186,8 +181,8 @@ def expanded_node_mock_state(
     """Provides an expanded root node with mock children."""
     root = root_node_mock_state
     # Cast root.state back to MockGameState for the evaluator
-    mock_state = root.state
-    policy, value = mock_evaluator.evaluate(mock_state)  # type: ignore [arg-type]
+    mock_state: MockGameState = root.state  # type: ignore [assignment]
+    policy, value = mock_evaluator.evaluate(mock_state)
     # Manually expand for testing setup
     for action in mock_state.valid_actions():
         prior = policy.get(action, 0.0)

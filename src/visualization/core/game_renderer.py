@@ -1,11 +1,12 @@
 # File: src/visualization/core/game_renderer.py
+# File: src/visualization/core/game_renderer.py
 import logging
 from typing import TYPE_CHECKING, Any
 
 import pygame
 
-from src.environment import GameState
-
+# Use relative imports
+from ...environment import GameState
 from ..drawing import grid as grid_drawing
 from ..drawing import previews as preview_drawing
 from . import colors

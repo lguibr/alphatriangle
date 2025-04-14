@@ -1,11 +1,12 @@
 # File: src/visualization/ui/progress_bar.py
+# File: src/visualization/ui/progress_bar.py
 import time
 from typing import Any
 
 import pygame
 
-from src.utils import format_eta
-
+# Use relative imports
+from ...utils import format_eta
 from ..core import colors
 
 

@@ -1,26 +1,20 @@
 # File: run_training_visual.py
+# File: run_training_visual.py
 # This script is now primarily for legacy execution or direct debugging.
 # The recommended way to run is via the 'alphatriangle train' command.
 
 import argparse
 import logging
 import sys
-from pathlib import Path  # Import Path
 
-# Ensure the src directory is in the Python path
-script_dir = Path(__file__).resolve().parent
-project_root = script_dir.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
-# Import the function that now contains the core logic
+# Use absolute imports assuming the package is installed
 try:
-    from src.config import PersistenceConfig, TrainConfig
-    from src.training.runners import run_training_visual_mode
+    from alphatriangle.config import PersistenceConfig, TrainConfig
+    from alphatriangle.training.runners import run_training_visual_mode
 except ImportError as e:
     print(f"ImportError: {e}")
     print(
-        "Please ensure the package is installed (`pip install .`) or run from the project root."
+        "Please ensure the package is installed (`pip install -e .`) or run from the project root."
     )
     sys.exit(1)
 
@@ -59,6 +53,7 @@ if __name__ == "__main__":
     logger.info("Starting visual training via legacy runner...")
 
     # Create config overrides
+    # Pydantic models with defaults can be instantiated without args
     train_config_override = TrainConfig()
     persist_config_override = PersistenceConfig()
     train_config_override.RANDOM_SEED = args.seed

@@ -1,4 +1,5 @@
 # File: src/rl/core/trainer.py
+# File: src/rl/core/trainer.py
 import logging
 from typing import cast
 
@@ -8,9 +9,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import _LRScheduler
 
-from src.config import EnvConfig, TrainConfig
-from src.nn import NeuralNetwork
-from src.utils.types import (
+# Use relative imports
+from ...config import EnvConfig, TrainConfig
+from ...nn import NeuralNetwork
+from ...utils.types import (
     ExperienceBatch,
     PERBatchSample,
 )
@@ -105,9 +107,10 @@ class Trainer:
         grids = []
         other_features = []
         value_targets = []
-        # ACTION_DIM is already int
+        # Cast ACTION_DIM to int
+        action_dim_int = int(self.env_config.ACTION_DIM)
         policy_target_tensor = torch.zeros(
-            (batch_size, self.env_config.ACTION_DIM),
+            (batch_size, action_dim_int),
             dtype=torch.float32,
             device=self.device,
         )
@@ -117,8 +120,8 @@ class Trainer:
             other_features.append(state_features["other_features"])
             value_targets.append(value_target)
             for action, prob in policy_target_map.items():
-                # ACTION_DIM is already int
-                if 0 <= action < self.env_config.ACTION_DIM:
+                # Cast action_dim_int for comparison
+                if 0 <= action < action_dim_int:
                     policy_target_tensor[i, action] = prob
                 else:
                     logger.warning(

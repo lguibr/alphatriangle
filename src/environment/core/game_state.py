@@ -1,18 +1,21 @@
 # File: src/environment/core/game_state.py
+# File: src/environment/core/game_state.py
 import logging
 import random
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from src.structs import Shape
-
+# Use relative imports
 from ...config import EnvConfig
 from ...utils.types import ActionType
-from .. import shapes  # Import the shapes module itself
+from .. import shapes
 from ..grid.grid_data import GridData
 from ..logic.actions import get_valid_actions
 from ..logic.step import execute_placement
 from .action_codec import decode_action
+
+if TYPE_CHECKING:
+    from ...structs import Shape
+
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +29,7 @@ class GameState:
     def __init__(
         self, config: EnvConfig | None = None, initial_seed: int | None = None
     ):
-        # Provide default values if config is None by calling constructor without args
+        # Pydantic models with defaults can be instantiated without args
         self.env_config = config if config else EnvConfig()
         self._rng = (
             random.Random(initial_seed) if initial_seed is not None else random.Random()

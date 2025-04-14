@@ -1,11 +1,12 @@
 # File: src/utils/__init__.py
+# File: src/utils/__init__.py
 from .geometry import is_point_in_polygon
 from .helpers import (
     format_eta,
     get_device,
     normalize_color_for_matplotlib,
     set_random_seeds,
-)  # Added normalize_color_for_matplotlib
+)
 from .sumtree import SumTree
 from .types import (
     ActionType,
@@ -22,7 +23,7 @@ __all__ = [
     "get_device",
     "set_random_seeds",
     "format_eta",
-    "normalize_color_for_matplotlib",  # Added export
+    "normalize_color_for_matplotlib",
     # types
     "StateType",
     "ActionType",

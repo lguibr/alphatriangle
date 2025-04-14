@@ -1,13 +1,15 @@
+# File: src/visualization/drawing/highlight.py
+# File: src/visualization/drawing/highlight.py
 from typing import TYPE_CHECKING
 
 import pygame
 
-from src.structs import Triangle
-
+# Use relative imports
+from ...structs import Triangle
 from ..core import colors, coord_mapper
 
 if TYPE_CHECKING:
-    from src.config import EnvConfig
+    from ...config import EnvConfig
 
 
 def draw_debug_highlight(

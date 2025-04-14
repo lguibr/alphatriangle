@@ -1,11 +1,12 @@
 # File: src/visualization/core/visualizer.py
+# File: src/visualization/core/visualizer.py
 import logging
 from typing import TYPE_CHECKING
 
 import pygame
 
-from src.structs import Shape  # Import Shape
-
+# Use relative imports
+from ...structs import Shape
 from ..drawing import grid as grid_drawing
 from ..drawing import highlight as highlight_drawing
 from ..drawing import hud as hud_drawing
@@ -13,12 +14,12 @@ from ..drawing import previews as preview_drawing
 from ..drawing.previews import (
     draw_floating_preview,
     draw_placement_preview,
-)  # Import specific functions
+)
 from . import colors, layout
 
 if TYPE_CHECKING:
-    from src.config import EnvConfig, VisConfig
-    from src.environment.core.game_state import GameState
+    from ...config import EnvConfig, VisConfig
+    from ...environment.core.game_state import GameState
 
 logger = logging.getLogger(__name__)
 

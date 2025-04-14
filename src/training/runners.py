@@ -1,35 +1,29 @@
 # File: src/training/runners.py
+# File: src/training/runners.py
 import logging
 import queue
 import sys
 import threading
 import time
 import traceback
-from pathlib import Path  # Import Path
+from pathlib import Path
 from typing import Any
 
 import mlflow
 import pygame
 
-# Move imports to the top before potentially modifying sys.path
-from src import config, environment, utils, visualization
-from src.data import DataManager
-from src.nn import NeuralNetwork
-from src.rl import ExperienceBuffer, Trainer
-from src.stats import StatsCollectorActor
-from src.training import TrainingComponents, TrainingPipeline
-from src.training.logging_utils import (
+# Use relative imports
+from .. import config, environment, utils, visualization
+from ..data import DataManager
+from ..nn import NeuralNetwork
+from ..rl import ExperienceBuffer, Trainer
+from ..stats import StatsCollectorActor
+from . import TrainingComponents, TrainingPipeline
+from .logging_utils import (
     Tee,
     get_root_logger,
     setup_file_logging,
 )
-
-# Ensure the src directory is in the Python path *if running directly*
-script_dir = Path(__file__).parent
-project_root = script_dir.parent.parent  # Go up two levels
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
 
 # Queue for pipeline to send combined state dict {worker_id: state, -1: global_stats}
 # Define it here so it's accessible by the visual runner function
@@ -47,7 +41,7 @@ def _setup_training_components(
         # Use the potentially overridden configs passed in
         train_config = train_config_override
         persist_config = persist_config_override
-        # Provide defaults for missing arguments by calling constructors without args
+        # Pydantic models with defaults can be instantiated without args
         env_config = config.EnvConfig()
         model_config = config.ModelConfig()
         mcts_config = config.MCTSConfig()
@@ -268,7 +262,7 @@ def run_training_visual_mode(
         logger.info("Training pipeline thread launched.")
 
         # --- Initialize Visualization ---
-        # Provide defaults for VisConfig by calling constructor without args
+        # Pydantic models with defaults can be instantiated without args
         vis_config = config.VisConfig()
         pygame.init()
         pygame.font.init()
@@ -322,6 +316,9 @@ def run_training_visual_mode(
                     # Use update for global stats to handle potential overlaps
                     global_stats_update = visual_data.pop(-1, {})
                     if isinstance(global_stats_update, dict):
+                        # Ensure current_global_stats is a dict before updating
+                        if not isinstance(current_global_stats, dict):
+                            current_global_stats = {}
                         current_global_stats.update(global_stats_update)
                     else:
                         logger.warning(
@@ -349,6 +346,9 @@ def run_training_visual_mode(
                         )
                         # Optionally merge them into global stats if they are dicts
                         if isinstance(remaining_items, dict):
+                            # Ensure current_global_stats is a dict before updating
+                            if not isinstance(current_global_stats, dict):
+                                current_global_stats = {}
                             current_global_stats.update(remaining_items)
 
                 else:

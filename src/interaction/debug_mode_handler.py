@@ -1,16 +1,17 @@
 # File: src/interaction/debug_mode_handler.py
+# File: src/interaction/debug_mode_handler.py
 import logging
 from typing import TYPE_CHECKING
 
 import pygame
 
-from src.environment import grid as env_grid
-from src.visualization import core as vis_core
+# Use relative imports
+from ..environment import grid as env_grid
+from ..visualization import core as vis_core
 
 # Move Triangle import into TYPE_CHECKING
 if TYPE_CHECKING:
-    from src.structs import Triangle
-
+    from ..structs import Triangle
     from .input_handler import InputHandler  # Import InputHandler type
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ def handle_debug_click(event: pygame.event.Event, handler: "InputHandler") -> No
     r, c = grid_coords
     if game_state.grid_data.valid(r, c):
         # Use TYPE_CHECKING import for Triangle type hint
-        tri: Triangle = game_state.grid_data.triangles[r][c]
+        tri: "Triangle" = game_state.grid_data.triangles[r][c]
         if not tri.is_death:
             # Toggle state directly on the GameState's GridData
             tri.is_occupied = not tri.is_occupied

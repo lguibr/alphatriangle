@@ -1,9 +1,10 @@
 # File: src/data/data_manager.py
+# File: src/data/data_manager.py
 import json
 import logging
 import shutil
 from collections import deque
-from pathlib import Path  # Import Path
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import cloudpickle
@@ -13,19 +14,19 @@ import ray
 import torch
 from pydantic import ValidationError
 
-from src.utils.sumtree import SumTree
-
+# Use relative imports
+from ..utils.sumtree import SumTree
 from .schemas import BufferData, CheckpointData, LoadedTrainingState
 
 if TYPE_CHECKING:
     from torch.optim import Optimizer
 
-    from src.config import PersistenceConfig, TrainConfig
-    from src.nn import NeuralNetwork
-    from src.rl.core.buffer import (
+    from ..config import PersistenceConfig, TrainConfig
+    from ..nn import NeuralNetwork
+    from ..rl.core.buffer import (
         ExperienceBuffer,
     )
-    from src.stats import StatsCollectorActor
+    from ..stats import StatsCollectorActor
 
 logger = logging.getLogger(__name__)
 

@@ -1,17 +1,16 @@
 # File: src/visualization/drawing/grid.py
+# File: src/visualization/drawing/grid.py
 from typing import TYPE_CHECKING
 
 import pygame
 
-# Move Triangle import into TYPE_CHECKING block
-if TYPE_CHECKING:
-    from src.structs import Triangle
-
+# Use relative imports
+from ...structs import Triangle
 from ..core import colors, coord_mapper
 
 if TYPE_CHECKING:
-    from src.config import EnvConfig
-    from src.environment import GridData
+    from ...config import EnvConfig
+    from ...environment import GridData
 
 
 def draw_grid_background(surface: pygame.Surface, bg_color: tuple) -> None:

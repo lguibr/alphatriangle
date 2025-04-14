@@ -4,11 +4,9 @@
 Visualization module for rendering the game state using Pygame.
 """
 
-# REMOVED: Import and potentially export utils
-# from . import utils as vis_utils
-from src.config import VisConfig
-
-from .core import colors  # Keep colors accessible
+# Use relative imports
+from ..config import VisConfig
+from .core import colors
 from .core.coord_mapper import (
     get_grid_coords_from_screen,
     get_preview_index_from_screen,
@@ -59,8 +57,6 @@ __all__ = [
     "draw_debug_highlight",
     # UI Components
     "ProgressBar",
-    # REMOVED: Utils export
-    # "vis_utils",
     # Config
     "VisConfig",
 ]

@@ -1,24 +1,18 @@
 # File: run_interactive.py
+# File: run_interactive.py
 # This script is now primarily for legacy execution or direct debugging.
 # The recommended way to run is via the 'alphatriangle' command-line tool.
 
 import argparse
 import sys
-from pathlib import Path  # Import Path
 
-# Ensure the src directory is in the Python path
-script_dir = Path(__file__).resolve().parent
-project_root = script_dir.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
-# Import the function that now contains the core logic
+# Use absolute imports assuming the package is installed
 try:
-    from src.cli import run_interactive_mode
+    from alphatriangle.cli import run_interactive_mode
 except ImportError as e:
     print(f"ImportError: {e}")
     print(
-        "Please ensure the package is installed (`pip install .`) or run from the project root."
+        "Please ensure the package is installed (`pip install -e .`) or run from the project root."
     )
     sys.exit(1)
 

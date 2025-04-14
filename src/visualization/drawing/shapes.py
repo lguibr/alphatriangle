@@ -1,8 +1,9 @@
 # File: src/visualization/drawing/shapes.py
+# File: src/visualization/drawing/shapes.py
 import pygame
 
-from src.structs import Shape, Triangle
-
+# Use relative imports
+from ...structs import Shape, Triangle
 from ..core import colors
 
 

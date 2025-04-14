@@ -1,8 +1,11 @@
+# File: src/data/schemas.py
+# File: src/data/schemas.py
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.utils.types import Experience
+# Use relative import
+from ..utils.types import Experience
 
 arbitrary_types_config = ConfigDict(arbitrary_types_allowed=True)
 

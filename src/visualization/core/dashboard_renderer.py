@@ -1,4 +1,5 @@
 # File: src/visualization/core/dashboard_renderer.py
+# File: src/visualization/core/dashboard_renderer.py
 import logging
 import math
 from collections import deque
@@ -6,22 +7,19 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import pygame
 
-from src.environment import GameState
-
-# Move StatsCollectorData import into TYPE_CHECKING block
-if TYPE_CHECKING:
-    from src.stats import StatsCollectorActor, StatsCollectorData
-
-# Import Plotter directly from its module
-from src.stats.plotter import Plotter
-
+# Use relative imports
+from ...environment import GameState
+from ...stats.plotter import Plotter
 from ..drawing import hud as hud_drawing
 from ..ui import ProgressBar
 from . import colors, layout
 from .game_renderer import GameRenderer
 
+# Move StatsCollectorData import into TYPE_CHECKING block
 if TYPE_CHECKING:
-    from ...config import EnvConfig, ModelConfig, VisConfig  # Add ModelConfig
+    from ...config import EnvConfig, ModelConfig, VisConfig
+    from ...stats import StatsCollectorActor, StatsCollectorData
+
 
 logger = logging.getLogger(__name__)
 

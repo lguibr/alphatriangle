@@ -1,17 +1,18 @@
 # File: src/visualization/drawing/previews.py
+# File: src/visualization/drawing/previews.py
 import logging
 from typing import TYPE_CHECKING
 
 import pygame
 
-from src.structs import Shape, Triangle
-
+# Use relative imports
+from ...structs import Shape, Triangle
 from ..core import colors, coord_mapper
 from .shapes import draw_shape
 
 if TYPE_CHECKING:
-    from src.config import EnvConfig, VisConfig
-    from src.environment import GameState
+    from ...config import EnvConfig, VisConfig
+    from ...environment import GameState
 
 logger = logging.getLogger(__name__)
 

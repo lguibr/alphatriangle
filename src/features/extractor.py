@@ -1,18 +1,19 @@
 # File: src/features/extractor.py
+# File: src/features/extractor.py
 import logging
 from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from src.config import ModelConfig
+# Use relative imports
+from ..config import ModelConfig
+from ..utils.types import StateType
+from . import grid_features
 
 # Import GameState only for type checking
 if TYPE_CHECKING:
-    from src.environment import GameState
+    from ..environment import GameState
 
-from src.utils.types import StateType
-
-from . import grid_features
 
 logger = logging.getLogger(__name__)
 

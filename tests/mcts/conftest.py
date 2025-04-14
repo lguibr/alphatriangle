@@ -1,21 +1,24 @@
 # File: tests/mcts/conftest.py
+# File: tests/mcts/conftest.py
 import random
-import sys
 from collections.abc import Mapping
-from pathlib import Path  # Import Path
+from typing import Any
 
 import numpy as np
 import pytest
 
-# Move imports to the top
-from src.environment import EnvConfig
-from src.mcts.core.node import Node
-from src.utils.types import ActionType, PolicyValueOutput
-
-# Ensure src path is added using pathlib
-src_path = Path(__file__).resolve().parent.parent.parent / "src"
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
+# Use relative imports for src components if running tests from project root
+# or absolute imports if package is installed
+try:
+    # Try absolute imports first (for installed package)
+    from alphatriangle.config import EnvConfig
+    from alphatriangle.mcts.core.node import Node
+    from alphatriangle.utils.types import ActionType, PolicyValueOutput
+except ImportError:
+    # Fallback to relative imports (for running tests directly)
+    from src.config import EnvConfig
+    from src.mcts.core.node import Node
+    from src.utils.types import ActionType, PolicyValueOutput
 
 
 # Use default NumPy random number generator
@@ -38,23 +41,11 @@ class MockGameState:
         self._is_over = is_terminal
         self._outcome = outcome
         # Use a default EnvConfig if none provided, needed for action dim
-        self.env_config = (
-            env_config
-            if env_config
-            # Provide default values for EnvConfig
-            else EnvConfig(
-                ROWS=3,
-                COLS=3,
-                COLS_PER_ROW=[3, 3, 3],
-                NUM_SHAPE_SLOTS=1,
-                MIN_LINE_LENGTH=3,
-            )
-        )
+        self.env_config = env_config if env_config else EnvConfig()
+        # Cast ACTION_DIM to int
+        action_dim_int = int(self.env_config.ACTION_DIM)
         self._valid_actions = (
-            valid_actions
-            if valid_actions is not None
-            # ACTION_DIM is already int
-            else list(range(self.env_config.ACTION_DIM))
+            valid_actions if valid_actions is not None else list(range(action_dim_int))
         )
 
     def is_over(self) -> bool:
@@ -157,8 +148,8 @@ class MockNetworkEvaluator:
 
     def evaluate(self, state: MockGameState) -> PolicyValueOutput:
         self.evaluation_history.append(state)
-        # ACTION_DIM is already int
-        self._action_dim = state.env_config.ACTION_DIM
+        # Cast ACTION_DIM to int
+        self._action_dim = int(state.env_config.ACTION_DIM)
         policy = self._get_policy(state)
         # Create full policy map respecting action_dim
         full_policy = dict.fromkeys(range(self._action_dim), 0.0)
@@ -181,16 +172,18 @@ class MockNetworkEvaluator:
 @pytest.fixture
 def mock_evaluator(mock_env_config: EnvConfig) -> MockNetworkEvaluator:
     """Provides a MockNetworkEvaluator instance configured with the mock EnvConfig."""
-    # ACTION_DIM is already int
-    return MockNetworkEvaluator(action_dim=mock_env_config.ACTION_DIM)
+    # Cast ACTION_DIM to int
+    action_dim_int = int(mock_env_config.ACTION_DIM)
+    return MockNetworkEvaluator(action_dim=action_dim_int)
 
 
 @pytest.fixture
 def root_node_mock_state(mock_env_config: EnvConfig) -> Node:
     """Provides a root Node with a MockGameState using the mock EnvConfig."""
+    # Cast ACTION_DIM to int
+    action_dim_int = int(mock_env_config.ACTION_DIM)
     state = MockGameState(
-        # ACTION_DIM is already int
-        valid_actions=list(range(mock_env_config.ACTION_DIM)),
+        valid_actions=list(range(action_dim_int)),
         env_config=mock_env_config,
     )
     # Cast MockGameState to Any temporarily to satisfy Node's type hint
@@ -204,11 +197,11 @@ def expanded_node_mock_state(
     """Provides an expanded root node with mock children using mock EnvConfig."""
     root = root_node_mock_state
     # Cast root.state back to MockGameState for the evaluator
-    mock_state = root.state
+    mock_state: MockGameState = root.state  # type: ignore [assignment]
     # Ensure evaluator action_dim is int
-    # ACTION_DIM is already int
-    mock_evaluator._action_dim = mock_state.env_config.ACTION_DIM
-    policy, value = mock_evaluator.evaluate(mock_state)  # type: ignore [arg-type]
+    # Cast ACTION_DIM to int
+    mock_evaluator._action_dim = int(mock_state.env_config.ACTION_DIM)
+    policy, value = mock_evaluator.evaluate(mock_state)
     # Ensure policy is not empty before expanding
     if not policy:
         policy = (
@@ -248,8 +241,8 @@ def deep_expanded_node_mock_state(
     """
     root = expanded_node_mock_state
     # Ensure evaluator has correct action dim (as int)
-    # ACTION_DIM is already int
-    mock_evaluator._action_dim = mock_env_config.ACTION_DIM
+    # Cast ACTION_DIM to int
+    mock_evaluator._action_dim = int(mock_env_config.ACTION_DIM)
 
     # Ensure children exist
     if 0 not in root.children or 1 not in root.children:
@@ -276,8 +269,8 @@ def deep_expanded_node_mock_state(
     # Ensure Child 0 has children (expand it manually)
     # Use evaluator to get a policy, then manually create children
     # Cast child0.state back to MockGameState for the evaluator
-    mock_child0_state = child0.state
-    policy_gc, value_gc = mock_evaluator.evaluate(mock_child0_state)  # type: ignore [arg-type]
+    mock_child0_state: MockGameState = child0.state  # type: ignore [assignment]
+    policy_gc, value_gc = mock_evaluator.evaluate(mock_child0_state)
     if not policy_gc:  # Handle case where mock state has no valid actions
         policy_gc = (
             dict.fromkeys(

@@ -1,7 +1,8 @@
 # File: src/environment/core/action_codec.py
+# File: src/environment/core/action_codec.py
 
-from src.config import EnvConfig
-from src.utils.types import ActionType
+from ...config import EnvConfig
+from ...utils.types import ActionType
 
 
 def encode_action(shape_idx: int, r: int, c: int, config: EnvConfig) -> ActionType:
@@ -21,10 +22,11 @@ def encode_action(shape_idx: int, r: int, c: int, config: EnvConfig) -> ActionTy
 
 def decode_action(action_index: ActionType, config: EnvConfig) -> tuple[int, int, int]:
     """Decodes an integer action into (shape_idx, r, c)."""
-    # ACTION_DIM is already an int, no need to cast
-    if not (0 <= action_index < config.ACTION_DIM):
+    # Cast ACTION_DIM to int for comparison
+    action_dim_int = int(config.ACTION_DIM)
+    if not (0 <= action_index < action_dim_int):
         raise ValueError(
-            f"Invalid action index: {action_index}, must be < {config.ACTION_DIM}"
+            f"Invalid action index: {action_index}, must be < {action_dim_int}"
         )
 
     grid_size = config.ROWS * config.COLS

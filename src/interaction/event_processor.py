@@ -1,11 +1,14 @@
+# File: src/interaction/event_processor.py
+# File: src/interaction/event_processor.py
 import logging
 from collections.abc import Generator
 from typing import TYPE_CHECKING, Any
 
 import pygame
 
+# Use relative import
 if TYPE_CHECKING:
-    from src.visualization.core.visualizer import Visualizer
+    from ..visualization.core.visualizer import Visualizer
 
 logger = logging.getLogger(__name__)
 

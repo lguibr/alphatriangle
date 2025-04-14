@@ -1,16 +1,27 @@
 # File: tests/environment/conftest.py
+# File: tests/environment/conftest.py
 
 import pytest
 
-from src.environment import EnvConfig, GameState
-from src.structs import Shape  # Import Shape
+# Use relative imports for src components if running tests from project root
+# or absolute imports if package is installed
+try:
+    # Try absolute imports first (for installed package)
+    from alphatriangle.config import EnvConfig
+    from alphatriangle.environment import GameState
+    from alphatriangle.structs import Shape
+except ImportError:
+    # Fallback to relative imports (for running tests directly)
+    from src.config import EnvConfig
+    from src.environment import GameState
+    from src.structs import Shape
 
 
 # Use session-scoped config from top-level conftest
 @pytest.fixture(scope="session")
 def default_env_config() -> EnvConfig:
     """Provides the default EnvConfig used in the specification (session-scoped)."""
-    # Provide default values for missing arguments by calling the constructor without args
+    # Pydantic models with defaults can be instantiated without args
     return EnvConfig()
 
 

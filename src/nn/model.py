@@ -1,10 +1,12 @@
 # File: src/nn/model.py
+# File: src/nn/model.py
 import math
 
 import torch
 import torch.nn as nn
 
-from src.config import EnvConfig, ModelConfig
+# Use relative imports
+from ..config import EnvConfig, ModelConfig
 
 
 def conv_block(
@@ -96,7 +98,8 @@ class AlphaTriangleNet(nn.Module):
         super().__init__()
         self.model_config = model_config
         self.env_config = env_config
-        self.action_dim = env_config.ACTION_DIM  # Already an int
+        # Cast ACTION_DIM to int
+        self.action_dim = int(env_config.ACTION_DIM)
 
         activation_cls: type[nn.Module] = getattr(nn, model_config.ACTIVATION_FUNCTION)
 
@@ -232,7 +235,7 @@ class AlphaTriangleNet(nn.Module):
             policy_head_layers.append(activation_cls())
             policy_in_features = hidden_dim
         # Final layer to output action dimension logits
-        # self.action_dim is already an int
+        # Use self.action_dim which is already cast to int
         policy_head_layers.append(nn.Linear(policy_in_features, self.action_dim))
         self.policy_head = nn.Sequential(*policy_head_layers)
 
