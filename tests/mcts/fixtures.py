@@ -1,10 +1,8 @@
-# File: tests/mcts/fixtures.py
-# File: tests/mcts/fixtures.py
 from collections.abc import Mapping
 
 import pytest
 
-# Use relative imports for src components if running tests from project root
+# Use relative imports for alphatriangle components if running tests from project root
 # or absolute imports if package is installed
 try:
     # Try absolute imports first (for installed package)

@@ -1,5 +1,4 @@
-# File: src/config/README.md
-# Configuration Module (`src.config`)
+# Configuration Module (`alphatriangle.config`)
 
 ## Purpose and Architecture
 
@@ -19,7 +18,7 @@ This module centralizes all configuration parameters for the AlphaTriangle proje
     -   `TrainConfig`: Training loop hyperparameters (batch size, learning rate, workers, **PER settings**, etc.).
     -   `VisConfig`: Visualization parameters (screen size, FPS, layout).
     -   `PersistenceConfig`: Data saving/loading parameters (directories, filenames).
-    -   `MCTSConfig`: MCTS parameters (simulations, exploration constants, temperature). - *Note: Defined in `src.mcts.core.config` but often used alongside other configs.*
+    -   `MCTSConfig`: MCTS parameters (simulations, exploration constants, temperature). - *Note: Defined in `alphatriangle.mcts.core.config` but often used alongside other configs.*
 -   **Constants:**
     -   `APP_NAME`: The name of the application.
 -   **Functions:**
@@ -30,7 +29,7 @@ This module centralizes all configuration parameters for the AlphaTriangle proje
 This module primarily defines configurations and relies heavily on **Pydantic**.
 
 -   **`pydantic`**: The core library used for defining models and validation.
--   **`src.mcts.core.config`**: The `validation.py` script imports `MCTSConfig` from this location.
+-   **`alphatriangle.mcts.core.config`**: The `validation.py` script imports `MCTSConfig` from this location.
 -   **Standard Libraries:** `typing`, `time`, `os`.
 
 ---

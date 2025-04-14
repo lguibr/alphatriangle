@@ -1,5 +1,3 @@
-# File: src/environment/grid/grid_data.py
-# File: src/environment/grid/grid_data.py
 import logging
 
 import numpy as np
@@ -12,7 +10,6 @@ from . import logic as GridLogic
 logger = logging.getLogger(__name__)
 
 
-# --- Line Precomputation (Moved here to break circular import) ---
 def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
     """
     Generates all potential horizontal and diagonal lines based on grid geometry.
@@ -127,11 +124,9 @@ def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
                 if len(current_line_d2) >= min_len:
                     lines.append(current_line_d2)
 
-    # Remove duplicate lines (can happen with trace logic)
     unique_lines_tuples = {tuple(sorted(line)) for line in lines}
     unique_lines = [list(line_tuple) for line_tuple in unique_lines_tuples]
 
-    # Filter out lines shorter than min_len again after removing duplicates
     final_lines = [line for line in unique_lines if len(line) >= min_len]
 
     return final_lines
@@ -145,7 +140,7 @@ class GridData:
         self.cols = config.COLS
         self.config = config
         self.triangles: list[list[Triangle]] = self._create(config)
-        GridLogic.link_neighbors(self)  # Use logic from logic.py
+        GridLogic.link_neighbors(self)
 
         self._occupied_np = np.array(
             [[t.is_occupied for t in r] for r in self.triangles], dtype=bool
@@ -156,8 +151,7 @@ class GridData:
 
         self.potential_lines: set[frozenset[Triangle]] = set()
         self._triangle_to_lines_map: dict[Triangle, set[frozenset[Triangle]]] = {}
-        self._initialize_lines_and_index()  # Call internal method
-        # Changed log level from INFO to DEBUG
+        self._initialize_lines_and_index()
         logger.debug(
             f"GridData initialized ({self.rows}x{self.cols}). Found {len(self.potential_lines)} potential lines."
         )
@@ -282,12 +276,10 @@ class GridData:
             new_line_triangles: set[Triangle] = set()
             valid_new_line = True
             for old_tri in old_frozen_line:
-                # Use the renamed variable here
                 new_tri_lookup: Triangle | None = old_to_new_tri_map.get(hash(old_tri))
                 if new_tri_lookup:
                     new_line_triangles.add(new_tri_lookup)
                 else:
-                    # This shouldn't happen if the map is built correctly
                     logger.error(
                         f"Deepcopy error: Could not find new triangle corresponding to old {old_tri}"
                     )
@@ -304,7 +296,6 @@ class GridData:
                         new_frozen_line
                     )
 
-        # logger.debug(f"GridData deepcopy complete. Copied {len(new_grid.potential_lines)} lines.") # Optional: reduce log noise
         return new_grid
 
     def __str__(self) -> str:

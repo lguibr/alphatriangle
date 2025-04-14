@@ -1,4 +1,3 @@
-# File: src/config/mcts_config.py
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -32,8 +31,6 @@ class MCTSConfig(BaseModel):
     @field_validator("temperature_final")
     @classmethod
     def check_temp_final_le_initial(cls, v: float, info) -> float:
-        # info.data might not be available during initial validation in Pydantic v2
-        # Check 'values' if info.data is empty
         data = info.data if info.data else info.values
         initial_temp = data.get("temperature_initial")
         if initial_temp is not None and v > initial_temp:
@@ -43,5 +40,4 @@ class MCTSConfig(BaseModel):
         return v
 
 
-# Ensure model is rebuilt after changes
 MCTSConfig.model_rebuild(force=True)

@@ -1,5 +1,4 @@
-# File: src/training/README.md
-# Training Module (`src.training`)
+# Training Module (`alphatriangle.training`)
 
 ## Purpose and Architecture
 
@@ -52,14 +51,14 @@ This structure separates the high-level setup/teardown (`pipeline`) from the cor
 
 ## Dependencies
 
--   **`src.config`**: All configuration classes.
--   **`src.nn`**: `NeuralNetwork`.
--   **`src.rl`**: `ExperienceBuffer`, `Trainer`, `SelfPlayWorker`, `SelfPlayResult`.
--   **`src.data`**: `DataManager`, `LoadedTrainingState`.
--   **`src.stats`**: `StatsCollectorActor`.
--   **`src.environment`**: `GameState`.
--   **`src.utils`**: Helper functions and types.
--   **`src.visualization`**: `ProgressBar`.
+-   **`alphatriangle.config`**: All configuration classes.
+-   **`alphatriangle.nn`**: `NeuralNetwork`.
+-   **`alphatriangle.rl`**: `ExperienceBuffer`, `Trainer`, `SelfPlayWorker`, `SelfPlayResult`.
+-   **`alphatriangle.data`**: `DataManager`, `LoadedTrainingState`.
+-   **`alphatriangle.stats`**: `StatsCollectorActor`.
+-   **`alphatriangle.environment`**: `GameState`.
+-   **`alphatriangle.utils`**: Helper functions and types.
+-   **`alphatriangle.visualization`**: `ProgressBar`.
 -   **`ray`**: For parallelism.
 -   **`mlflow`**: For experiment tracking.
 -   **`torch`**: For neural network operations.

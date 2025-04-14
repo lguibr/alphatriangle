@@ -1,4 +1,3 @@
-# File: src/training/__init__.py
 """
 Training module containing the pipeline, loop, components, and utilities
 for orchestrating the reinforcement learning training process.

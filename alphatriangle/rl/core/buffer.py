@@ -1,4 +1,3 @@
-# File: src/rl/core/buffer.py
 import logging
 import random
 from collections import deque

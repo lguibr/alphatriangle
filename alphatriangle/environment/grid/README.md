@@ -1,11 +1,10 @@
-# File: src/environment/grid/README.md
-# Environment Grid Submodule (`src.environment.grid`)
+# Environment Grid Submodule (`alphatriangle.environment.grid`)
 
 ## Purpose and Architecture
 
 This submodule manages the game's grid structure and related logic. It defines the triangular cells, their properties, relationships, and operations like placement validation and line clearing.
 
--   **Cell Representation:** The `Triangle` class (defined in `src.structs`) represents a single cell, storing its position, orientation (`is_up`), state (`is_occupied`, `is_death`), color, and references to its immediate neighbors.
+-   **Cell Representation:** The `Triangle` class (defined in `alphatriangle.structs`) represents a single cell, storing its position, orientation (`is_up`), state (`is_occupied`, `is_death`), color, and references to its immediate neighbors.
 -   **Grid Data Structure:** The `GridData` class holds the 2D array of `Triangle` objects. It also maintains optimized `numpy` arrays (`_occupied_np`, `_death_np`) for faster state access and manages information about potential lines for efficient clearing checks.
 -   **Grid Logic:** The `logic.py` module (exposed as `GridLogic`) contains functions operating on `GridData` and `Triangle` objects. This includes:
     -   Initializing the grid based on `EnvConfig` (defining death zones).
@@ -13,7 +12,7 @@ This submodule manages the game's grid structure and related logic. It defines t
     -   Precomputing potential lines (`_precompute_lines`) and indexing them (`initialize_lines_and_index`) for efficient checking.
     -   Checking if a shape can be placed (`can_place`), **including matching triangle orientations**.
     -   Checking for and clearing completed lines (`check_and_clear_lines`). **This function does NOT implement gravity.**
--   **Grid Features:** Note: The `grid_features.py` module, which provided functions to calculate scalar metrics (heights, holes, bumpiness), has been **moved** to the top-level `src/features` module (`src/features/grid_features.py`) as part of decoupling feature extraction from the core environment.
+-   **Grid Features:** Note: The `grid_features.py` module, which provided functions to calculate scalar metrics (heights, holes, bumpiness), has been **moved** to the top-level `alphatriangle/features` module (`alphatriangle/features/grid_features.py`) as part of decoupling feature extraction from the core environment.
 
 ## Exposed Interfaces
 
@@ -33,9 +32,9 @@ This submodule manages the game's grid structure and related logic. It defines t
 
 ## Dependencies
 
--   **`src.config`**:
+-   **`alphatriangle.config`**:
     -   `EnvConfig`: Used by `GridData` initialization and logic functions.
--   **`src.structs`**:
+-   **`alphatriangle.structs`**:
     -   Uses `Triangle`, `Shape`.
 -   **`numpy`**:
     -   Used extensively in `GridData`.

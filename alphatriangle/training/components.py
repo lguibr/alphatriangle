@@ -1,4 +1,3 @@
-# File: src/training/components.py
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 

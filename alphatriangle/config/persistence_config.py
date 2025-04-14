@@ -1,4 +1,3 @@
-# File: src/config/persistence_config.py
 from pathlib import Path
 
 from pydantic import BaseModel, Field, computed_field
@@ -21,7 +20,6 @@ class PersistenceConfig(BaseModel):
     BUFFER_FILENAME: str = Field(default="buffer.pkl")
     CONFIG_FILENAME: str = Field(default="configs.json")
 
-    # Default RUN_NAME is handled by TrainConfig usually, but provide a fallback
     RUN_NAME: str = Field(default="default_run")
 
     SAVE_GAME_STATES: bool = Field(default=False)
@@ -38,7 +36,7 @@ class PersistenceConfig(BaseModel):
         if hasattr(self, "ROOT_DATA_DIR") and hasattr(self, "MLFLOW_DIR_NAME"):
             abs_path = Path(self.ROOT_DATA_DIR).joinpath(self.MLFLOW_DIR_NAME).resolve()
             return abs_path.as_uri()
-        return ""  # Fallback
+        return ""
 
     def get_run_base_dir(self, run_name: str | None = None) -> str:
         """Gets the base directory for a specific run."""

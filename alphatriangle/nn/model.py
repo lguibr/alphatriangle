@@ -1,12 +1,9 @@
-# File: src/nn/model.py
-# File: src/nn/model.py
 import math
-from typing import cast  # Import cast
+from typing import cast
 
 import torch
 import torch.nn as nn
 
-# Use relative imports
 from ..config import EnvConfig, ModelConfig
 
 
@@ -20,7 +17,7 @@ def conv_block(
     activation: type[nn.Module],
 ) -> nn.Sequential:
     """Creates a standard convolutional block."""
-    layers: list[nn.Module] = [  # Explicitly type the list
+    layers: list[nn.Module] = [
         nn.Conv2d(
             in_channels,
             out_channels,
@@ -48,9 +45,9 @@ class ResidualBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(channels) if use_batch_norm else nn.Identity()
         self.activation = activation()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # Added return type hint
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         residual = x
-        out: torch.Tensor = self.conv1(x)  # Add type hint
+        out: torch.Tensor = self.conv1(x)
         out = self.conv2(out)
         out = self.bn2(out)
         out += residual
@@ -95,9 +92,9 @@ class PositionalEncoding(nn.Module):
         """
         Args:
             x: Tensor, shape [seq_len, batch_size, embedding_dim]
-               (Note: AlphaTriangleNet might pass [batch_size, embedding_dim, seq_len (H*W)])
-               It needs to be permuted before applying positional encoding if that's the case.
-               Here, we assume the input is already [seq_len, batch_size, embedding_dim].
+                (Note: AlphaTriangleNet might pass [batch_size, embedding_dim, seq_len (H*W)])
+                It needs to be permuted before applying positional encoding if that's the case.
+                Here, we assume the input is already [seq_len, batch_size, embedding_dim].
 
         Returns:
             Tensor with added positional encoding.
@@ -137,7 +134,7 @@ class AlphaTriangleNet(nn.Module):
         activation_cls: type[nn.Module] = getattr(nn, model_config.ACTIVATION_FUNCTION)
 
         # --- CNN Body ---
-        conv_layers: list[nn.Module] = []  # Explicitly type the list
+        conv_layers: list[nn.Module] = []
         in_channels = model_config.GRID_INPUT_CHANNELS
         for i, out_channels in enumerate(model_config.CONV_FILTERS):
             conv_layers.append(
@@ -155,7 +152,7 @@ class AlphaTriangleNet(nn.Module):
         self.conv_body = nn.Sequential(*conv_layers)
 
         # --- Residual Body ---
-        res_layers: list[nn.Module] = []  # Explicitly type the list
+        res_layers: list[nn.Module] = []
         if model_config.NUM_RESIDUAL_BLOCKS > 0:
             res_channels = model_config.RESIDUAL_BLOCK_FILTERS
             if in_channels != res_channels:
@@ -255,7 +252,7 @@ class AlphaTriangleNet(nn.Module):
         self.shared_fc = nn.Sequential(*shared_fc_layers)
 
         # --- Policy Head ---
-        policy_head_layers: list[nn.Module] = []  # Explicitly type the list
+        policy_head_layers: list[nn.Module] = []
         policy_in_features = in_features
         # Iterate through hidden dims if any
         for hidden_dim in model_config.POLICY_HEAD_DIMS:

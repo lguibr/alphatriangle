@@ -1,4 +1,4 @@
-# Neural Network Module (`src.nn`)
+# Neural Network Module (`alphatriangle.nn`)
 
 ## Purpose and Architecture
 
@@ -16,7 +16,7 @@ This module defines and manages the neural network used by the AlphaTriangle age
 -   **Network Interface (`network.py`):**
     -   The `NeuralNetwork` class acts as a wrapper around the `AlphaTriangleNet` PyTorch model.
     -   It provides a clean interface for the rest of the system (MCTS, Trainer) to interact with the network, abstracting away PyTorch specifics.
-    -   It **internally uses `src.features.extract_state_features`** to convert input `GameState` objects into tensors before feeding them to the underlying `AlphaTriangleNet` model.
+    -   It **internally uses `alphatriangle.features.extract_state_features`** to convert input `GameState` objects into tensors before feeding them to the underlying `AlphaTriangleNet` model.
     -   Key methods:
         -   `evaluate(state: GameState)`: Takes a `GameState`, extracts features, performs a forward pass, and returns the policy probabilities (as a dictionary) and the scalar value estimate. Conforms to the `ActionPolicyValueEvaluator` protocol required by MCTS.
         -   `evaluate_batch(states: List[GameState])`: Extracts features from a batch of `GameState` objects and performs batched evaluation for efficiency.
@@ -39,15 +39,15 @@ This module defines and manages the neural network used by the AlphaTriangle age
 
 ## Dependencies
 
--   **`src.config`**:
+-   **`alphatriangle.config`**:
     -   `ModelConfig`: Defines the network architecture parameters (including expected feature dimensions and Transformer options).
     -   `EnvConfig`: Provides environment dimensions (grid size, action space size) needed by the model.
     -   `TrainConfig`: Used by `NeuralNetwork` init.
--   **`src.environment`**:
+-   **`alphatriangle.environment`**:
     -   `GameState`: Input type for `evaluate` and `evaluate_batch`.
--   **`src.features`**:
+-   **`alphatriangle.features`**:
     -   `extract_state_features`: Used internally by `NeuralNetwork` to process `GameState` inputs.
--   **`src.utils.types`**:
+-   **`alphatriangle.utils.types`**:
     -   `ActionType`, `PolicyValueOutput`, `StateType`: Used in method signatures and return types.
 -   **`torch`**:
     -   The core deep learning framework (`torch`, `torch.nn`, `torch.nn.functional`).
@@ -57,4 +57,4 @@ This module defines and manages the neural network used by the AlphaTriangle age
 
 ---
 
-**Note:** Please keep this README updated when changing the neural network architecture (`AlphaTriangleNet`, including Transformer usage), the `NeuralNetwork` interface methods, or its interaction with configuration or other modules (especially `src.features`). Accurate documentation is crucial for maintainability.
+**Note:** Please keep this README updated when changing the neural network architecture (`AlphaTriangleNet`, including Transformer usage), the `NeuralNetwork` interface methods, or its interaction with configuration or other modules (especially `alphatriangle.features`). Accurate documentation is crucial for maintainability.

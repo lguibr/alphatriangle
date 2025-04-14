@@ -1,5 +1,3 @@
-# File: src/visualization/core/dashboard_renderer.py
-# File: src/visualization/core/dashboard_renderer.py
 import logging
 import math
 from collections import deque
@@ -7,7 +5,6 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import pygame
 
-# Use relative imports
 from ...environment import GameState
 from ...stats.plotter import Plotter
 from ..drawing import hud as hud_drawing
@@ -15,7 +12,6 @@ from ..ui import ProgressBar
 from . import colors, layout
 from .game_renderer import GameRenderer
 
-# Move StatsCollectorData import into TYPE_CHECKING block
 if TYPE_CHECKING:
     from ...config import EnvConfig, ModelConfig, VisConfig
     from ...stats import StatsCollectorActor, StatsCollectorData
@@ -37,8 +33,8 @@ class DashboardRenderer:
         vis_config: "VisConfig",
         env_config: "EnvConfig",
         fonts: dict[str, pygame.font.Font | None],
-        stats_collector_actor: Optional["StatsCollectorActor"] = None,  # Keep handle
-        model_config: Optional["ModelConfig"] = None,  # Add model_config
+        stats_collector_actor: Optional["StatsCollectorActor"] = None,
+        model_config: Optional["ModelConfig"] = None,
     ):
         self.screen = screen
         self.vis_config = vis_config

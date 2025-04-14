@@ -1,5 +1,3 @@
-# File: tests/nn/test_network.py
-# File: tests/nn/test_network.py
 from unittest.mock import MagicMock, patch
 
 import numpy as np

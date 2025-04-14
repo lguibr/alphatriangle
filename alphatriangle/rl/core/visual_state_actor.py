@@ -1,12 +1,9 @@
-# File: src/rl/core/visual_state_actor.py
-# File: src/rl/core/visual_state_actor.py
 import logging
 import time
 from typing import Any
 
 import ray
 
-# Use relative import
 from ...environment import GameState
 
 logger = logging.getLogger(__name__)
@@ -40,7 +37,6 @@ class VisualStateActor:
             # Don't reset, just ignore the update
             # self.global_stats = {}
 
-    # --- CHANGE: Correct return type hint ---
     def get_all_states(self) -> dict[int, Any]:
         """
         Called by the orchestrator to get states for the visual queue.
@@ -52,7 +48,6 @@ class VisualStateActor:
         combined_states: dict[int, Any] = dict(self.worker_states)
         combined_states[-1] = self.global_stats.copy()
         return combined_states
-        # --- END CHANGE ---
 
     def get_state(self, worker_id: int) -> GameState | None:
         """Get state for a specific worker (unused currently)."""

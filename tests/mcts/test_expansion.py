@@ -1,4 +1,3 @@
-# File: tests/mcts/test_expansion.py
 from typing import Any
 
 import pytest

@@ -1,8 +1,5 @@
-# File: src/visualization/drawing/shapes.py
-# File: src/visualization/drawing/shapes.py
 import pygame
 
-# Use relative imports
 from ...structs import Shape, Triangle
 from ..core import colors
 
@@ -12,7 +9,7 @@ def draw_shape(
     shape: Shape,
     topleft: tuple[int, int],
     cell_size: float,
-    _is_selected: bool = False,  # Mark as unused
+    _is_selected: bool = False,
     origin_offset: tuple[int, int] = (0, 0),
 ) -> None:
     """Draws a single shape onto a surface."""

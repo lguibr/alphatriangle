@@ -1,11 +1,8 @@
-# File: src/visualization/core/visualizer.py
-# File: src/visualization/core/visualizer.py
 import logging
 from typing import TYPE_CHECKING
 
 import pygame
 
-# Use relative imports
 from ...structs import Shape
 from ..drawing import grid as grid_drawing
 from ..drawing import highlight as highlight_drawing

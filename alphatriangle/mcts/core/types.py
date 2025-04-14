@@ -1,8 +1,6 @@
-# File: src/mcts/core/types.py
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Protocol
 
-# Use relative imports
 from ...utils.types import PolicyValueOutput
 
 if TYPE_CHECKING:

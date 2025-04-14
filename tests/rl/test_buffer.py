@@ -1,4 +1,3 @@
-# File: tests/rl/test_buffer.py
 from collections import deque
 
 import numpy as np
@@ -6,7 +5,7 @@ import pytest
 
 from alphatriangle.config import TrainConfig
 from alphatriangle.rl import ExperienceBuffer
-from alphatriangle.utils.sumtree import SumTree  # Import SumTree
+from alphatriangle.utils.sumtree import SumTree
 from alphatriangle.utils.types import Experience, StateType
 
 # Use module-level rng from tests/conftest.py

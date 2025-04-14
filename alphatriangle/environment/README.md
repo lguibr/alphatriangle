@@ -1,16 +1,15 @@
-# File: src/environment/README.md
-# Environment Module (`src.environment`)
+# Environment Module (`alphatriangle.environment`)
 
 ## Purpose and Architecture
 
 This module defines the game world for AlphaTriangle. It encapsulates the rules, state representation, actions, and core game logic. **Crucially, this module is now independent of any feature extraction logic specific to the neural network.** Its sole focus is the simulation of the game itself.
 
--   **State Representation:** `GameState` holds the current board (`GridData`), available shapes (`List[Shape]`), score, and game status. It represents the canonical state of the game. It uses core structures like `Shape` and `Triangle` defined in `src.structs`.
+-   **State Representation:** `GameState` holds the current board (`GridData`), available shapes (`List[Shape]`), score, and game status. It represents the canonical state of the game. It uses core structures like `Shape` and `Triangle` defined in `alphatriangle.structs`.
 -   **Core Logic:** Submodules (`grid`, `shapes`, `logic`) handle specific aspects like checking valid placements, clearing lines, managing shape generation, and calculating rewards. These logic modules operate on `GridData`, `Shape`, and `Triangle`. **Shape refilling now happens in batches: all slots are refilled only when all slots become empty.**
 -   **Action Handling:** `action_codec` provides functions to convert between a structured action (shape index, row, column) and a single integer representation used by the RL agent and MCTS.
 -   **Modularity:** Separating grid logic, shape logic, and core state makes the code easier to understand and modify.
 
-**Note:** Feature extraction (converting `GameState` to NN input tensors) is handled by the separate `src/features` module. Core data structures (`Triangle`, `Shape`) are defined in `src/structs`.
+**Note:** Feature extraction (converting `GameState` to NN input tensors) is handled by the separate `alphatriangle/features` module. Core data structures (`Triangle`, `Shape`) are defined in `alphatriangle/structs`.
 
 ## Exposed Interfaces
 
@@ -39,11 +38,11 @@ This module defines the game world for AlphaTriangle. It encapsulates the rules,
 
 ## Dependencies
 
--   **`src.config`**:
+-   **`alphatriangle.config`**:
     -   Uses `EnvConfig` extensively to define grid dimensions, shape slots, etc.
--   **`src.structs`**:
+-   **`alphatriangle.structs`**:
     -   Uses `Triangle`, `Shape`, `SHAPE_COLORS`.
--   **`src.utils.types`**:
+-   **`alphatriangle.utils.types`**:
     -   Uses `ActionType`.
 -   **`numpy`**:
     -   Used for grid representation (`GridData`).

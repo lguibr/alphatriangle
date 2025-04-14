@@ -1,4 +1,3 @@
-# File: src/interaction/__init__.py
 from .debug_mode_handler import handle_debug_click, update_debug_hover
 from .event_processor import process_pygame_events
 from .input_handler import InputHandler

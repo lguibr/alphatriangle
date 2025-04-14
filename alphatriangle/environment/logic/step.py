@@ -58,7 +58,7 @@ def execute_placement(
     # Place the shape
     newly_occupied_triangles: set[Triangle] = set()
     placed_count = 0
-    for dr, dc, _is_up in shape.triangles:  # Rename is_up to _is_up
+    for dr, dc, _is_up in shape.triangles:
         tri_r, tri_c = r + dr, c + dc
         if game_state.grid_data.valid(tri_r, tri_c):
             tri = game_state.grid_data.triangles[tri_r][tri_c]
@@ -69,7 +69,6 @@ def execute_placement(
                 newly_occupied_triangles.add(tri)
                 placed_count += 1
             else:
-                # This case should ideally be caught by can_place, but log if it occurs
                 logger.warning(
                     f"Overlap detected during placement at ({tri_r},{tri_c}) despite can_place=True."
                 )

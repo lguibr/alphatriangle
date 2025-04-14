@@ -1,9 +1,8 @@
-# File: README.md
 # AlphaTriangle Project
 
 <!-- Badges -->
 [![CI/CD Status](https://github.com/lguibr/alphatriangle/actions/workflows/ci_cd.yml/badge.svg)](https://github.com/lguibr/alphatriangle/actions/workflows/ci_cd.yml)
-[![codecov](https://codecov.io/gh/lguibr/alphatriangle/graph/badge.svg?token=YOUR_CODECOV_TOKEN)](https://codecov.io/gh/lguibr/alphatriangle) <!-- CHANGE TOKEN & USERNAME -->
+[![codecov](https://codecov.io/gh/lguibr/alphatriangle/graph/badge.svg?token=YOUR_CODECOV_TOKEN)](https://codecov.io/gh/lguibr/alphatriangle) 
 [![PyPI version](https://badge.fury.io/py/alphatriangle.svg)](https://badge.fury.io/py/alphatriangle)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -16,7 +15,7 @@ The project includes:
 *   A playable version of the triangle puzzle game using Pygame.
 *   An implementation of the MCTS algorithm tailored for the game.
 *   A deep neural network (policy and value heads) implemented in PyTorch, featuring convolutional layers and **optional Transformer Encoder layers**.
-*   A reinforcement learning pipeline coordinating **parallel self-play (using Ray)**, data storage, and network training, managed by the `src.training` module.
+*   A reinforcement learning pipeline coordinating **parallel self-play (using Ray)**, data storage, and network training, managed by the `alphatriangle.training` module.
 *   Visualization tools for interactive play, debugging, and monitoring training progress (**with near real-time plot updates**).
 *   Experiment tracking using MLflow.
 *   Unit tests for core components.
@@ -50,7 +49,7 @@ The project includes:
 │           ├── buffers/
 │           ├── logs/
 │           └── configs.json
-├── src/                    # Source code for the project package
+├── alphatriangle/                    # Source code for the project package
 │   ├── alphatriangle/      # (Implicit package name after install)
 │   │   ├── __init__.py
 │   │   ├── app.py
@@ -83,7 +82,7 @@ The project includes:
 └── run_training_visual.py  # Legacy script for visual training
 ```
 
-## Key Modules (`src`)
+## Key Modules (`alphatriangle`)
 
 *   **`cli`:** Defines the command-line interface using Typer.
 *   **`config`:** Centralized Pydantic configuration classes.
@@ -174,7 +173,7 @@ Use the `alphatriangle` command:
 
 ## Configuration
 
-All major parameters are defined in the Pydantic classes within the `src/config/` directory. Modify these files to experiment with different settings. The `src/config/validation.py` script performs basic checks on startup.
+All major parameters are defined in the Pydantic classes within the `alphatriangle/config/` directory. Modify these files to experiment with different settings. The `alphatriangle/config/validation.py` script performs basic checks on startup.
 
 ## Data Storage
 
@@ -182,4 +181,4 @@ All persistent data, including MLflow tracking data and run-specific artifacts, 
 
 ## Maintainability
 
-This project includes README files within each major `src` submodule. **Please keep these READMEs updated** when making changes to the code's structure, interfaces, or core logic.
+This project includes README files within each major `alphatriangle` submodule. **Please keep these READMEs updated** when making changes to the code's structure, interfaces, or core logic.

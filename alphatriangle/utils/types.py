@@ -1,5 +1,3 @@
-# File: src/utils/types.py
-# File: src/utils/types.py
 from collections import deque
 from collections.abc import Mapping
 
@@ -38,7 +36,7 @@ PolicyValueOutput = tuple[Mapping[ActionType, float], float]
 StatsCollectorData = dict[str, deque[tuple[int, float]]]
 
 # --- Pydantic Models for Data Transfer ---
-# SelfPlayResult moved to src/rl/types.py to resolve circular import
+# SelfPlayResult moved to alphatriangle/rl/types.py to resolve circular import
 
 
 # --- Prioritized Experience Replay Types ---

@@ -1,5 +1,3 @@
-# File: tests/environment/test_actions.py
-
 import pytest
 
 from alphatriangle.config import EnvConfig

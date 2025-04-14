@@ -1,5 +1,4 @@
-# File: src/stats/README.md
-# Statistics Module (`src.stats`)
+# Statistics Module (`alphatriangle.stats`)
 
 ## Purpose and Architecture
 
@@ -34,7 +33,7 @@ This module provides utilities for collecting, storing, and visualizing time-ser
 
 ## Dependencies
 
--   **`src.visualization.core.colors`**: Used by `plot_utils.py`.
+-   **`alphatriangle.visualization.core.colors`**: Used by `plot_utils.py`.
 -   **`pygame`**: Used by `plotter.py` to create the final surface.
 -   **`matplotlib`**: Used by `plotter.py` and `plot_utils.py` for generating plots.
 -   **`numpy`**: Used by `plot_utils.py` for calculations.
@@ -43,8 +42,8 @@ This module provides utilities for collecting, storing, and visualizing time-ser
 
 ## Integration
 
--   The `TrainingOrchestrator` (`src.rl.core.orchestrator`) instantiates `StatsCollectorActor` and calls its remote `log` or `log_batch` methods.
--   The `GameRenderer` (`src.visualization.core.game_renderer`) holds a handle to the `StatsCollectorActor` and calls `get_data.remote()` periodically to fetch data for plotting.
+-   The `TrainingOrchestrator` (`alphatriangle.rl.core.orchestrator`) instantiates `StatsCollectorActor` and calls its remote `log` or `log_batch` methods.
+-   The `GameRenderer` (`alphatriangle.visualization.core.game_renderer`) holds a handle to the `StatsCollectorActor` and calls `get_data.remote()` periodically to fetch data for plotting.
 -   The `GameRenderer` instantiates `Plotter` and calls `get_plot_surface` using the fetched stats data and the target plot area dimensions. It then blits the returned surface.
 -   The `DataManager` interacts with the `StatsCollectorActor` via `get_state.remote()` and `set_state.remote()` during checkpoint saving and loading.
 

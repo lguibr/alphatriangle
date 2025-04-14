@@ -1,4 +1,3 @@
-# File: src/environment/shapes/logic.py
 import logging
 import random
 from typing import TYPE_CHECKING
@@ -50,7 +49,6 @@ def is_shape_connected(triangles: list[tuple[int, int, bool]]) -> bool:
         return True
 
     adj: dict[tuple[int, int], list[tuple[int, int]]] = {}
-    # Use set comprehension
     triangle_coords = {(r, c) for r, c, _ in triangles}
 
     for r, c, is_up in triangles:

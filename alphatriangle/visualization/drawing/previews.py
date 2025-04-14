@@ -1,11 +1,8 @@
-# File: src/visualization/drawing/previews.py
-# File: src/visualization/drawing/previews.py
 import logging
 from typing import TYPE_CHECKING
 
 import pygame
 
-# Use relative imports
 from ...structs import Shape, Triangle
 from ..core import colors, coord_mapper
 from .shapes import draw_shape
@@ -21,10 +18,10 @@ def render_previews(
     surface: pygame.Surface,
     game_state: "GameState",
     area_topleft: tuple[int, int],
-    _mode: str,  # Mark mode as unused
+    _mode: str,
     env_config: "EnvConfig",
     vis_config: "VisConfig",
-    selected_shape_idx: int = -1,  # Add the new parameter with default
+    selected_shape_idx: int = -1,
 ) -> dict[int, pygame.Rect]:
     """Renders shape previews in their area. Returns dict {index: screen_rect}."""
     surface.fill(colors.PREVIEW_BG)

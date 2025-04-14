@@ -1,16 +1,12 @@
-# File: src/features/extractor.py
-# File: src/features/extractor.py
 import logging
 from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-# Use relative imports
 from ..config import ModelConfig
 from ..utils.types import StateType
 from . import grid_features
 
-# Import GameState only for type checking
 if TYPE_CHECKING:
     from ..environment import GameState
 
@@ -34,13 +30,10 @@ class GameStateFeatures:
         Shape: (C, H, W) where C is GRID_INPUT_CHANNELS
         """
         rows, cols = self.env_config.ROWS, self.env_config.COLS
-        # Initialize with correct number of channels
-        # Correct type hint for the grid state array
         grid_state: np.ndarray = np.zeros(
             (self.model_config.GRID_INPUT_CHANNELS, rows, cols), dtype=np.float32
         )
 
-        # Populate the first channel (or the only channel if C=1)
         for r in range(rows):
             for c in range(cols):
                 tri = self.gs.grid_data.triangles[r][c]
@@ -50,9 +43,6 @@ class GameStateFeatures:
                     grid_state[0, r, c] = 1.0
                 else:
                     grid_state[0, r, c] = 0.0
-
-        # Add more channels here if GRID_INPUT_CHANNELS > 1
-        # Example: grid_state[1, :, :] = ... (e.g., color features)
 
         if not np.all(np.isfinite(grid_state)):
             logger.error(
@@ -150,9 +140,7 @@ class GameStateFeatures:
             )
             combined = np.nan_to_num(combined, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # --- CHANGE: Explicitly cast return type ---
         return cast("np.ndarray", combined.astype(np.float32))
-        # --- END CHANGE ---
 
 
 def extract_state_features(

@@ -1,19 +1,15 @@
-# File: src/interaction/play_mode_handler.py
-# File: src/interaction/play_mode_handler.py
 import logging
 from typing import TYPE_CHECKING
 
 import pygame
 
-# Use relative imports
 from ..environment import core as env_core
 from ..environment import grid as env_grid
 from ..visualization import core as vis_core
 
-# Move Shape import into TYPE_CHECKING block
 if TYPE_CHECKING:
     from ..structs import Shape
-    from .input_handler import InputHandler  # Import InputHandler type
+    from .input_handler import InputHandler
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +120,6 @@ def update_play_hover(handler: "InputHandler") -> None:
     shape_idx = handler.selected_shape_idx
     if not (0 <= shape_idx < len(game_state.shapes)):
         return
-    # Use TYPE_CHECKING import for Shape type hint
     shape: Shape | None = game_state.shapes[shape_idx]
     if not shape:
         return
@@ -144,5 +139,4 @@ def update_play_hover(handler: "InputHandler") -> None:
         handler.hover_is_valid = is_valid
         handler.hover_shape = shape  # Store the shape being hovered
     else:
-        # Still hovering grid, but not over a specific cell, show floating preview
         handler.hover_shape = shape  # Store shape for floating preview

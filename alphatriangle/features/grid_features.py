@@ -1,4 +1,3 @@
-# File: src/features/grid_features.py
 import numpy as np
 from numba import njit, prange
 

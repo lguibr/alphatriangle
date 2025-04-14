@@ -1,4 +1,3 @@
-# File: src/stats/plotter.py
 import logging
 import time
 from collections import deque
@@ -7,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import matplotlib
 
-# Move numpy import into TYPE_CHECKING block
 if TYPE_CHECKING:
     import numpy as np
 
@@ -16,11 +14,10 @@ import pygame
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# Use relative imports
 from ..utils.helpers import normalize_color_for_matplotlib
 from ..visualization.core import colors as vis_colors
 from .collector import StatsCollectorData
-from .plot_utils import render_single_plot  # Keep this import
+from .plot_utils import render_single_plot
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +57,7 @@ class Plotter:
                 vis_colors.LIGHT_GRAY
             ),
             "MCTS/Avg_Tree_Depth": normalize_color_for_matplotlib(vis_colors.LIGHTG),
-            "placeholder": normalize_color_for_matplotlib(
-                vis_colors.GRAY
-            ),  # Keep placeholder color
+            "placeholder": normalize_color_for_matplotlib(vis_colors.GRAY),
         }
 
     def _init_figure(self, target_width: int, target_height: int):
@@ -89,8 +84,7 @@ class Plotter:
                 dpi=dpi,
                 sharex=False,
             )
-            # Set figure background color
-            self.fig.patch.set_facecolor((0.1, 0.1, 0.1))  # Dark background for figure
+            self.fig.patch.set_facecolor((0.1, 0.1, 0.1))
             self.fig.subplots_adjust(
                 hspace=0.4, wspace=0.35, left=0.08, right=0.98, bottom=0.15, top=0.92
             )
@@ -167,9 +161,7 @@ class Plotter:
                     ax.spines["left"].set_color("gray")
                 return True
 
-            placeholder_color_mpl = self.colors.get(
-                "placeholder", (0.5, 0.5, 0.5)
-            )  # Get placeholder color
+            placeholder_color_mpl = self.colors.get("placeholder", (0.5, 0.5, 0.5))
 
             for i, (data_key, label, log_scale) in enumerate(plot_defs):
                 if i >= len(axes_flat):
@@ -187,7 +179,7 @@ class Plotter:
                     current_values,
                     label,
                     color_mpl,
-                    placeholder_color=placeholder_color_mpl,  # Pass placeholder color
+                    placeholder_color=placeholder_color_mpl,
                     rolling_window_sizes=self.rolling_window_sizes,
                     show_placeholder=(not current_values),
                     placeholder_text=label,
@@ -292,10 +284,8 @@ class Plotter:
                 self.fig, self.axes, self.last_target_size = None, None, (0, 0)
             return None
 
-        # cache_status = "HIT" # Removed unused variable
         try:
             if needs_reinit:
-                # cache_status = "MISS (Re-init)" # Removed unused variable
                 self._init_figure(target_width, target_height)
                 if self.fig and self._update_plot_data(plot_data):
                     self.plot_surface_cache = self._render_figure_to_surface(
@@ -306,7 +296,6 @@ class Plotter:
                 else:
                     self.plot_surface_cache = None
             elif needs_update:
-                # cache_status = f"MISS (Update - Data: {data_changed}, Time: {time_elapsed})" # Removed unused variable
                 if self._update_plot_data(plot_data):
                     self.plot_surface_cache = self._render_figure_to_surface(
                         target_width, target_height
@@ -317,9 +306,7 @@ class Plotter:
                     logger.warning(
                         "[Plotter] Plot update failed, returning stale cache."
                     )
-                    # cache_status = "ERROR (Update Failed)" # Removed unused variable
             elif self.plot_surface_cache is None:
-                # cache_status = "MISS (Cache None)" # Removed unused variable
                 if self.fig is None:
                     self._init_figure(target_width, target_height)
                 if self.fig and self._update_plot_data(plot_data):

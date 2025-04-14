@@ -1,4 +1,3 @@
-# File: src/environment/shapes/templates.py
 # ==============================================================================
 # ==                    PREDEFINED SHAPE TEMPLATES                          ==
 # ==                                                                        ==

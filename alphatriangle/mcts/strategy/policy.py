@@ -1,17 +1,13 @@
-# File: src/mcts/strategy/policy.py
-# File: src/mcts/strategy/policy.py
 import logging
 import random
 
 import numpy as np
 
-# Use relative imports
 from ...utils.types import ActionType
 from ..core.node import Node
 from ..core.types import ActionPolicyMapping
 
 logger = logging.getLogger(__name__)
-# Use default NumPy random number generator for reproducibility if seed is set elsewhere
 rng = np.random.default_rng()
 
 
@@ -51,7 +47,6 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
         logger.warning(
             f"[PolicySelect] Total visit count for children is zero at root node (Step {root_node.state.current_step}). MCTS might have failed. Selecting uniformly."
         )
-        # Use standard library random for uniform choice
         selected_action = random.choice(actions)
         logger.debug(
             f"[PolicySelect] Uniform random action selected: {selected_action}"
@@ -76,10 +71,8 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
     else:
         logger.debug(f"[PolicySelect] Probabilistic selection: Temp={temperature:.4f}")
         logger.debug(f"  Visit Counts: {visit_counts}")
-        # Add small epsilon to prevent log(0)
         log_visits = np.log(np.maximum(visit_counts, 1e-9))
         scaled_log_visits = log_visits / temperature
-        # Subtract max for numerical stability before exponentiating
         scaled_log_visits -= np.max(scaled_log_visits)
         probabilities = np.exp(scaled_log_visits)
         sum_probs = np.sum(probabilities)
@@ -127,7 +120,6 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
     Calculates the policy target distribution based on MCTS visit counts.
     Raises PolicyGenerationError if target cannot be generated.
     """
-    # Cast ACTION_DIM to int
     action_dim = int(root_node.state.env_config.ACTION_DIM)  # type: ignore[call-overload]
     full_target = dict.fromkeys(range(action_dim), 0.0)
 
@@ -142,7 +134,7 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
     }
     actions = list(child_visits.keys())
     visits = np.array(list(child_visits.values()), dtype=np.float64)
-    total_visits = np.sum(visits)  # Define total_visits here
+    total_visits = np.sum(visits)
 
     if not actions:
         logger.warning(
@@ -161,8 +153,6 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
         best_actions = [actions[i] for i, v in enumerate(visits) if v == max_visits]
         prob = 1.0 / len(best_actions)
         for a in best_actions:
-            # a is already ActionType (int)
-            # Cast action_dim to int for comparison
             if 0 <= a < action_dim:
                 full_target[a] = prob
             else:
@@ -196,8 +186,6 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
 
         raw_policy = {action: probabilities[i] for i, action in enumerate(actions)}
         for action, prob in raw_policy.items():
-            # action is already ActionType (int)
-            # Cast action_dim to int for comparison
             if 0 <= action < action_dim:
                 full_target[action] = prob
             else:
@@ -206,7 +194,6 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
                 )
 
     final_sum = sum(full_target.values())
-    # Use the defined total_visits
     if abs(final_sum - 1.0) > 1e-5 and total_visits > 0:
         logger.error(
             f"[PolicyTarget] Final policy target does not sum to 1 ({final_sum:.6f}). Target: {full_target}"

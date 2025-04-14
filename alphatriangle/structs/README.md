@@ -1,5 +1,4 @@
-# File: src/structs/README.md
-# Core Structures Module (`src.structs`)
+# Core Structures Module (`alphatriangle.structs`)
 
 ## Purpose and Architecture
 

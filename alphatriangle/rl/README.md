@@ -1,16 +1,15 @@
-# File: src/rl/README.md
-# Reinforcement Learning Module (`src.rl`)
+# Reinforcement Learning Module (`alphatriangle.rl`)
 
 ## Purpose and Architecture
 
-This module contains core components related to the reinforcement learning algorithm itself, specifically the `Trainer` for network updates, the `ExperienceBuffer` for storing data, and the `SelfPlayWorker` actor for generating data. **The overall orchestration of the training process has been moved to the `src.training` module.**
+This module contains core components related to the reinforcement learning algorithm itself, specifically the `Trainer` for network updates, the `ExperienceBuffer` for storing data, and the `SelfPlayWorker` actor for generating data. **The overall orchestration of the training process has been moved to the `alphatriangle.training` module.**
 
--   **Core Components (`src.rl.core`):**
+-   **Core Components (`alphatriangle.rl.core`):**
     -   `Trainer`: Responsible for performing the neural network update steps. It takes batches of experience from the buffer, calculates losses (applying importance sampling weights if using PER), updates the network weights, and calculates TD errors for PER priority updates.
     -   `ExperienceBuffer`: A replay buffer storing `Experience` tuples (`(StateType, policy_target, value_target)`). Supports both uniform sampling and Prioritized Experience Replay (PER).
--   **Self-Play Components (`src.rl.self_play`):**
+-   **Self-Play Components (`alphatriangle.rl.self_play`):**
     -   `worker`: Defines the `SelfPlayWorker` Ray actor. Each actor runs game episodes independently using MCTS and its local copy of the neural network. It collects experiences and returns results via a `SelfPlayResult` object.
--   **Types (`src.rl.types`):**
+-   **Types (`alphatriangle.rl.types`):**
     -   Defines Pydantic models like `SelfPlayResult` for structured data transfer between Ray actors and the training loop.
 
 ## Exposed Interfaces
@@ -38,14 +37,14 @@ This module contains core components related to the reinforcement learning algor
 
 ## Dependencies
 
--   **`src.config`**: `TrainConfig`, `EnvConfig`, `ModelConfig`, `MCTSConfig`.
--   **`src.nn`**: `NeuralNetwork`.
--   **`src.features`**: `extract_state_features`.
--   **`src.mcts`**: Core MCTS components.
--   **`src.environment`**: `GameState`.
--   **`src.stats`**: `StatsCollectorActor` (used indirectly via `src.training`).
--   **`src.utils`**: Types and helpers.
--   **`src.structs`**: Implicitly used via `GameState`.
+-   **`alphatriangle.config`**: `TrainConfig`, `EnvConfig`, `ModelConfig`, `MCTSConfig`.
+-   **`alphatriangle.nn`**: `NeuralNetwork`.
+-   **`alphatriangle.features`**: `extract_state_features`.
+-   **`alphatriangle.mcts`**: Core MCTS components.
+-   **`alphatriangle.environment`**: `GameState`.
+-   **`alphatriangle.stats`**: `StatsCollectorActor` (used indirectly via `alphatriangle.training`).
+-   **`alphatriangle.utils`**: Types and helpers.
+-   **`alphatriangle.structs`**: Implicitly used via `GameState`.
 -   **`torch`**: Used by `Trainer` and `NeuralNetwork`.
 -   **`ray`**: Used by `SelfPlayWorker`.
 -   **Standard Libraries:** `typing`, `logging`, `collections.deque`, `numpy`.

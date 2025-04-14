@@ -1,20 +1,17 @@
-# File: src/nn/network.py
 import logging
-from collections.abc import Mapping  # Keep Mapping here for now
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
-# Use relative imports
 from ..config import EnvConfig, ModelConfig, TrainConfig
 from ..environment import GameState
 from ..features import extract_state_features
 from ..utils.types import ActionType, PolicyValueOutput, StateType
 from .model import AlphaTriangleNet
 
-# Move Mapping import into TYPE_CHECKING block if only used for hints
 if TYPE_CHECKING:
     from collections.abc import Mapping
 

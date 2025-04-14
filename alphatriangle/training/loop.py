@@ -1,5 +1,3 @@
-# File: src/training/loop.py
-# File: src/training/loop.py
 import logging
 import queue
 import threading
@@ -10,14 +8,12 @@ import numpy as np
 import ray
 from pydantic import ValidationError
 
-# Use relative imports
 from ..environment import GameState
 from ..rl import SelfPlayResult, SelfPlayWorker
 from ..utils import format_eta
 from ..utils.types import Experience, PERBatchSample, StatsCollectorData
 from ..visualization.ui import ProgressBar
 
-# Import TrainingComponents only for type hinting
 if TYPE_CHECKING:
     from .components import TrainingComponents
 
@@ -119,7 +115,7 @@ class TrainingLoop:
         logger.info(
             f"Initialized {len(self.active_worker_indices)} active self-play workers."
         )
-        del weights_ref  # Ensure the reference is deleted
+        del weights_ref
 
     def _initialize_progress_bars(self):
         """Initializes progress bars based on current state."""
@@ -162,8 +158,6 @@ class TrainingLoop:
             logger.error(
                 f"A worker actor failed during weight update: {e}", exc_info=True
             )
-            # Identify and remove the failed worker
-            # This requires more complex tracking or handling the error when the task result is retrieved
         except ray.exceptions.GetTimeoutError:
             logger.error("Timeout waiting for workers to update weights.")
         except Exception as e:
@@ -171,7 +165,7 @@ class TrainingLoop:
                 f"Unexpected error updating worker networks: {e}", exc_info=True
             )
         finally:
-            del weights_ref  # Ensure the reference is deleted
+            del weights_ref
 
     def _fetch_latest_stats(self):
         """Fetches the latest stats data from the actor."""
@@ -181,7 +175,6 @@ class TrainingLoop:
         self.last_stats_fetch_time = current_time
         if self.stats_collector_actor:
             try:
-                # Correctly call remote method
                 data_ref = self.stats_collector_actor.get_data.remote()  # type: ignore
                 self.latest_stats_data = ray.get(data_ref, timeout=1.0)
             except Exception as e:
@@ -251,7 +244,6 @@ class TrainingLoop:
         # Fetch latest worker states from the collector actor
         latest_worker_states: dict[int, GameState] = {}
         try:
-            # Correctly call remote method
             states_ref = self.stats_collector_actor.get_latest_worker_states.remote()  # type: ignore
             latest_worker_states = ray.get(states_ref, timeout=VIS_STATE_FETCH_TIMEOUT)
             if not isinstance(latest_worker_states, dict):
@@ -263,7 +255,7 @@ class TrainingLoop:
             logger.warning(
                 f"Failed to fetch latest worker states for visualization: {e}"
             )
-            latest_worker_states = {}  # Use empty dict on error
+            latest_worker_states = {}
 
         # Fetch latest metrics data (needed for plots and per-step worker stats)
         self._fetch_latest_stats()
@@ -318,8 +310,8 @@ class TrainingLoop:
             "total_simulations": self.total_simulations_run,
             "train_progress": self.train_step_progress,
             "buffer_progress": self.buffer_fill_progress,
-            "stats_data": self.latest_stats_data,  # Full stats data for plotting
-            "worker_step_stats": worker_step_stats,  # Add the extracted per-step stats
+            "stats_data": self.latest_stats_data,
+            "worker_step_stats": worker_step_stats,
             "num_workers": len(self.active_worker_indices),
             "pending_tasks": len(self.worker_tasks),
         }

@@ -1,5 +1,3 @@
-# File: src/utils/__init__.py
-# File: src/utils/__init__.py
 from .geometry import is_point_in_polygon
 from .helpers import (
     format_eta,

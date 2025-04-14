@@ -1,5 +1,3 @@
-# File: src/rl/core/trainer.py
-# File: src/rl/core/trainer.py
 import logging
 from typing import cast
 
@@ -9,7 +7,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import _LRScheduler
 
-# Use relative imports
 from ...config import EnvConfig, TrainConfig
 from ...nn import NeuralNetwork
 from ...utils.types import (
@@ -59,7 +56,7 @@ class Trainer:
     def _create_scheduler(self, optimizer: optim.Optimizer) -> _LRScheduler | None:
         """Creates the learning rate scheduler based on TrainConfig."""
         scheduler_type_config = self.train_config.LR_SCHEDULER_TYPE
-        scheduler_type: str | None = None  # Initialize as None
+        scheduler_type: str | None = None
         if scheduler_type_config:
             scheduler_type = scheduler_type_config.lower()
 
@@ -86,7 +83,6 @@ class Trainer:
                 )
                 t_max = self.train_config.MAX_TRAINING_STEPS or 1_000_000
             logger.info(f"  CosineAnnealingLR params: T_max={t_max}, eta_min={eta_min}")
-            # Cast return type
             return cast(
                 "_LRScheduler",
                 optim.lr_scheduler.CosineAnnealingLR(
@@ -107,7 +103,6 @@ class Trainer:
         grids = []
         other_features = []
         value_targets = []
-        # Cast ACTION_DIM to int
         action_dim_int = int(self.env_config.ACTION_DIM)  # type: ignore[call-overload]
         policy_target_tensor = torch.zeros(
             (batch_size, action_dim_int),
@@ -120,7 +115,6 @@ class Trainer:
             other_features.append(state_features["other_features"])
             value_targets.append(value_target)
             for action, prob in policy_target_map.items():
-                # Cast action_dim_int for comparison
                 if 0 <= action < action_dim_int:
                     policy_target_tensor[i, action] = prob
                 else:
@@ -157,7 +151,6 @@ class Trainer:
         Returns loss info dictionary and TD errors for priority updates.
         """
         batch = per_sample["batch"]
-        # indices = per_sample["indices"] # Unused variable
         is_weights = per_sample["weights"]
 
         if not batch:
@@ -187,7 +180,6 @@ class Trainer:
         policy_loss_elementwise = -torch.sum(policy_target_t * log_probs, dim=1)
         policy_loss = (policy_loss_elementwise * is_weights_t).mean()
 
-        # --- CHANGE: Explicit calculation of entropy for logging ---
         entropy_scalar: float = 0.0  # Initialize as float
         entropy_loss_term = torch.tensor(
             0.0, device=self.device
@@ -207,8 +199,6 @@ class Trainer:
                 -self.train_config.ENTROPY_BONUS_WEIGHT
                 * entropy_term_elementwise.mean()
             )
-            # Use entropy_loss_term in total_loss calculation
-        # --- END CHANGE ---
 
         total_loss = (
             self.train_config.POLICY_LOSS_WEIGHT * policy_loss
@@ -236,10 +226,8 @@ class Trainer:
             "total_loss": total_loss.item(),
             "policy_loss": policy_loss.item(),
             "value_loss": value_loss.item(),
-            # --- CHANGE: Use the calculated scalar entropy ---
             "entropy": entropy_scalar,
-            # --- END CHANGE ---
-            "mean_td_error": float(np.mean(np.abs(td_errors))),  # Cast to float
+            "mean_td_error": float(np.mean(np.abs(td_errors))),
         }
 
         return loss_info, td_errors

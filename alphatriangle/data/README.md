@@ -1,5 +1,4 @@
-# File: src/data/README.md
-# Data Management Module (`src.data`)
+# Data Management Module (`alphatriangle.data`)
 
 ## Purpose and Architecture
 
@@ -38,11 +37,11 @@ The core component is the `DataManager` class, which centralizes file path manag
 
 ## Dependencies
 
--   **`src.config`**: `PersistenceConfig`, `TrainConfig`.
--   **`src.nn`**: `NeuralNetwork`.
--   **`src.rl.core.buffer`**: `ExperienceBuffer`.
--   **`src.stats`**: `StatsCollectorActor`.
--   **`src.utils.types`**: `Experience`.
+-   **`alphatriangle.config`**: `PersistenceConfig`, `TrainConfig`.
+-   **`alphatriangle.nn`**: `NeuralNetwork`.
+-   **`alphatriangle.rl.core.buffer`**: `ExperienceBuffer`.
+-   **`alphatriangle.stats`**: `StatsCollectorActor`.
+-   **`alphatriangle.utils.types`**: `Experience`.
 -   **`torch.optim`**: `Optimizer`.
 -   **Standard Libraries:** `os`, `shutil`, `logging`, `glob`, `re`, `json`, `collections.deque`.
 -   **Third-Party:** `pydantic`, `cloudpickle`, `torch`, `ray`, `mlflow`.

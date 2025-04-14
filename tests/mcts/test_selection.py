@@ -1,4 +1,3 @@
-# File: tests/mcts/test_selection.py
 import math
 from typing import Any
 

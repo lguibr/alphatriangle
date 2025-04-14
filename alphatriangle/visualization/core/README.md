@@ -1,14 +1,13 @@
-# File: src/visualization/core/README.md
-# Visualization Core Submodule (`src.visualization.core`)
+# Visualization Core Submodule (`alphatriangle.visualization.core`)
 
 ## Purpose and Architecture
 
 This submodule contains the central classes and foundational elements for the visualization system. It orchestrates rendering, manages layout and coordinate systems, and defines core visual properties like colors and fonts.
 
 -   **Render Orchestration:**
-    -   `Visualizer`: The main class for rendering in **interactive modes** ("play", "debug"). It maintains the Pygame screen, calculates layout using `layout.py`, manages cached preview area rectangles, and calls appropriate drawing functions from `src.visualization.drawing`. **It receives interaction state (hover position, selected index) via its `render` method to display visual feedback.**
+    -   `Visualizer`: The main class for rendering in **interactive modes** ("play", "debug"). It maintains the Pygame screen, calculates layout using `layout.py`, manages cached preview area rectangles, and calls appropriate drawing functions from `alphatriangle.visualization.drawing`. **It receives interaction state (hover position, selected index) via its `render` method to display visual feedback.**
     -   `GameRenderer`: **Simplified renderer** responsible for drawing a **single** worker's `GameState` (grid and previews) within a specified sub-rectangle. Used by the `DashboardRenderer`.
-    -   `DashboardRenderer` **(New)**: Renderer specifically for the **training visualization mode**. It uses `layout.py` to divide the screen into a worker game grid area and a statistics area. It renders multiple worker `GameState` objects (using `GameRenderer` instances) in the top grid and displays statistics plots (using `src.stats.Plotter`) and progress bars in the bottom area. It takes a dictionary mapping worker IDs to `GameState` objects and a dictionary of global statistics.
+    -   `DashboardRenderer` **(New)**: Renderer specifically for the **training visualization mode**. It uses `layout.py` to divide the screen into a worker game grid area and a statistics area. It renders multiple worker `GameState` objects (using `GameRenderer` instances) in the top grid and displays statistics plots (using `alphatriangle.stats.Plotter`) and progress bars in the bottom area. It takes a dictionary mapping worker IDs to `GameState` objects and a dictionary of global statistics.
 -   **Layout Management:**
     -   `layout.py`: Contains functions (`calculate_interactive_layout`, `calculate_training_layout`) to determine the size and position of the main UI areas based on the screen dimensions, mode, and `VisConfig`.
 -   **Coordinate System:**
@@ -47,12 +46,12 @@ This submodule contains the central classes and foundational elements for the vi
 
 ## Dependencies
 
--   **`src.config`**: `VisConfig`, `EnvConfig`.
--   **`src.environment`**: `GameState`, `GridData`.
--   **`src.stats`**: `Plotter`, `StatsCollectorActor` (used by `DashboardRenderer`).
--   **`src.utils`**: `types`.
--   **`src.visualization.drawing`**: Drawing functions are called by renderers.
--   **`src.visualization.ui`**: `ProgressBar` (used by `DashboardRenderer`).
+-   **`alphatriangle.config`**: `VisConfig`, `EnvConfig`.
+-   **`alphatriangle.environment`**: `GameState`, `GridData`.
+-   **`alphatriangle.stats`**: `Plotter`, `StatsCollectorActor` (used by `DashboardRenderer`).
+-   **`alphatriangle.utils`**: `types`.
+-   **`alphatriangle.visualization.drawing`**: Drawing functions are called by renderers.
+-   **`alphatriangle.visualization.ui`**: `ProgressBar` (used by `DashboardRenderer`).
 -   **`pygame`**: Used for surfaces, rectangles, fonts, display management.
 -   **Standard Libraries:** `typing`, `logging`, `math`.
 

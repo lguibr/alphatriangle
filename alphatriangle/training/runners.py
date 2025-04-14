@@ -1,5 +1,3 @@
-# File: src/training/runners.py
-# File: src/training/runners.py
 import logging
 import queue
 import sys
@@ -11,7 +9,6 @@ from typing import Any
 import mlflow
 import pygame
 
-# Use relative imports
 from .. import config, environment, utils, visualization
 from ..data import DataManager
 from ..nn import NeuralNetwork
@@ -41,11 +38,9 @@ def _setup_training_components(
         train_config = train_config_override
         persist_config = persist_config_override
         # Instantiate Pydantic models using defaults
-        # --- CHANGE: Removed type ignore ---
         env_config = config.EnvConfig()
         model_config = config.ModelConfig()
         mcts_config = config.MCTSConfig()
-        # --- END CHANGE ---
 
         # --- Validate Configs ---
         config.print_config_info_and_validate(mcts_config)

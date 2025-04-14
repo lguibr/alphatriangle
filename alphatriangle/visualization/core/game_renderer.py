@@ -1,11 +1,8 @@
-# File: src/visualization/core/game_renderer.py
-# File: src/visualization/core/game_renderer.py
 import logging
 from typing import TYPE_CHECKING, Any
 
 import pygame
 
-# Use relative imports
 from ...environment import GameState
 from ..drawing import grid as grid_drawing
 from ..drawing import previews as preview_drawing
@@ -33,10 +30,10 @@ class GameRenderer:
         self.vis_config = vis_config
         self.env_config = env_config
         self.fonts = fonts
-        self.preview_width_ratio = 0.2  # Ratio of area width for previews
+        self.preview_width_ratio = 0.2
         self.min_preview_width = 30
         self.max_preview_width = 60
-        self.padding = 5  # Internal padding between grid and preview
+        self.padding = 5
 
     def render_worker_state(
         self,

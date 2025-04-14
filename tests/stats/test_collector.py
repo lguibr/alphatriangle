@@ -1,19 +1,16 @@
-# File: tests/stats/test_collector.py
-import logging  # <-- Import the logging module
+import logging
 from collections import deque
 
-import cloudpickle  # Use cloudpickle for state serialization test
+import cloudpickle
 import pytest
 import ray
 
 from alphatriangle.stats import StatsCollectorActor
 
 
-# Fixture to initialize and shutdown Ray for the test session
 @pytest.fixture(scope="module", autouse=True)
 def ray_init_shutdown():
     if not ray.is_initialized():
-        # Use logging.WARNING now that logging is imported
         ray.init(logging_level=logging.WARNING, num_cpus=1)
     yield
     if ray.is_initialized():

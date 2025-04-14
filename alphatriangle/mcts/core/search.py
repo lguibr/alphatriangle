@@ -1,10 +1,8 @@
-# File: src/mcts/core/search.py
 import logging
 import time
 
 import numpy as np
 
-# Use relative imports
 from ...config import MCTSConfig
 from ..strategy import backpropagation, expansion, selection
 from .node import Node

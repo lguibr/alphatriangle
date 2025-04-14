@@ -1,4 +1,3 @@
-# File: tests/environment/test_shape_logic.py
 import random
 
 from alphatriangle.environment.core.game_state import GameState

@@ -1,4 +1,3 @@
-# File: src/mcts/core/node.py
 from __future__ import annotations
 
 import logging
@@ -54,16 +53,9 @@ class Node:
         visits = max(1, self.visit_count)
         q_value = self.total_action_value / visits
 
-        # Removed warning log for performance
-        # if self.visit_count == 0:
-        #     logger.warning(
-        #         f"Node {self} had visit_count=0 but value_estimate was accessed. Returning 0."
-        #     )
-
         return q_value
 
     def __repr__(self) -> str:
-        # parent_action = self.parent.action_taken if self.parent else "Root" # Unused variable
         return (
             f"Node(StateStep={self.state.current_step}, "
             f"FromAction={self.action_taken}, Visits={self.visit_count}, "

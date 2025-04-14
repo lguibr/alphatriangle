@@ -1,4 +1,4 @@
-# File: src/stats/__init__.py
+# File: alphatriangle/stats/__init__.py
 """
 Statistics collection and plotting module.
 """

@@ -1,6 +1,5 @@
-# File: src/training/logging_utils.py
 import logging
-from pathlib import Path  # Import Path
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import mlflow
@@ -32,12 +31,9 @@ class Tee:
         self.stream2.flush()
 
     def fileno(self):
-        # Return the fileno of the main stream (e.g., original stdout/stderr)
-        # This is needed for some libraries that check fileno (like tqdm)
         return self._main_stream_for_fileno.fileno()
 
     def isatty(self):
-        # Report based on the main stream
         return self._main_stream_for_fileno.isatty()
 
 
@@ -60,7 +56,6 @@ def setup_file_logging(
     file_handler.setFormatter(formatter)
 
     root_logger = get_root_logger()
-    # Ensure we don't add duplicate handlers if called multiple times
     if not any(isinstance(h, logging.FileHandler) for h in root_logger.handlers):
         root_logger.addHandler(file_handler)
         logger.info(f"Added file handler logging to: {log_file_path}")

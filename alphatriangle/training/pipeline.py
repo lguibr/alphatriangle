@@ -1,5 +1,3 @@
-# File: src/training/pipeline.py
-# File: src/training/pipeline.py
 import logging
 import queue
 import time
@@ -11,7 +9,6 @@ import mlflow
 import ray
 import torch
 
-# Use relative imports
 from ..config import (
     APP_NAME,
 )
@@ -116,7 +113,6 @@ class TrainingPipeline:
                     logger.error(
                         f"Could not load optimizer state: {opt_load_err}. Optimizer might reset."
                     )
-            # --- CHANGE: Apply stats collector state ---
             if cp_data.stats_collector_state and self.components.stats_collector_actor:
                 try:
                     set_state_ref = (
@@ -130,7 +126,6 @@ class TrainingPipeline:
                     logger.error(
                         f"Error restoring StatsCollectorActor state: {e}", exc_info=True
                     )
-            # --- END CHANGE ---
 
             # Set initial state in the loop object
             self.training_loop = TrainingLoop(self.components, self.visual_state_queue)
@@ -143,7 +138,7 @@ class TrainingPipeline:
         else:
             logger.info("No checkpoint data loaded. Starting fresh.")
             self.training_loop = TrainingLoop(self.components, self.visual_state_queue)
-            self.training_loop.set_initial_state(0, 0, 0)  # Start from zero
+            self.training_loop.set_initial_state(0, 0, 0)
 
         # Load buffer data
         if loaded_state.buffer_data:

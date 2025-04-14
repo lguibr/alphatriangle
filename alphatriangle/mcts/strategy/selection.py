@@ -1,15 +1,12 @@
-# File: src/mcts/strategy/selection.py
 import logging
 import math
 
 import numpy as np
 
-# Use relative imports
 from ...config import MCTSConfig
 from ..core.node import Node
 
 logger = logging.getLogger(__name__)
-# Use default NumPy random number generator for reproducibility if seed is set elsewhere
 rng = np.random.default_rng()
 
 

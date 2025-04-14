@@ -1,8 +1,6 @@
-# File: src/mcts/strategy/expansion.py
 import logging
 from typing import TYPE_CHECKING
 
-# Move ActionType import into TYPE_CHECKING block
 if TYPE_CHECKING:
     from ...utils.types import ActionType
 
@@ -43,10 +41,9 @@ def expand_node_with_policy(node: Node, action_policy: ActionPolicyMapping):
         logger.warning(
             f"[Expand] Expanding node at step {node.state.current_step} with no valid actions but not terminal? Marking state as game over."
         )
-        # Attempt to mark game over on the state object directly
         if hasattr(node.state, "game_over"):
             node.state.game_over = True
-        elif hasattr(node.state, "_is_over"):  # Handle mock state case
+        elif hasattr(node.state, "_is_over"):
             node.state._is_over = True
         else:
             logger.error("[Expand] Cannot mark state as game over - attribute missing.")

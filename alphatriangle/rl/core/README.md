@@ -1,9 +1,8 @@
-# File: src/rl/core/README.md
-# RL Core Submodule (`src.rl.core`)
+# RL Core Submodule (`alphatriangle.rl.core`)
 
 ## Purpose and Architecture
 
-This submodule contains core classes directly involved in the reinforcement learning update process and data storage. **The orchestration logic previously found here (`TrainingOrchestrator`) has been moved to the `src.training` module.**
+This submodule contains core classes directly involved in the reinforcement learning update process and data storage. **The orchestration logic previously found here (`TrainingOrchestrator`) has been moved to the `alphatriangle.training` module.**
 
 -   **`Trainer`:** This class encapsulates the logic for updating the neural network's weights.
     -   It holds the main `NeuralNetwork` interface, optimizer, and scheduler.
@@ -29,10 +28,10 @@ This submodule contains core classes directly involved in the reinforcement lear
 
 ## Dependencies
 
--   **`src.config`**: `TrainConfig`, `EnvConfig`, `ModelConfig`.
--   **`src.nn`**: `NeuralNetwork`.
--   **`src.features`**: `extract_state_features`.
--   **`src.utils`**: Types (`Experience`, `PERBatchSample`, etc.) and helpers (`SumTree`).
+-   **`alphatriangle.config`**: `TrainConfig`, `EnvConfig`, `ModelConfig`.
+-   **`alphatriangle.nn`**: `NeuralNetwork`.
+-   **`alphatriangle.features`**: `extract_state_features`.
+-   **`alphatriangle.utils`**: Types (`Experience`, `PERBatchSample`, etc.) and helpers (`SumTree`).
 -   **`torch`**: Used heavily by `Trainer`.
 -   **Standard Libraries:** `typing`, `logging`, `collections.deque`, `numpy`, `random`.
 

@@ -1,4 +1,3 @@
-# File: src/environment/grid/logic.py
 import logging
 from typing import TYPE_CHECKING
 

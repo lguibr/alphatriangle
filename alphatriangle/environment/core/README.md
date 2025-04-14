@@ -1,5 +1,4 @@
-# File: src/environment/core/README.md
-# Environment Core Submodule (`src.environment.core`)
+# Environment Core Submodule (`alphatriangle.environment.core`)
 
 ## Purpose and Architecture
 
@@ -11,24 +10,24 @@ This submodule contains the most fundamental components of the game environment:
 ## Exposed Interfaces
 
 -   **Classes:**
-    -   `GameState`: The main state class (see `src/environment/README.md` for methods).
+    -   `GameState`: The main state class (see `alphatriangle/environment/README.md` for methods).
 -   **Functions:**
     -   `encode_action(shape_idx: int, r: int, c: int, config: EnvConfig) -> ActionType`
     -   `decode_action(action_index: ActionType, config: EnvConfig) -> Tuple[int, int, int]`
 
 ## Dependencies
 
--   **`src.config`**:
+-   **`alphatriangle.config`**:
     -   `EnvConfig`: Used by `GameState` and `action_codec`.
--   **`src.utils.types`**:
+-   **`alphatriangle.utils.types`**:
     -   `StateType`, `ActionType`: Used for method signatures and return types.
--   **`src.environment.grid`**:
+-   **`alphatriangle.environment.grid`**:
     -   `GridData`, `GridLogic`: Used internally by `GameState`.
--   **`src.environment.shapes`**:
+-   **`alphatriangle.environment.shapes`**:
     -   `Shape`, `ShapeLogic`: Used internally by `GameState`.
--   **`src.environment.features`**:
+-   **`alphatriangle.environment.features`**:
     -   `extract_state_features`: Used internally by `GameState.get_state()`.
--   **`src.environment.logic`**:
+-   **`alphatriangle.environment.logic`**:
     -   `get_valid_actions`, `execute_placement`: Used internally by `GameState`.
 -   **Standard Libraries:** `typing`, `numpy`, `logging`, `random`.
 

@@ -2,7 +2,7 @@
 include README.md
 include LICENSE
 include requirements.txt
-graft src
+graft alphatriangle
 graft tests
 include .python-version
 include pyproject.toml

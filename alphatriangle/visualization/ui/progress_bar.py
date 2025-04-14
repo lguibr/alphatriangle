@@ -1,11 +1,8 @@
-# File: src/visualization/ui/progress_bar.py
-# File: src/visualization/ui/progress_bar.py
 import time
 from typing import Any
 
 import pygame
 
-# Use relative imports
 from ...utils import format_eta
 from ..core import colors
 
@@ -26,7 +23,7 @@ class ProgressBar:
         self.current_steps = self.initial_steps
         self.start_time = start_time if start_time is not None else time.time()
         self._last_step_time = self.start_time
-        self._step_times: list[float] = []  # Add type hint
+        self._step_times: list[float] = []
         self.extra_data: dict[str, Any] = {}
 
     def add_steps(self, steps_added: int):

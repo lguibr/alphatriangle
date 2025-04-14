@@ -1,10 +1,7 @@
-# File: src/visualization/drawing/highlight.py
-# File: src/visualization/drawing/highlight.py
 from typing import TYPE_CHECKING
 
 import pygame
 
-# Use relative imports
 from ...structs import Triangle
 from ..core import colors, coord_mapper
 

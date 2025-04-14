@@ -1,11 +1,7 @@
-# File: src/visualization/drawing/grid.py
-# File: src/visualization/drawing/grid.py
 from typing import TYPE_CHECKING
 
 import pygame
 
-# Use relative imports
-# Move Triangle import into TYPE_CHECKING block and sort
 if TYPE_CHECKING:
     from ...config import EnvConfig
     from ...environment import GridData
@@ -34,7 +30,6 @@ def draw_grid_triangles(
 
     for r in range(grid_data.rows):
         for c in range(grid_data.cols):
-            # Use TYPE_CHECKING import for Triangle type hint (no quotes needed)
             tri: Triangle = grid_data.triangles[r][c]
 
             if tri.is_death:
@@ -78,14 +73,12 @@ def draw_grid_indices(
 
     for r in range(grid_data.rows):
         for c in range(grid_data.cols):
-            # Use TYPE_CHECKING import for Triangle type hint (no quotes needed)
             tri: Triangle = grid_data.triangles[r][c]
             pts = tri.get_points(ox, oy, cw, ch)
             center_x = sum(p[0] for p in pts) / 3
             center_y = sum(p[1] for p in pts) / 3
 
             if tri.is_death:
-                # bg_color = colors.DARK_GRAY # Unused variable
                 text_color = colors.LIGHT_GRAY
             elif tri.is_occupied:
                 bg_color = tri.color if tri.color else colors.DEBUG_TOGGLE_COLOR

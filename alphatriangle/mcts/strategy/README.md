@@ -1,9 +1,8 @@
-# File: src/mcts/strategy/README.md
-# MCTS Strategy Submodule (`src.mcts.strategy`)
+# MCTS Strategy Submodule (`alphatriangle.mcts.strategy`)
 
 ## Purpose and Architecture
 
-This submodule implements the specific algorithms and heuristics used within the different phases of the Monte Carlo Tree Search, as orchestrated by `src.mcts.core.search.run_mcts_simulations`.
+This submodule implements the specific algorithms and heuristics used within the different phases of the Monte Carlo Tree Search, as orchestrated by `alphatriangle.mcts.core.search.run_mcts_simulations`.
 
 -   **`selection`:** Contains the logic for traversing the tree from the root to a leaf node.
     -   `calculate_puct_score`: Implements the PUCT (Polynomial Upper Confidence Trees) formula, balancing exploitation (node value) and exploration (prior probability and visit counts).
@@ -35,13 +34,13 @@ This submodule implements the specific algorithms and heuristics used within the
 
 ## Dependencies
 
--   **`src.mcts.core`**:
+-   **`alphatriangle.mcts.core`**:
     -   `Node`: The primary data structure operated upon.
     -   `MCTSConfig`: Provides hyperparameters (PUCT coeff, noise params, etc.).
     -   `ActionPolicyMapping`: Used in `expansion` and `policy`.
--   **`src.environment`**:
+-   **`alphatriangle.environment`**:
     -   `GameState`: Accessed via `Node.state` for methods like `is_over`, `get_outcome`, `valid_actions`, `step`.
--   **`src.utils.types`**:
+-   **`alphatriangle.utils.types`**:
     -   `ActionType`: Used for representing actions.
 -   **`numpy`**:
     -   Used for Dirichlet noise and potentially in policy/selection calculations.

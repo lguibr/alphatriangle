@@ -1,10 +1,7 @@
-# File: src/visualization/__init__.py
-# File: src/visualization/__init__.py
 """
 Visualization module for rendering the game state using Pygame.
 """
 
-# Use relative imports
 from ..config import VisConfig
 from .core import colors
 from .core.coord_mapper import (

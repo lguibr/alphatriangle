@@ -1,10 +1,7 @@
-# File: src/environment/core/game_state.py
-# File: src/environment/core/game_state.py
 import logging
 import random
 from typing import TYPE_CHECKING
 
-# Use relative imports
 from ...config import EnvConfig
 from ...utils.types import ActionType
 from .. import shapes
@@ -29,9 +26,7 @@ class GameState:
     def __init__(
         self, config: EnvConfig | None = None, initial_seed: int | None = None
     ):
-        # --- CHANGE: Add type ignore for Pydantic call-arg error ---
         self.env_config = config if config else EnvConfig()  # type: ignore[call-arg]
-        # --- END CHANGE ---
         self._rng = (
             random.Random(initial_seed) if initial_seed is not None else random.Random()
         )
@@ -76,11 +71,9 @@ class GameState:
             return 0.0, True
 
         shape_idx, r, c = decode_action(action_index, self.env_config)
-        # Pass the rng instance to execute_placement
         reward = execute_placement(self, shape_idx, r, c, self._rng)
         self.current_step += 1
 
-        # Check for game over *after* potential refill in execute_placement
         if not self.game_over and not self.valid_actions():
             self.game_over = True
             logger.info(f"Game over detected after step {self.current_step}.")
@@ -109,7 +102,6 @@ class GameState:
         """Creates a deep copy for simulations (e.g., MCTS)."""
         new_state = GameState.__new__(GameState)
         new_state.env_config = self.env_config
-        # Create a new RNG instance but copy the state
         new_state._rng = random.Random()
         new_state._rng.setstate(self._rng.getstate())
         new_state.grid_data = self.grid_data.deepcopy()

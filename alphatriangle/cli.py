@@ -1,15 +1,9 @@
-# File: src/cli.py
 import logging
 import sys
 from typing import Annotated
 
 import typer
 
-# Use absolute imports based on the package structure defined in pyproject.toml
-# Assumes 'src' is the package root directory for editable installs,
-# or the package 'alphatriangle' is installed.
-# RELY on the package being installed correctly (`pip install -e .`).
-# If these imports fail, the installation or environment is likely the issue.
 from alphatriangle import config, utils
 from alphatriangle.app import Application
 from alphatriangle.config import (
@@ -28,7 +22,6 @@ app = typer.Typer(
     add_completion=False,
 )
 
-# Shared options
 LogLevelOption = Annotated[
     str,
     typer.Option(

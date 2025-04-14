@@ -1,5 +1,4 @@
-# File: src/environment/logic/README.md
-# Environment Logic Submodule (`src.environment.logic`)
+# Environment Logic Submodule (`alphatriangle.environment.logic`)
 
 ## Purpose and Architecture
 
@@ -19,17 +18,17 @@ This submodule contains the core game progression logic, connecting actions to s
 
 ## Dependencies
 
--   **`src.environment.core`**:
+-   **`alphatriangle.environment.core`**:
     -   `GameState`: The primary object modified by the logic.
     -   `ActionCodec`: Used by `get_valid_actions`.
--   **`src.environment.grid`**:
+-   **`alphatriangle.environment.grid`**:
     -   `GridLogic`: Used for placement validation (`can_place`) and line clearing (`check_and_clear_lines`).
     -   `GridData`: Accessed via `GameState`.
--   **`src.environment.shapes`**:
+-   **`alphatriangle.environment.shapes`**:
     -   `ShapeLogic`: Used by `execute_placement` to trigger shape refills.
--   **`src.structs`**:
+-   **`alphatriangle.structs`**:
     -   `Shape`, `Triangle`: Used for representing game elements.
--   **`src.utils.types`**:
+-   **`alphatriangle.utils.types`**:
     -   `ActionType`: Used for representing actions.
 -   **Standard Libraries:** `typing`, `logging`, `random`.
 

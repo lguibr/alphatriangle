@@ -1,12 +1,8 @@
-# File: src/stats/plot_utils.py
-# File: src/stats/plot_utils.py
 import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FuncFormatter, MaxNLocator
-
-# Import normalize_color_for_matplotlib from the new location
 
 logger = logging.getLogger(__name__)
 
@@ -127,11 +123,6 @@ def render_single_plot(
             plotted_rolling = True
             break  # Only plot the largest applicable rolling average
 
-    # Plot trend line
-    # trend_steps, trend_values = calculate_trend_line(steps, values)
-    # if trend_steps:
-    #     ax.plot(trend_steps, trend_values, color=color, linestyle='--', linewidth=1.0, alpha=0.8, label='Trend')
-
     # Formatting
     ax.set_title(label, loc="left", fontsize=9, color="white", pad=2)
     ax.tick_params(axis="both", which="major", labelsize=7, colors="lightgray")
@@ -178,7 +169,3 @@ def render_single_plot(
         fontsize=7,
         color="white",
     )
-
-    # Optional legend for rolling average
-    # if plotted_rolling:
-    #     ax.legend(fontsize=6, loc='upper right', frameon=False, labelcolor='lightgray')

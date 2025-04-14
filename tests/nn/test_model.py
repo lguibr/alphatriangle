@@ -1,9 +1,7 @@
-# File: tests/nn/test_model.py
-# File: tests/nn/test_model.py
 import pytest
 import torch
 
-# Use relative imports for src components if running tests from project root
+# Use relative imports for alphatriangle components if running tests from project root
 # or absolute imports if package is installed
 try:
     # Try absolute imports first (for installed package)

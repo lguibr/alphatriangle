@@ -1,5 +1,3 @@
-# File: src/stats/collector.py
-# File: src/stats/collector.py
 import logging
 import time
 from collections import deque
@@ -8,13 +6,11 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import ray
 
-# Use relative imports
 from ..utils.types import StatsCollectorData
 
 if TYPE_CHECKING:
-    from ..environment import GameState  # Import GameState for type hint
+    from ..environment import GameState
 
-# Get logger instance for this module
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +25,7 @@ class StatsCollectorActor:
         self._data: StatsCollectorData = {}
         # Store the latest GameState reported by each worker
         self._latest_worker_states: dict[int, GameState] = {}
-        self._last_state_update_time: dict[int, float] = {}  # Track update times
+        self._last_state_update_time: dict[int, float] = {}
 
         print(f"[StatsCollectorActor] Initialized with max_history={max_history}.")
         logger.info(f"Initialized with max_history={max_history}.")

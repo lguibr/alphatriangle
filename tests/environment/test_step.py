@@ -1,4 +1,3 @@
-# File: tests/environment/test_step.py
 import random
 from time import sleep
 

@@ -1,6 +1,3 @@
-# File: tests/environment/test_grid_logic.py
-# File: tests/environment/test_grid_logic.py
-
 import pytest
 
 from alphatriangle.config import EnvConfig

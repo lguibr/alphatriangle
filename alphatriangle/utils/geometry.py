@@ -1,6 +1,3 @@
-# File: src/utils/geometry.py
-
-
 def is_point_in_polygon(
     point: tuple[float, float], polygon: list[tuple[float, float]]
 ) -> bool:

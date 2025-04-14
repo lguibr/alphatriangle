@@ -1,10 +1,7 @@
-# File: src/app.py
-# File: src/app.py
 import logging
 
 import pygame
 
-# Use relative imports within the 'src' package
 from . import (
     config,
     environment,
@@ -19,10 +16,8 @@ class Application:
     """Main application integrating visualization and interaction."""
 
     def __init__(self, mode: str = "play"):
-        # --- CHANGE: Removed type ignore ---
         self.vis_config = config.VisConfig()
         self.env_config = config.EnvConfig()
-        # --- END CHANGE ---
         self.mode = mode
 
         pygame.init()

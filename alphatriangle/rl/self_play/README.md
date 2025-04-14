@@ -1,5 +1,4 @@
-# File: src/rl/self_play/README.md
-# RL Self-Play Submodule (`src.rl.self_play`)
+# RL Self-Play Submodule (`alphatriangle.rl.self_play`)
 
 ## Purpose and Architecture
 
@@ -11,9 +10,9 @@ This submodule focuses specifically on generating game episodes through self-pla
     -   It receives configuration objects (`EnvConfig`, `MCTSConfig`, `ModelConfig`, `TrainConfig`) during initialization.
     -   It has a `set_weights` method allowing the `TrainingOrchestrator` to periodically update its local neural network with the latest trained weights from the central model.
     -   Its main method, `run_episode`, simulates a complete game episode:
-        -   Uses its local `NeuralNetwork` evaluator and `MCTSConfig` to run MCTS (`src.mcts.run_mcts_simulations`), **reusing the search tree between moves**.
-        -   Selects actions based on MCTS results (`src.mcts.strategy.policy.select_action_based_on_visits`).
-        -   Generates policy targets (`src.mcts.strategy.policy.get_policy_target`).
+        -   Uses its local `NeuralNetwork` evaluator and `MCTSConfig` to run MCTS (`alphatriangle.mcts.run_mcts_simulations`), **reusing the search tree between moves**.
+        -   Selects actions based on MCTS results (`alphatriangle.mcts.strategy.policy.select_action_based_on_visits`).
+        -   Generates policy targets (`alphatriangle.mcts.strategy.policy.get_policy_target`).
         -   Stores `(StateType, policy_target, placeholder_value)` tuples (using extracted features).
         -   Steps its local game environment (`GameState.step`).
         -   Backfills the value target after the episode ends.
@@ -28,24 +27,24 @@ This submodule focuses specifically on generating game episodes through self-pla
         -   `run_episode() -> SelfPlayResult`: Runs one episode and returns results.
         -   `set_weights(weights: Dict)`: Updates the actor's local network weights.
 -   **Types:**
-    -   `SelfPlayResult`: Pydantic model defined in `src.rl.types`.
+    -   `SelfPlayResult`: Pydantic model defined in `alphatriangle.rl.types`.
 
 ## Dependencies
 
--   **`src.config`**:
+-   **`alphatriangle.config`**:
     -   `EnvConfig`, `MCTSConfig`, `ModelConfig`, `TrainConfig`.
--   **`src.nn`**:
+-   **`alphatriangle.nn`**:
     -   `NeuralNetwork`: Instantiated locally within the actor.
--   **`src.mcts`**:
+-   **`alphatriangle.mcts`**:
     -   Core MCTS functions and types. **MCTS uses batched evaluation.**
--   **`src.environment`**:
+-   **`alphatriangle.environment`**:
     -   `GameState`, `EnvConfig`: Used to instantiate and step through the game simulation locally.
--   **`src.features`**:
+-   **`alphatriangle.features`**:
     -   `extract_state_features`: Used to generate `StateType` for experiences.
--   **`src.utils`**:
+-   **`alphatriangle.utils`**:
     -   `types`: `Experience`, `ActionType`, `PolicyTargetMapping`, `StateType`.
     -   `helpers`: `get_device`, `set_random_seeds`.
--   **`src.rl.types`**:
+-   **`alphatriangle.rl.types`**:
     -   `SelfPlayResult`: Return type.
 -   **`numpy`**:
     -   Used by MCTS strategies.

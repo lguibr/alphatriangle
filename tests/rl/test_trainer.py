@@ -1,5 +1,3 @@
-# File: tests/rl/test_trainer.py
-
 import numpy as np
 import pytest
 import torch

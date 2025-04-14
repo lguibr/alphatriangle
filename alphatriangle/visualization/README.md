@@ -1,25 +1,24 @@
-# File: src/visualization/README.md
-# Visualization Module (`src.visualization`)
+# Visualization Module (`alphatriangle.visualization`)
 
 ## Purpose and Architecture
 
 This module is responsible for rendering the game state visually using the Pygame library. It provides components for drawing the grid, shapes, previews, HUD elements, and statistics plots. **In training visualization mode, it now renders the states of multiple self-play workers in a grid layout alongside plots and progress bars.**
 
--   **Core Components (`src.visualization.core`):**
+-   **Core Components (`alphatriangle.visualization.core`):**
     -   `Visualizer`: Orchestrates the rendering process for interactive modes ("play", "debug"). It manages the layout, calls drawing functions, and handles hover/selection states specific to visualization.
-    -   `GameRenderer`: **Adapted renderer** for displaying **multiple** game states and statistics during training visualization (`run_training_visual.py`). It uses `layout.py` to divide the screen. It renders worker game states in one area and statistics plots/progress bars in another. It re-instantiates `src.stats.Plotter`.
+    -   `GameRenderer`: **Adapted renderer** for displaying **multiple** game states and statistics during training visualization (`run_training_visual.py`). It uses `layout.py` to divide the screen. It renders worker game states in one area and statistics plots/progress bars in another. It re-instantiates `alphatriangle.stats.Plotter`.
     -   `layout`: Calculates the screen positions and sizes for different UI areas (worker grid, stats area, plots).
     -   `fonts`: Loads necessary font files.
     -   `colors`: Defines a centralized palette of RGB color tuples.
     -   `coord_mapper`: Provides functions to map screen coordinates to grid coordinates (`get_grid_coords_from_screen`) and preview indices (`get_preview_index_from_screen`).
--   **Drawing Components (`src.visualization.drawing`):**
+-   **Drawing Components (`alphatriangle.visualization.drawing`):**
     -   Contains specific functions for drawing different elements onto Pygame surfaces:
         -   `grid`: Draws the grid background and occupied/empty triangles.
         -   `shapes`: Draws individual shapes (used by previews).
         -   `previews`: Renders the shape preview area.
         -   `hud`: Renders text information like global training stats and help text at the bottom.
         -   `highlight`: Draws debug highlights.
--   **UI Components (`src.visualization.ui`):**
+-   **UI Components (`alphatriangle.visualization.ui`):**
     -   Contains reusable UI elements like `ProgressBar`.
 
 ## Exposed Interfaces
@@ -41,25 +40,25 @@ This module is responsible for rendering the game state visually using the Pygam
 -   **UI Components:**
     -   `ProgressBar`: Class for rendering progress bars.
 -   **Config:**
-    -   `VisConfig`: Configuration class (re-exported from `src.config`).
+    -   `VisConfig`: Configuration class (re-exported from `alphatriangle.config`).
 
 ## Dependencies
 
--   **`src.config`**:
+-   **`alphatriangle.config`**:
     -   `VisConfig`, `EnvConfig`: Used extensively for layout, sizing, and coordinate mapping.
--   **`src.environment`**:
+-   **`alphatriangle.environment`**:
     -   `GameState`: The primary object whose state is visualized.
     -   `GridData`: Accessed via `GameState` or passed directly to drawing functions.
--   **`src.structs`**:
+-   **`alphatriangle.structs`**:
     -   Uses `Triangle`, `Shape`.
--   **`src.stats`**:
+-   **`alphatriangle.stats`**:
     -   Uses `Plotter` within `GameRenderer`.
--   **`src.utils`**:
+-   **`alphatriangle.utils`**:
     -   Uses `geometry.is_point_in_polygon`, `helpers.format_eta`, `types.StatsCollectorData`.
 -   **`pygame`**:
     -   The core library used for all drawing, surface manipulation, event handling (via `interaction`), and font rendering.
 -   **`matplotlib`**:
-    -   Used by `src.stats.Plotter`.
+    -   Used by `alphatriangle.stats.Plotter`.
 -   **Standard Libraries:** `typing`, `logging`, `math`, `time`.
 
 ---

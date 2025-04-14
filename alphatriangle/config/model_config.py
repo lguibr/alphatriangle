@@ -1,4 +1,3 @@
-# File: src/config/model_config.py
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -10,10 +9,7 @@ class ModelConfig(BaseModel):
     --- SERIOUS CONFIGURATION ---
     """
 
-    GRID_INPUT_CHANNELS: int = Field(
-        default=1, gt=0
-    )  # Assuming single channel input (occupancy/death)
-
+    GRID_INPUT_CHANNELS: int = Field(default=1, gt=0)
     # --- CNN Architecture Parameters ---
     # Increased filters for more feature extraction capacity
     CONV_FILTERS: list[int] = Field(default=[64, 128])
@@ -46,7 +42,7 @@ class ModelConfig(BaseModel):
     USE_BATCH_NORM: bool = Field(default=True)
 
     # --- Input Feature Dimension ---
-    # This depends on src/features/extractor.py and should match its output.
+    # This depends on alphatriangle/features/extractor.py and should match its output.
     # Default calculation: 3 slots * 7 shape feats + 3 avail feats + 6 explicit feats = 30
     OTHER_NN_INPUT_FEATURES_DIM: int = Field(default=30, gt=0)
 
@@ -150,5 +146,4 @@ class ModelConfig(BaseModel):
         return self
 
 
-# Ensure model is rebuilt after changes
 ModelConfig.model_rebuild(force=True)

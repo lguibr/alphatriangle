@@ -1,15 +1,9 @@
-# File: src/rl/types.py
 import logging
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# Use relative import
-from ..utils.types import (
-    Experience,  # Import StateType for validation check
-)
-
-# Import GameState only for type checking if needed, but it's removed from the model now
+from ..utils.types import Experience
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +18,6 @@ class SelfPlayResult(BaseModel):
     episode_experiences: list[Experience]
     final_score: float
     episode_steps: int
-    # final_game_state: GameState # REMOVED - No longer returned directly
 
     total_simulations: int = Field(..., ge=0)
     avg_root_visits: float = Field(..., ge=0)

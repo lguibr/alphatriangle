@@ -1,4 +1,3 @@
-# File: src/rl/self_play/worker.py
 import logging
 import random
 import time
@@ -7,7 +6,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import ray
 
-# Use relative imports
 from ...config import MCTSConfig, ModelConfig, TrainConfig
 from ...environment import EnvConfig, GameState
 from ...features import extract_state_features
@@ -21,9 +19,8 @@ from ...mcts import (
 from ...nn import NeuralNetwork
 from ...utils import get_device, set_random_seeds
 
-# Move application type imports into TYPE_CHECKING block
 if TYPE_CHECKING:
-    from ...stats import StatsCollectorActor  # Import for type hinting
+    from ...stats import StatsCollectorActor
     from ...utils.types import Experience, PolicyTargetMapping, StateType
 
 from ..types import SelfPlayResult
@@ -76,8 +73,8 @@ class SelfPlayWorker:
 
         mcts_log_level = logging.INFO
         nn_log_level = logging.INFO
-        logging.getLogger("src.mcts").setLevel(mcts_log_level)
-        logging.getLogger("src.nn").setLevel(nn_log_level)
+        logging.getLogger("alphatriangle.mcts").setLevel(mcts_log_level)
+        logging.getLogger("alphatriangle.nn").setLevel(nn_log_level)
 
         set_random_seeds(self.seed)
 
@@ -113,7 +110,6 @@ class SelfPlayWorker:
             try:
                 # Send a copy to avoid potential issues with shared state
                 state_copy = game_state.copy()
-                # Correctly call remote method
                 self.stats_collector_actor.update_worker_game_state.remote(  # type: ignore
                     self.actor_id, state_copy
                 )
@@ -129,7 +125,6 @@ class SelfPlayWorker:
         """Asynchronously logs per-step stats to the collector."""
         if self.stats_collector_actor:
             try:
-                # Use distinct keys for per-step worker stats
                 step_stats = {
                     f"Worker_{self.actor_id}/Step_Score": (
                         game_state.game_score,
@@ -168,7 +163,7 @@ class SelfPlayWorker:
         step_simulations: list[int] = []
 
         logger.info(f"Starting episode with seed {episode_seed}")
-        self._report_current_state(game)  # Report initial state
+        self._report_current_state(game)
 
         root_node: Node | None = Node(state=game.copy())
 
@@ -184,7 +179,7 @@ class SelfPlayWorker:
                 f"Step {game.current_step}: Running MCTS simulations ({self.mcts_config.num_simulations}) on state from step {root_node.state.current_step}..."
             )
             mcts_start_time = time.monotonic()
-            mcts_max_depth = 0  # Default value
+            mcts_max_depth = 0
             try:
                 mcts_max_depth = run_mcts_simulations(
                     root_node, self.mcts_config, self.nn_evaluator
@@ -312,7 +307,6 @@ class SelfPlayWorker:
             f"Episode finished. Outcome: {final_outcome}, Steps: {game.current_step}"
         )
 
-        # Use TYPE_CHECKING import for Experience type hint
         processed_experiences: list[Experience] = [
             (state_type, policy, final_outcome)
             for state_type, policy, _ in raw_experiences
@@ -322,8 +316,6 @@ class SelfPlayWorker:
         avg_visits_episode = np.mean(step_root_visits) if step_root_visits else 0.0
         avg_depth_episode = np.mean(step_tree_depths) if step_tree_depths else 0.0
 
-        # No longer need to return final_game_state
-        # Cast numpy floats to standard floats for Pydantic model
         return SelfPlayResult(
             episode_experiences=processed_experiences,
             final_score=final_outcome,

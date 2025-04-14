@@ -1,5 +1,4 @@
-# File: src/interaction/README.md
-# Interaction Module (`src.interaction`)
+# Interaction Module (`alphatriangle.interaction`)
 
 ## Purpose and Architecture
 
@@ -32,14 +31,14 @@ This module handles user input (keyboard and mouse) for interactive modes of the
 
 ## Dependencies
 
--   **`src.environment`**:
+-   **`alphatriangle.environment`**:
     -   `GameState`: Modifies the game state based on user actions (placing shapes, toggling debug cells).
     -   `EnvConfig`: Used for coordinate mapping and action encoding.
     -   `GridLogic`, `ActionCodec`: Used by mode-specific handlers.
--   **`src.visualization`**:
+-   **`alphatriangle.visualization`**:
     -   `Visualizer`: Used to get layout information (`grid_rect`, `preview_rects`) and for coordinate mapping (`get_grid_coords_from_screen`, `get_preview_index_from_screen`). Also updated directly during resize events.
     -   `VisConfig`: Accessed via `Visualizer`.
--   **`src.structs`**:
+-   **`alphatriangle.structs`**:
     -   `Shape`: Used by play mode handler.
 -   **`pygame`**:
     -   Relies heavily on Pygame for event handling (`pygame.event`, `pygame.mouse`) and constants (`MOUSEBUTTONDOWN`, `KEYDOWN`, etc.).

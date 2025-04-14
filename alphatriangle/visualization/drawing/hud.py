@@ -1,23 +1,16 @@
-# File: src/visualization/drawing/hud.py
-# File: src/visualization/drawing/hud.py
 from typing import Any
 
 import pygame
 
 from ..core import colors
-
-# Use relative imports
 from ..ui import ProgressBar
 
 
 def render_hud(
     surface: pygame.Surface,
-    # Removed: game_state: "GameState", # No longer needed
     mode: str,
     fonts: dict[str, pygame.font.Font | None],
-    display_stats: (
-        dict[str, Any] | None
-    ) = None,  # Renamed from global_stats for clarity
+    display_stats: dict[str, Any] | None = None,
 ) -> None:
     """
     Renders global information (like step count, worker status) at the bottom.

@@ -1,8 +1,7 @@
-# File: src/config/validation.py
 import logging
 from typing import Any
 
-from pydantic import BaseModel, ValidationError  # Import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from .env_config import EnvConfig
 from .mcts_config import MCTSConfig
@@ -32,17 +31,15 @@ def print_config_info_and_validate(mcts_config_instance: MCTSConfig | None):
     }
 
     for name, ConfigClass in config_classes.items():
-        instance: BaseModel | None = None  # Initialize instance as None
+        instance: BaseModel | None = None
         try:
             if name == "MCTS":
                 if mcts_config_instance is not None:
-                    # Validate the provided instance
                     instance = MCTSConfig.model_validate(
                         mcts_config_instance.model_dump()
                     )
                     print(f"[{name}] - Instance provided & validated OK")
                 else:
-                    # Instantiate if not provided (shouldn't happen based on signature, but safe)
                     instance = ConfigClass()
                     print(f"[{name}] - Validated OK (Instantiated Default)")
             else:

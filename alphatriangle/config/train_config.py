@@ -1,4 +1,3 @@
-# File: src/config/train_config.py
 import time
 from typing import Literal
 

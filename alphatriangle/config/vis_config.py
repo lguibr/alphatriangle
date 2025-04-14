@@ -1,4 +1,3 @@
-# File: src/config/vis_config.py
 from pydantic import BaseModel, Field
 
 
@@ -27,5 +26,4 @@ class VisConfig(BaseModel):
     PREVIEW_INNER_PADDING: int = Field(default=2, ge=0)
 
 
-# Ensure model is rebuilt after changes
 VisConfig.model_rebuild(force=True)

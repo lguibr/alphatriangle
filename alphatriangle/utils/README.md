@@ -1,5 +1,4 @@
-# File: src/utils/README.md
-# Utilities Module (`src.utils`)
+# Utilities Module (`alphatriangle.utils`)
 
 ## Purpose and Architecture
 
@@ -44,7 +43,7 @@ This module provides common utility functions and type definitions used across v
     -   Used by `get_device` and `set_random_seeds`.
 -   **`numpy`**:
     -   Used by `set_random_seeds` and potentially in type definitions (`np.ndarray`).
--   **`src.environment`**:
+-   **`alphatriangle.environment`**:
     -   `GameState` (used in `Experience` type hint via TYPE_CHECKING).
 -   **Standard Libraries:** `typing`, `random`, `os`, `math`, `logging`, `collections.deque`.
 
