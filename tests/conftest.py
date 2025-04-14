@@ -52,8 +52,8 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
         TRANSFORMER_LAYERS=0,  # Provide default
         TRANSFORMER_FC_DIM=32,  # Provide default
         FC_DIMS_SHARED=[8],
-        # Cast ACTION_DIM to int
-        POLICY_HEAD_DIMS=[int(mock_env_config.ACTION_DIM)],
+        # ACTION_DIM is already int
+        POLICY_HEAD_DIMS=[mock_env_config.ACTION_DIM],
         VALUE_HEAD_DIMS=[1],
         OTHER_NN_INPUT_FEATURES_DIM=10,  # Simplified feature dim for testing
         ACTIVATION_FUNCTION="ReLU",  # Provide default
@@ -135,7 +135,8 @@ def mock_experience(
     mock_state_type: StateType, mock_env_config: EnvConfig
 ) -> Experience:
     """Creates a mock Experience tuple."""
-    action_dim = int(mock_env_config.ACTION_DIM)  # Cast to int
+    # ACTION_DIM is already int
+    action_dim = mock_env_config.ACTION_DIM
     policy_target = (
         dict.fromkeys(range(action_dim), 1.0 / action_dim)
         if action_dim > 0
@@ -190,15 +191,16 @@ def filled_mock_buffer(
     """Provides a buffer filled with some mock experiences."""
     for _ in range(mock_experience_buffer.min_size_to_train + 5):
         # Create slightly different experiences
-        # Ensure dict values are copied correctly
-        state_copy: StateType = {k: v.copy() for k, v in mock_experience[0].items()}
-        # Ensure grid is writeable before modifying
-        if not state_copy["grid"].flags.writeable:
-            state_copy["grid"] = state_copy["grid"].copy()
+        # Correctly copy StateType dict and its NumPy arrays
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy(),
+            "other_features": mock_experience[0]["other_features"].copy(),
+        }
+        # Ensure grid is writeable before modifying (copy() already does this)
         state_copy["grid"] += (
             rng.standard_normal(state_copy["grid"].shape, dtype=np.float32) * 0.1
         )
-        # Cast state_copy to the correct type for the buffer
+        # Create the new experience tuple
         exp_copy: Experience = (state_copy, mock_experience[1], random.uniform(-1, 1))
         mock_experience_buffer.add(exp_copy)
     return mock_experience_buffer

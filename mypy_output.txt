@@ -1,0 +1,210 @@
+src/environment/grid/grid_data.py:210: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+src/environment/grid/grid_data.py:215: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+src/environment/core/action_codec.py:25: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+src/environment/core/action_codec.py:25: note: Possible overload variants:
+src/environment/core/action_codec.py:25: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/environment/core/action_codec.py:25: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+src/environment/core/game_state.py:30: error: Missing named argument "ROWS" for "EnvConfig"  [call-arg]
+src/environment/core/game_state.py:30: error: Missing named argument "NUM_SHAPE_SLOTS" for "EnvConfig"  [call-arg]
+src/environment/core/game_state.py:30: error: Missing named argument "MIN_LINE_LENGTH" for "EnvConfig"  [call-arg]
+tests/environment/test_shape_logic.py:45: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/environment/conftest.py:14: error: Missing named argument "ROWS" for "EnvConfig"  [call-arg]
+tests/environment/conftest.py:14: error: Missing named argument "NUM_SHAPE_SLOTS" for "EnvConfig"  [call-arg]
+tests/environment/conftest.py:14: error: Missing named argument "MIN_LINE_LENGTH" for "EnvConfig"  [call-arg]
+src/features/extractor.py:59: error: Incompatible types in assignment (expression has type "ndarray[tuple[int, ...], dtype[floating[_32Bit]]]", variable has type "ndarray[tuple[int, int, int], dtype[floating[_32Bit]]]")  [assignment]
+src/features/extractor.py:150: error: Returning Any from function declared to return "ndarray[Any, Any]"  [no-any-return]
+tests/mcts/fixtures.py:33: error: Missing named argument "MIN_LINE_LENGTH" for "EnvConfig"  [call-arg]
+tests/mcts/fixtures.py:38: error: No overload variant of "range" matches argument type "Callable[[], int]"  [call-overload]
+tests/mcts/fixtures.py:38: note: Possible overload variants:
+tests/mcts/fixtures.py:38: note:     def range(SupportsIndex, /) -> range
+tests/mcts/fixtures.py:38: note:     def range(SupportsIndex, SupportsIndex, SupportsIndex = ..., /) -> range
+tests/mcts/fixtures.py:142: error: Missing named argument "MIN_LINE_LENGTH" for "EnvConfig"  [call-arg]
+tests/mcts/fixtures.py:163: error: Argument "action_dim" to "MockNetworkEvaluator" has incompatible type "Callable[[], int]"; expected "int"  [arg-type]
+tests/mcts/fixtures.py:170: error: No overload variant of "range" matches argument type "Callable[[], int]"  [call-overload]
+tests/mcts/fixtures.py:170: note: Possible overload variants:
+tests/mcts/fixtures.py:170: note:     def range(SupportsIndex, /) -> range
+tests/mcts/fixtures.py:170: note:     def range(SupportsIndex, SupportsIndex, SupportsIndex = ..., /) -> range
+tests/mcts/conftest.py:57: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+tests/mcts/conftest.py:57: note: Possible overload variants:
+tests/mcts/conftest.py:57: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/mcts/conftest.py:57: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+tests/mcts/conftest.py:160: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+tests/mcts/conftest.py:160: note: Possible overload variants:
+tests/mcts/conftest.py:160: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/mcts/conftest.py:160: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+tests/mcts/conftest.py:184: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+tests/mcts/conftest.py:184: note: Possible overload variants:
+tests/mcts/conftest.py:184: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/mcts/conftest.py:184: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+tests/mcts/conftest.py:192: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+tests/mcts/conftest.py:192: note: Possible overload variants:
+tests/mcts/conftest.py:192: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/mcts/conftest.py:192: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+tests/mcts/conftest.py:208: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+tests/mcts/conftest.py:208: note: Possible overload variants:
+tests/mcts/conftest.py:208: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/mcts/conftest.py:208: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+tests/mcts/conftest.py:249: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+tests/mcts/conftest.py:249: note: Possible overload variants:
+tests/mcts/conftest.py:249: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/mcts/conftest.py:249: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+src/mcts/strategy/policy.py:128: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+src/mcts/strategy/policy.py:128: note: Possible overload variants:
+src/mcts/strategy/policy.py:128: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/mcts/strategy/policy.py:128: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+src/nn/model.py:55: error: Returning Any from function declared to return "Tensor"  [no-any-return]
+src/nn/model.py:78: error: Value of type "Tensor | Module" is not indexable  [index]
+src/nn/model.py:229: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+src/nn/model.py:229: note: Possible overload variants:
+src/nn/model.py:229: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/nn/model.py:229: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+tests/nn/test_model.py:102: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+tests/nn/test_model.py:102: note: Possible overload variants:
+tests/nn/test_model.py:102: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/nn/test_model.py:102: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+src/rl/core/visual_state_actor.py:19: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+src/rl/core/visual_state_actor.py:20: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+src/rl/core/visual_state_actor.py:21: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+src/rl/core/visual_state_actor.py:44: error: Incompatible types in assignment (expression has type "dict[str, Any]", target has type "GameState")  [assignment]
+src/rl/core/trainer.py:110: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+src/rl/core/trainer.py:110: note: Possible overload variants:
+src/rl/core/trainer.py:110: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/rl/core/trainer.py:110: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+src/rl/core/trainer.py:121: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+src/rl/core/trainer.py:121: note: Possible overload variants:
+src/rl/core/trainer.py:121: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/rl/core/trainer.py:121: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+src/rl/core/trainer.py:196: error: Incompatible types in assignment (expression has type "Tensor", variable has type "float")  [assignment]
+tests/conftest.py:56: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+tests/conftest.py:56: note: Possible overload variants:
+tests/conftest.py:56: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/conftest.py:56: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+tests/conftest.py:138: error: No overload variant of "int" matches argument type "Callable[[], int]"  [call-overload]
+tests/conftest.py:138: note: Possible overload variants:
+tests/conftest.py:138: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/conftest.py:138: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+tests/conftest.py:194: error: Incompatible types in assignment (expression has type "dict[str, Any]", variable has type "StateType")  [assignment]
+tests/conftest.py:194: error: "object" has no attribute "copy"  [attr-defined]
+tests/rl/test_trainer.py:89: error: Incompatible types in assignment (expression has type "dict[str, Any]", variable has type "StateType")  [assignment]
+tests/rl/test_trainer.py:89: error: "object" has no attribute "copy"  [attr-defined]
+tests/rl/test_trainer.py:109: error: Incompatible types in assignment (expression has type "dict[str, Any]", variable has type "StateType")  [assignment]
+tests/rl/test_trainer.py:109: error: "object" has no attribute "copy"  [attr-defined]
+tests/rl/test_buffer.py:141: error: Incompatible types in assignment (expression has type "dict[str, Any]", variable has type "StateType")  [assignment]
+tests/rl/test_buffer.py:141: error: "object" has no attribute "copy"  [attr-defined]
+tests/rl/test_buffer.py:170: error: Incompatible types in assignment (expression has type "dict[str, Any]", variable has type "StateType")  [assignment]
+tests/rl/test_buffer.py:170: error: "object" has no attribute "copy"  [attr-defined]
+tests/rl/test_buffer.py:241: error: Incompatible types in assignment (expression has type "dict[str, Any]", variable has type "StateType")  [assignment]
+tests/rl/test_buffer.py:241: error: "object" has no attribute "copy"  [attr-defined]
+tests/rl/test_buffer.py:261: error: Incompatible types in assignment (expression has type "dict[str, Any]", variable has type "StateType")  [assignment]
+tests/rl/test_buffer.py:261: error: "object" has no attribute "copy"  [attr-defined]
+tests/rl/test_buffer.py:300: error: Incompatible types in assignment (expression has type "dict[str, Any]", variable has type "StateType")  [assignment]
+tests/rl/test_buffer.py:300: error: "object" has no attribute "copy"  [attr-defined]
+tests/nn/test_network.py:119: error: "object" has no attribute "copy"  [attr-defined]
+tests/nn/test_network.py:176: error: "object" has no attribute "copy"  [attr-defined]
+src/app.py:21: error: Missing named argument "FPS" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "SCREEN_WIDTH" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "SCREEN_HEIGHT" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "GRID_AREA_RATIO" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "PREVIEW_AREA_WIDTH" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "PADDING" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "HUD_HEIGHT" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "FONT_UI_SIZE" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "FONT_SCORE_SIZE" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "FONT_HELP_SIZE" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "PREVIEW_PADDING" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "PREVIEW_BORDER_WIDTH" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "PREVIEW_SELECTED_BORDER_WIDTH" for "VisConfig"  [call-arg]
+src/app.py:21: error: Missing named argument "PREVIEW_INNER_PADDING" for "VisConfig"  [call-arg]
+src/app.py:22: error: Missing named argument "ROWS" for "EnvConfig"  [call-arg]
+src/app.py:22: error: Missing named argument "NUM_SHAPE_SLOTS" for "EnvConfig"  [call-arg]
+src/app.py:22: error: Missing named argument "MIN_LINE_LENGTH" for "EnvConfig"  [call-arg]
+src/training/loop.py:250: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+src/training/loop.py:270: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+src/training/loop.py:300: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+src/training/runners.py:51: error: Missing named argument "ROWS" for "EnvConfig"  [call-arg]
+src/training/runners.py:51: error: Missing named argument "NUM_SHAPE_SLOTS" for "EnvConfig"  [call-arg]
+src/training/runners.py:51: error: Missing named argument "MIN_LINE_LENGTH" for "EnvConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "GRID_INPUT_CHANNELS" for "ModelConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "NUM_RESIDUAL_BLOCKS" for "ModelConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "RESIDUAL_BLOCK_FILTERS" for "ModelConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "USE_TRANSFORMER" for "ModelConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "TRANSFORMER_DIM" for "ModelConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "TRANSFORMER_HEADS" for "ModelConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "TRANSFORMER_LAYERS" for "ModelConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "TRANSFORMER_FC_DIM" for "ModelConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "ACTIVATION_FUNCTION" for "ModelConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "USE_BATCH_NORM" for "ModelConfig"  [call-arg]
+src/training/runners.py:52: error: Missing named argument "OTHER_NN_INPUT_FEATURES_DIM" for "ModelConfig"  [call-arg]
+src/training/runners.py:53: error: Missing named argument "num_simulations" for "MCTSConfig"  [call-arg]
+src/training/runners.py:53: error: Missing named argument "puct_coefficient" for "MCTSConfig"  [call-arg]
+src/training/runners.py:53: error: Missing named argument "temperature_initial" for "MCTSConfig"  [call-arg]
+src/training/runners.py:53: error: Missing named argument "temperature_final" for "MCTSConfig"  [call-arg]
+src/training/runners.py:53: error: Missing named argument "temperature_anneal_steps" for "MCTSConfig"  [call-arg]
+src/training/runners.py:53: error: Missing named argument "dirichlet_alpha" for "MCTSConfig"  [call-arg]
+src/training/runners.py:53: error: Missing named argument "dirichlet_epsilon" for "MCTSConfig"  [call-arg]
+src/training/runners.py:53: error: Missing named argument "max_search_depth" for "MCTSConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "FPS" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "SCREEN_WIDTH" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "SCREEN_HEIGHT" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "GRID_AREA_RATIO" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "PREVIEW_AREA_WIDTH" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "PADDING" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "HUD_HEIGHT" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "FONT_UI_SIZE" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "FONT_SCORE_SIZE" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "FONT_HELP_SIZE" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "PREVIEW_PADDING" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "PREVIEW_BORDER_WIDTH" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "PREVIEW_SELECTED_BORDER_WIDTH" for "VisConfig"  [call-arg]
+src/training/runners.py:272: error: Missing named argument "PREVIEW_INNER_PADDING" for "VisConfig"  [call-arg]
+src/training/runners.py:340: error: Argument 1 to "update" of "MutableMapping" has incompatible type "dict[int, Any]"; expected "SupportsKeysAndGetItem[str, Any]"  [arg-type]
+src/cli.py:95: error: Missing named argument "num_simulations" for "MCTSConfig"  [call-arg]
+src/cli.py:95: error: Missing named argument "puct_coefficient" for "MCTSConfig"  [call-arg]
+src/cli.py:95: error: Missing named argument "temperature_initial" for "MCTSConfig"  [call-arg]
+src/cli.py:95: error: Missing named argument "temperature_final" for "MCTSConfig"  [call-arg]
+src/cli.py:95: error: Missing named argument "temperature_anneal_steps" for "MCTSConfig"  [call-arg]
+src/cli.py:95: error: Missing named argument "dirichlet_alpha" for "MCTSConfig"  [call-arg]
+src/cli.py:95: error: Missing named argument "dirichlet_epsilon" for "MCTSConfig"  [call-arg]
+src/cli.py:95: error: Missing named argument "max_search_depth" for "MCTSConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "LOAD_CHECKPOINT_PATH" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "LOAD_BUFFER_PATH" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "AUTO_RESUME_LATEST" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "DEVICE" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "RANDOM_SEED" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "NUM_SELF_PLAY_WORKERS" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "WORKER_DEVICE" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "BATCH_SIZE" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "BUFFER_CAPACITY" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "MIN_BUFFER_SIZE_TO_TRAIN" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "WORKER_UPDATE_FREQ_STEPS" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "OPTIMIZER_TYPE" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "LEARNING_RATE" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "WEIGHT_DECAY" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "LR_SCHEDULER_ETA_MIN" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "POLICY_LOSS_WEIGHT" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "VALUE_LOSS_WEIGHT" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "ENTROPY_BONUS_WEIGHT" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "CHECKPOINT_SAVE_FREQ_STEPS" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "USE_PER" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "PER_ALPHA" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "PER_BETA_INITIAL" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "PER_BETA_FINAL" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "PER_BETA_ANNEAL_STEPS" for "TrainConfig"  [call-arg]
+src/cli.py:158: error: Missing named argument "PER_EPSILON" for "TrainConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "ROOT_DATA_DIR" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "RUNS_DIR_NAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "MLFLOW_DIR_NAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "CHECKPOINT_SAVE_DIR_NAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "BUFFER_SAVE_DIR_NAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "GAME_STATE_SAVE_DIR_NAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "LOG_DIR_NAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "LATEST_CHECKPOINT_FILENAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "BEST_CHECKPOINT_FILENAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "BUFFER_FILENAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "CONFIG_FILENAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "RUN_NAME" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "SAVE_GAME_STATES" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "GAME_STATE_SAVE_FREQ_EPISODES" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "SAVE_BUFFER" for "PersistenceConfig"  [call-arg]
+src/cli.py:159: error: Missing named argument "BUFFER_SAVE_FREQ_STEPS" for "PersistenceConfig"  [call-arg]
+Found 152 errors in 18 files (checked 119 source files)

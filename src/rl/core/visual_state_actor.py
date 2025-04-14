@@ -20,30 +20,32 @@ class VisualStateActor:
         self.global_stats: dict[str, Any] = {}
         self.last_update_times: dict[int, float] = {}
 
-    def update_state(self, worker_id: int, game_state: "GameState"):
+    def update_state(self, worker_id: int, game_state: "GameState"):  # Added type hint
         """Workers call this to update their latest state."""
         self.worker_states[worker_id] = game_state
         self.last_update_times[worker_id] = time.time()
 
-    def update_global_stats(self, stats: dict[str, Any]):
+    def update_global_stats(self, stats: dict[str, Any]):  # Added type hint
         """Orchestrator calls this to update global stats."""
         # Ensure stats is a dictionary
         if isinstance(stats, dict):
-            self.global_stats = stats
+            # Use update to merge instead of direct assignment
+            self.global_stats.update(stats)
         else:
             # Handle error or log warning if stats is not a dict
             logger.error(
                 f"VisualStateActor received non-dict type for global stats: {type(stats)}"
             )
-            self.global_stats = {}  # Reset to empty dict
+            # Don't reset, just ignore the update
+            # self.global_stats = {}
 
-    def get_all_states(self) -> dict[int, Any]:
+    def get_all_states(self) -> dict[int, Any]:  # Added type hint
         """Called by the orchestrator to get states for the visual queue."""
         # Use dict() constructor instead of comprehension for ruff C416
         combined_states = dict(self.worker_states)
         combined_states[-1] = self.global_stats.copy()
         return combined_states
 
-    def get_state(self, worker_id: int) -> GameState | None:
+    def get_state(self, worker_id: int) -> "GameState" | None:  # Added type hint
         """Get state for a specific worker (unused currently)."""
         return self.worker_states.get(worker_id)

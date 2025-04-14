@@ -26,7 +26,7 @@ class GameState:
     def __init__(
         self, config: EnvConfig | None = None, initial_seed: int | None = None
     ):
-        # Provide default values if config is None
+        # Provide default values if config is None by calling constructor without args
         self.env_config = config if config else EnvConfig()
         self._rng = (
             random.Random(initial_seed) if initial_seed is not None else random.Random()

@@ -34,7 +34,8 @@ class GameStateFeatures:
         """
         rows, cols = self.env_config.ROWS, self.env_config.COLS
         # Initialize with correct number of channels
-        grid_state = np.zeros(
+        # Correct type hint for the grid state array
+        grid_state: np.ndarray = np.zeros(
             (self.model_config.GRID_INPUT_CHANNELS, rows, cols), dtype=np.float32
         )
 
@@ -124,8 +125,9 @@ class GameStateFeatures:
 
         # Ensure return type is ndarray and handle potential NaNs
         # Explicitly cast to satisfy mypy's no-any-return
+        # Use cast from typing
         return cast(
-            "np.ndarray", np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+            np.ndarray, np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
         )
 
     def get_combined_other_features(self) -> np.ndarray:

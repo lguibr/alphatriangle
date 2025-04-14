@@ -137,8 +137,11 @@ def test_uniform_buffer_capacity(
 ):
     for i in range(uniform_buffer.capacity + 10):
         # Create slightly different experiences
-        # Correctly copy StateType dict
-        state_copy: StateType = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        # Correctly copy StateType dict and its NumPy arrays
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy() + i,
+            "other_features": mock_experience[0]["other_features"].copy() + i,
+        }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
     assert len(uniform_buffer) == uniform_buffer.capacity
@@ -166,8 +169,11 @@ def test_uniform_buffer_sample(
 ):
     # Fill buffer until ready
     for i in range(uniform_buffer.min_size_to_train):
-        # Correctly copy StateType dict
-        state_copy: StateType = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        # Correctly copy StateType dict and its NumPy arrays
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy() + i,
+            "other_features": mock_experience[0]["other_features"].copy() + i,
+        }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
 
@@ -237,8 +243,11 @@ def test_per_buffer_add_batch(
 # Use mock_experience directly injected by pytest
 def test_per_buffer_capacity(per_buffer: ExperienceBuffer, mock_experience: Experience):
     for i in range(per_buffer.capacity + 10):
-        # Correctly copy StateType dict
-        state_copy: StateType = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        # Correctly copy StateType dict and its NumPy arrays
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy() + i,
+            "other_features": mock_experience[0]["other_features"].copy() + i,
+        }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)  # Adds with current max priority
     assert len(per_buffer) == per_buffer.capacity
@@ -257,8 +266,11 @@ def test_per_buffer_is_ready(per_buffer: ExperienceBuffer, mock_experience: Expe
 def test_per_buffer_sample(per_buffer: ExperienceBuffer, mock_experience: Experience):
     # Fill buffer until ready
     for i in range(per_buffer.min_size_to_train):
-        # Correctly copy StateType dict
-        state_copy: StateType = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        # Correctly copy StateType dict and its NumPy arrays
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy() + i,
+            "other_features": mock_experience[0]["other_features"].copy() + i,
+        }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
 
@@ -296,8 +308,11 @@ def test_per_buffer_update_priorities(
     # Add some items
     num_items = per_buffer.min_size_to_train
     for i in range(num_items):
-        # Correctly copy StateType dict
-        state_copy: StateType = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        # Correctly copy StateType dict and its NumPy arrays
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy() + i,
+            "other_features": mock_experience[0]["other_features"].copy() + i,
+        }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
 

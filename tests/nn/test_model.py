@@ -1,4 +1,4 @@
-
+# File: tests/nn/test_model.py
 import pytest
 import torch
 
@@ -98,8 +98,8 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
         TRANSFORMER_LAYERS=1,
         TRANSFORMER_FC_DIM=32,
         FC_DIMS_SHARED=[16],
-        # Cast ACTION_DIM to int
-        POLICY_HEAD_DIMS=[int(env_config.ACTION_DIM)],
+        # ACTION_DIM is already int
+        POLICY_HEAD_DIMS=[env_config.ACTION_DIM],
         VALUE_HEAD_DIMS=[1],
         OTHER_NN_INPUT_FEATURES_DIM=10,
         ACTIVATION_FUNCTION="ReLU",  # Provide default

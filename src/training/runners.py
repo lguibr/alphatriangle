@@ -328,6 +328,7 @@ def run_training_visual_mode(
                             f"Received non-dict global stats update: {type(global_stats_update)}"
                         )
 
+                    # Extract worker states (keys >= 0)
                     current_worker_states = {
                         k: v
                         for k, v in visual_data.items()
@@ -336,12 +337,20 @@ def run_training_visual_mode(
                         and isinstance(v, environment.GameState)
                     }
                     # Update global stats with any remaining items (shouldn't be any ideally)
-                    if isinstance(visual_data, dict):
-                        current_global_stats.update(visual_data)
-                    else:
+                    # Check if visual_data still contains non-worker items after pop
+                    remaining_items = {
+                        k: v
+                        for k, v in visual_data.items()
+                        if k != -1 and k not in current_worker_states
+                    }
+                    if remaining_items:
                         logger.warning(
-                            f"Remaining visual_data is not a dict: {type(visual_data)}"
+                            f"Unexpected items remaining in visual_data after processing: {remaining_items.keys()}"
                         )
+                        # Optionally merge them into global stats if they are dicts
+                        if isinstance(remaining_items, dict):
+                            current_global_stats.update(remaining_items)
+
                 else:
                     logger.warning(
                         f"Received unexpected item from visual queue: {type(visual_data)}"

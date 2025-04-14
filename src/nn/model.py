@@ -45,7 +45,7 @@ class ResidualBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(channels) if use_batch_norm else nn.Identity()
         self.activation = activation()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # Added return type hint
         residual = x
         out = self.conv1(x)
         out = self.conv2(out)
@@ -67,7 +67,14 @@ class PositionalEncoding(nn.Module):
         pe = torch.zeros(max_len, 1, d_model)
         pe[:, 0, 0::2] = torch.sin(position * div_term)
         # Ensure the second slice doesn't go out of bounds if d_model is odd
-        pe[:, 0, 1::2] = torch.cos(position * div_term[: pe[:, 0, 1::2].size(1)])
+        # Corrected slicing for odd d_model
+        if d_model % 2 != 0:
+            pe[:, 0, 1::2] = torch.cos(
+                position * div_term[:-1]
+            )  # Use div_term[:-1] for odd
+        else:
+            pe[:, 0, 1::2] = torch.cos(position * div_term)
+
         self.register_buffer("pe", pe)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -89,7 +96,7 @@ class AlphaTriangleNet(nn.Module):
         super().__init__()
         self.model_config = model_config
         self.env_config = env_config
-        self.action_dim = env_config.ACTION_DIM
+        self.action_dim = env_config.ACTION_DIM  # Already an int
 
         activation_cls: type[nn.Module] = getattr(nn, model_config.ACTIVATION_FUNCTION)
 
@@ -225,8 +232,8 @@ class AlphaTriangleNet(nn.Module):
             policy_head_layers.append(activation_cls())
             policy_in_features = hidden_dim
         # Final layer to output action dimension logits
-        # Cast action_dim to int to satisfy mypy
-        policy_head_layers.append(nn.Linear(policy_in_features, int(self.action_dim)))
+        # self.action_dim is already an int
+        policy_head_layers.append(nn.Linear(policy_in_features, self.action_dim))
         self.policy_head = nn.Sequential(*policy_head_layers)
 
         # --- Value Head ---

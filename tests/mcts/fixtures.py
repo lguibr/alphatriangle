@@ -30,11 +30,13 @@ class MockGameState:
         self.env_config = (
             env_config
             if env_config
-            else EnvConfig(ROWS=3, COLS=3, COLS_PER_ROW=[3, 3, 3], NUM_SHAPE_SLOTS=1)
+            # Provide default values for EnvConfig by calling constructor without args
+            else EnvConfig()
         )
         self._valid_actions = (
             valid_actions
             if valid_actions is not None
+            # ACTION_DIM is already int
             else list(range(self.env_config.ACTION_DIM))
         )
 
@@ -96,7 +98,7 @@ class MockNetworkEvaluator:
     ):
         self._default_policy = default_policy
         self._default_value = default_value
-        self._action_dim = action_dim
+        self._action_dim = action_dim  # Already int
         self.evaluation_history: list[MockGameState] = []
         self.batch_evaluation_history: list[list[MockGameState]] = []
 
@@ -139,7 +141,8 @@ class MockNetworkEvaluator:
 def mock_env_config() -> EnvConfig:
     """Provides a default EnvConfig for tests."""
     # Simple 3x3 grid for easier testing
-    return EnvConfig(ROWS=3, COLS=3, COLS_PER_ROW=[3, 3, 3], NUM_SHAPE_SLOTS=1)
+    # Call constructor without args to use defaults
+    return EnvConfig()
 
 
 @pytest.fixture
@@ -160,6 +163,7 @@ def mock_mcts_config() -> MCTSConfig:
 @pytest.fixture
 def mock_evaluator(mock_env_config: EnvConfig) -> MockNetworkEvaluator:
     """Provides a MockNetworkEvaluator instance."""
+    # ACTION_DIM is already int
     return MockNetworkEvaluator(action_dim=mock_env_config.ACTION_DIM)
 
 
@@ -167,6 +171,7 @@ def mock_evaluator(mock_env_config: EnvConfig) -> MockNetworkEvaluator:
 def root_node_mock_state(mock_env_config: EnvConfig) -> Node:
     """Provides a root Node with a MockGameState."""
     state = MockGameState(
+        # ACTION_DIM is already int
         valid_actions=list(range(mock_env_config.ACTION_DIM)),
         env_config=mock_env_config,
     )

@@ -85,9 +85,11 @@ def buffer_uniform(
     """Provides a filled uniform buffer."""
     buffer = ExperienceBuffer(train_config_uniform)
     for i in range(buffer.min_size_to_train + 5):
-        # Ensure dict values are copied correctly
-        state_copy: StateType = {k: v.copy() for k, v in mock_experience[0].items()}
-        state_copy["grid"] += i  # Modify state slightly
+        # Correctly copy StateType dict and its NumPy arrays
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy() + i,
+            "other_features": mock_experience[0]["other_features"].copy() + i,
+        }
         exp_copy: Experience = (
             state_copy,
             mock_experience[1],
@@ -105,9 +107,11 @@ def buffer_per(
     """Provides a filled PER buffer."""
     buffer = ExperienceBuffer(train_config_per)
     for i in range(buffer.min_size_to_train + 5):
-        # Ensure dict values are copied correctly
-        state_copy: StateType = {k: v.copy() for k, v in mock_experience[0].items()}
-        state_copy["grid"] += i  # Modify state slightly
+        # Correctly copy StateType dict and its NumPy arrays
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy() + i,
+            "other_features": mock_experience[0]["other_features"].copy() + i,
+        }
         exp_copy: Experience = (
             state_copy,
             mock_experience[1],

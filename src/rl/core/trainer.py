@@ -105,9 +105,9 @@ class Trainer:
         grids = []
         other_features = []
         value_targets = []
-        # Cast ACTION_DIM to int for shape
+        # ACTION_DIM is already int
         policy_target_tensor = torch.zeros(
-            (batch_size, int(self.env_config.ACTION_DIM)),
+            (batch_size, self.env_config.ACTION_DIM),
             dtype=torch.float32,
             device=self.device,
         )
@@ -117,8 +117,8 @@ class Trainer:
             other_features.append(state_features["other_features"])
             value_targets.append(value_target)
             for action, prob in policy_target_map.items():
-                # Cast ACTION_DIM to int for comparison
-                if 0 <= action < int(self.env_config.ACTION_DIM):
+                # ACTION_DIM is already int
+                if 0 <= action < self.env_config.ACTION_DIM:
                     policy_target_tensor[i, action] = prob
                 else:
                     logger.warning(
@@ -192,7 +192,7 @@ class Trainer:
                 policy_probs * torch.log(policy_probs + 1e-9), dim=1
             )
             # Cast entropy to float
-            entropy = float(entropy_term.mean().item())
+            entropy = float(entropy_term.mean().item())  # Cast tensor item to float
             entropy_loss = -self.train_config.ENTROPY_BONUS_WEIGHT * entropy_term.mean()
 
         total_loss = (
