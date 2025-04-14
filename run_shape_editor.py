@@ -1,19 +1,22 @@
 # File: run_shape_editor.py
+import contextlib  # Import contextlib
 import logging
 import os
 import random
 import sys
+from pathlib import Path  # Import Path
 
 import pygame
 
-# Ensure the src directory is in the Python path
-script_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(script_dir, "src")
-if src_dir not in sys.path:
-    sys.path.insert(0, src_dir)
-
-# Imports from your project structure
+# Imports from your project structure should be at the top
 from src import config, environment, structs, visualization
+
+# Ensure the src directory is in the Python path
+script_dir = Path(__file__).resolve().parent
+src_dir = script_dir / "src"
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
+
 
 # Basic logging setup
 logging.basicConfig(
@@ -125,7 +128,8 @@ class ShapeEditor:
         print("[")  # Start of the outer list
 
         num_shapes = len(self.saved_shapes)
-        for i, (triangles, color) in enumerate(self.saved_shapes):
+        # Rename unused loop variable 'color' to '_color'
+        for i, (triangles, _color) in enumerate(self.saved_shapes):
             print(f"    [ # Shape {i + 1}")  # Start of the inner list for this shape
             num_triangles = len(triangles)
             for j, (r, c, u) in enumerate(triangles):
@@ -160,10 +164,9 @@ class ShapeEditor:
     def cycle_color(self):
         """Cycles through the available shape colors."""
         current_index = -1
-        try:
+        # Use contextlib.suppress for cleaner try-except-pass
+        with contextlib.suppress(ValueError):
             current_index = structs.SHAPE_COLORS.index(self.current_shape_color)
-        except ValueError:
-            pass  # Color not found, start from beginning
         next_index = (current_index + 1) % len(structs.SHAPE_COLORS)
         self.current_shape_color = structs.SHAPE_COLORS[next_index]
         logger.info(f"Changed shape color to: {self.current_shape_color}")
@@ -208,27 +211,32 @@ class ShapeEditor:
                     logger.info(f"Window resized to {w}x{h}")
                 except pygame.error as e:
                     logger.error(f"Error resizing window: {e}")
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if grid_rect and grid_rect.collidepoint(mouse_pos):
-                    click_coords = visualization.get_grid_coords_from_screen(
-                        mouse_pos, grid_rect, self.env_config
-                    )
-                    if click_coords:
-                        r, c = click_coords
-                        if (
-                            self.grid_data.valid(r, c)
-                            and not self.grid_data.triangles[r][c].is_death
-                        ):
-                            is_up = (r + c) % 2 != 0
-                            triangle_tuple = (r, c, is_up)
-                            if triangle_tuple in self.current_shape_triangles:
-                                self.current_shape_triangles.remove(triangle_tuple)
-                                logger.debug(f"Removed triangle: {triangle_tuple}")
-                            else:
-                                self.current_shape_triangles.append(triangle_tuple)
-                                logger.debug(f"Added triangle: {triangle_tuple}")
-                                # Sort to maintain consistent order (optional)
-                                self.current_shape_triangles.sort()
+            # Combine nested if statements
+            if (
+                event.type == pygame.MOUSEBUTTONDOWN
+                and event.button == 1
+                and grid_rect
+                and grid_rect.collidepoint(mouse_pos)
+            ):
+                click_coords = visualization.get_grid_coords_from_screen(
+                    mouse_pos, grid_rect, self.env_config
+                )
+                if click_coords:
+                    r, c = click_coords
+                    if (
+                        self.grid_data.valid(r, c)
+                        and not self.grid_data.triangles[r][c].is_death
+                    ):
+                        is_up = (r + c) % 2 != 0
+                        triangle_tuple = (r, c, is_up)
+                        if triangle_tuple in self.current_shape_triangles:
+                            self.current_shape_triangles.remove(triangle_tuple)
+                            logger.debug(f"Removed triangle: {triangle_tuple}")
+                        else:
+                            self.current_shape_triangles.append(triangle_tuple)
+                            logger.debug(f"Added triangle: {triangle_tuple}")
+                            # Sort to maintain consistent order (optional)
+                            self.current_shape_triangles.sort()
 
     def render_current_shape_on_grid(self, grid_surf: pygame.Surface):
         """Draws the currently edited triangles onto the grid surface."""
@@ -279,14 +287,14 @@ class ShapeEditor:
             30, (available_h / num_saved) if num_saved > 0 else available_h
         )  # Min height 30
         slot_w = preview_surf.get_width() - 2 * pad
-        current_y = pad
+        current_y = float(pad)  # Use float for accumulation
 
         for i, (triangles, color) in enumerate(self.saved_shapes):
             if current_y + slot_h > preview_surf.get_height() - pad:
                 logger.debug("Preview area full, stopping render of saved shapes.")
                 break  # Stop rendering if we run out of space
 
-            slot_rect_local = pygame.Rect(pad, current_y, slot_w, slot_h)
+            slot_rect_local = pygame.Rect(pad, int(current_y), int(slot_w), int(slot_h))
             pygame.draw.rect(
                 preview_surf,
                 visualization.colors.PREVIEW_BORDER,
@@ -342,7 +350,7 @@ class ShapeEditor:
                 visualization.drawing.shapes.draw_shape(
                     preview_surf,
                     temp_shape,
-                    (draw_topleft_x, draw_topleft_y),
+                    (int(draw_topleft_x), int(draw_topleft_y)),  # Cast to int
                     cell_size,
                     is_selected=False,
                     origin_offset=(-min_r, -min_c),
@@ -434,7 +442,8 @@ class ShapeEditor:
     def run(self):
         """Main application loop."""
         while self.running:
-            dt = self.clock.tick(self.vis_config.FPS) / 1000.0
+            # dt = self.clock.tick(self.vis_config.FPS) / 1000.0 # Unused variable
+            self.clock.tick(self.vis_config.FPS)  # Still tick the clock
             self.handle_events()
             self.render()
 

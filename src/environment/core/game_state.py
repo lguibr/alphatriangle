@@ -1,8 +1,10 @@
 # File: src/environment/core/game_state.py
 import logging
 import random
+from typing import TYPE_CHECKING
 
-from src.structs import Shape
+if TYPE_CHECKING:
+    from src.structs import Shape
 
 from ...config import EnvConfig
 from ...utils.types import ActionType
@@ -24,6 +26,7 @@ class GameState:
     def __init__(
         self, config: EnvConfig | None = None, initial_seed: int | None = None
     ):
+        # Provide default values if config is None
         self.env_config = config if config else EnvConfig()
         self._rng = (
             random.Random(initial_seed) if initial_seed is not None else random.Random()

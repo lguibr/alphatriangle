@@ -34,10 +34,12 @@ class SelfPlayResult(BaseModel):
         """Basic structural validation for experiences."""
         invalid_count = 0
         valid_experiences = []
-        for i, exp in enumerate(self.episode_experiences):
+        # Rename unused loop variable 'i' to '_i'
+        for _i, exp in enumerate(self.episode_experiences):
             is_valid = False
             if isinstance(exp, tuple) and len(exp) == 3:
                 state_type, policy_map, value = exp
+                # Combine nested if statements
                 if (
                     isinstance(state_type, dict)
                     and "grid" in state_type
@@ -45,13 +47,13 @@ class SelfPlayResult(BaseModel):
                     and isinstance(state_type["grid"], np.ndarray)
                     and isinstance(state_type["other_features"], np.ndarray)
                     and isinstance(policy_map, dict)
-                    and isinstance(value, (float, int))
-                ):
+                    # Use isinstance with | for multiple types
+                    and isinstance(value, float | int)
                     # Basic check for NaN/inf in features
-                    if np.all(np.isfinite(state_type["grid"])) and np.all(
-                        np.isfinite(state_type["other_features"])
-                    ):
-                        is_valid = True
+                    and np.all(np.isfinite(state_type["grid"]))
+                    and np.all(np.isfinite(state_type["other_features"]))
+                ):
+                    is_valid = True
 
             if is_valid:
                 valid_experiences.append(exp)

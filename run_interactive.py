@@ -5,12 +5,13 @@
 import argparse
 import os
 import sys
+from pathlib import Path  # Import Path
 
 # Ensure the src directory is in the Python path
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(script_dir)
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 # Import the function that now contains the core logic
 try:

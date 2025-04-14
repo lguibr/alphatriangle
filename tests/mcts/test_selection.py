@@ -1,5 +1,6 @@
 # File: tests/mcts/test_selection.py
 import math
+from typing import Any
 
 import numpy as np
 import pytest
@@ -22,10 +23,10 @@ def test_puct_calculation_unvisited_child(
     mock_mcts_config: MCTSConfig, mock_env_config: EnvConfig
 ):
     """Test PUCT score for an unvisited child node."""
-    parent = Node(state=MockGameState(env_config=mock_env_config))
+    parent = Node(state=MockGameState(env_config=mock_env_config))  # type: ignore [arg-type]
     parent.visit_count = 10
     child = Node(
-        state=MockGameState(current_step=1, env_config=mock_env_config),
+        state=MockGameState(current_step=1, env_config=mock_env_config),  # type: ignore [arg-type]
         parent=parent,
         action_taken=0,
         prior_probability=0.5,
@@ -49,10 +50,10 @@ def test_puct_calculation_visited_child(
     mock_mcts_config: MCTSConfig, mock_env_config: EnvConfig
 ):
     """Test PUCT score for a visited child node."""
-    parent = Node(state=MockGameState(env_config=mock_env_config))
+    parent = Node(state=MockGameState(env_config=mock_env_config))  # type: ignore [arg-type]
     parent.visit_count = 25
     child = Node(
-        state=MockGameState(current_step=1, env_config=mock_env_config),
+        state=MockGameState(current_step=1, env_config=mock_env_config),  # type: ignore [arg-type]
         parent=parent,
         action_taken=1,
         prior_probability=0.2,
@@ -76,10 +77,10 @@ def test_puct_calculation_zero_parent_visits(
     mock_mcts_config: MCTSConfig, mock_env_config: EnvConfig
 ):
     """Test PUCT score when parent visit count is zero (should use sqrt(1))."""
-    parent = Node(state=MockGameState(env_config=mock_env_config))
+    parent = Node(state=MockGameState(env_config=mock_env_config))  # type: ignore [arg-type]
     parent.visit_count = 0
     child = Node(
-        state=MockGameState(current_step=1, env_config=mock_env_config),
+        state=MockGameState(current_step=1, env_config=mock_env_config),  # type: ignore [arg-type]
         parent=parent,
         action_taken=0,
         prior_probability=0.6,
@@ -199,11 +200,12 @@ def test_add_dirichlet_noise(
     if n_children == 0:
         pytest.skip("Node has no children to add noise to.")
     original_priors = {a: c.prior_probability for a, c in node.children.items()}
-    original_sum = sum(original_priors.values())
+    # original_sum = sum(original_priors.values()) # Unused variable
 
-    np.random.seed(42)
+    # Use default_rng for modern NumPy random generation
+    rng = np.random.default_rng(42)
     selection.add_dirichlet_noise(node, config_copy)
-    np.random.seed(None)
+    # Resetting global seed is less ideal, rely on instance if needed elsewhere
 
     new_priors = {a: c.prior_probability for a, c in node.children.items()}
     mixed_sum = sum(new_priors.values())
@@ -217,9 +219,9 @@ def test_add_dirichlet_noise(
             priors_changed = True
 
     assert priors_changed, "Priors did not change after adding noise"
-    assert mixed_sum == pytest.approx(1.0, abs=1e-6), (
-        f"Noisy priors sum to {mixed_sum}, not 1.0"
-    )
+    assert mixed_sum == pytest.approx(
+        1.0, abs=1e-6
+    ), f"Noisy priors sum to {mixed_sum}, not 1.0"
 
 
 def test_add_dirichlet_noise_disabled(
@@ -242,9 +244,9 @@ def test_add_dirichlet_noise_disabled(
 
     selection.add_dirichlet_noise(node, config_alpha_zero)
     priors_after_alpha_zero = {a: c.prior_probability for a, c in node.children.items()}
-    assert priors_after_alpha_zero == original_priors, (
-        "Priors changed when alpha was zero"
-    )
+    assert (
+        priors_after_alpha_zero == original_priors
+    ), "Priors changed when alpha was zero"
 
     # Reset priors before next test
     for a, p in original_priors.items():
@@ -252,9 +254,9 @@ def test_add_dirichlet_noise_disabled(
 
     selection.add_dirichlet_noise(node, config_eps_zero)
     priors_after_eps_zero = {a: c.prior_probability for a, c in node.children.items()}
-    assert priors_after_eps_zero == original_priors, (
-        "Priors changed when epsilon was zero"
-    )
+    assert (
+        priors_after_eps_zero == original_priors
+    ), "Priors changed when epsilon was zero"
 
 
 # --- Test Traversal ---
@@ -273,9 +275,9 @@ def test_traverse_to_leaf_expanded(
     """Test traversal selects a child from an expanded node and stops (depth 1)."""
     root = expanded_node_mock_state
     for child in root.children.values():
-        assert not child.is_expanded, (
-            f"Child {child} should not be expanded in this fixture setup"
-        )
+        assert (
+            not child.is_expanded
+        ), f"Child {child} should not be expanded in this fixture setup"
 
     leaf, depth = selection.traverse_to_leaf(root, mock_mcts_config)
 
@@ -306,16 +308,16 @@ def test_traverse_to_leaf_max_depth(
     # Manually expand one child to test if traversal stops *before* selecting grandchild
     child0 = next(iter(root.children.values()))
     child0.children[0] = Node(
-        state=MockGameState(current_step=2, env_config=root.state.env_config),
+        state=MockGameState(current_step=2, env_config=root.state.env_config),  # type: ignore [arg-type]
         parent=child0,
         action_taken=0,
     )
 
     leaf, depth = selection.traverse_to_leaf(root, config_copy)
 
-    assert leaf in root.children.values(), (
-        "Leaf node should be a direct child of the root"
-    )
+    assert (
+        leaf in root.children.values()
+    ), "Leaf node should be a direct child of the root"
     assert depth == 1, "Depth should be 1 when max_search_depth is 1"
 
 
@@ -328,7 +330,9 @@ def test_traverse_to_terminal_leaf(
     if 1 not in root.children:
         pytest.skip("Child 1 not present in fixture")
     child1 = root.children[1]
-    child1.state._is_over = True  # Mark child 1 as terminal
+    # Cast child1.state to Any temporarily to access mock attribute
+    mock_child1_state: Any = child1.state
+    mock_child1_state._is_over = True  # Mark child 1 as terminal
 
     # Make child 1 highly attractive to ensure it's selected
     root.visit_count = 10
@@ -365,7 +369,9 @@ def test_traverse_to_leaf_deeper(
     assert child0.children, "Child 0 should have grandchildren"
 
     # Determine the action preferred by the fixture logic for child0
-    valid_gc_actions = child0.state.valid_actions()
+    # Cast child0.state to Any temporarily to access mock method
+    mock_child0_state: Any = child0.state
+    valid_gc_actions = mock_child0_state.valid_actions()
     if 1 in valid_gc_actions:
         preferred_gc_action = 1
     elif valid_gc_actions:
@@ -374,16 +380,16 @@ def test_traverse_to_leaf_deeper(
         pytest.fail("Fixture error: Child 0 has no valid actions for grandchildren")
 
     expected_grandchild = child0.children.get(preferred_gc_action)
-    assert expected_grandchild is not None, (
-        f"Expected grandchild for action {preferred_gc_action} not found"
-    )
+    assert (
+        expected_grandchild is not None
+    ), f"Expected grandchild for action {preferred_gc_action} not found"
 
     # --- Run traversal ---
     leaf, depth = selection.traverse_to_leaf(root, config_copy)
 
     # --- Assertions ---
     # It should select child0, then the expected grandchild (which is a leaf in the fixture setup)
-    assert leaf is expected_grandchild, (
-        f"Expected leaf {expected_grandchild}, but got {leaf}"
-    )
+    assert (
+        leaf is expected_grandchild
+    ), f"Expected leaf {expected_grandchild}, but got {leaf}"
     assert depth == 2, f"Expected depth 2, but got {depth}"

@@ -1,12 +1,11 @@
-# File: src/environment/logic/step.py
 import logging
 import random
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Set
 
 from src.structs import Triangle
 
+from .. import shapes
 from ..grid import logic as GridLogic
-from ..shapes import logic as ShapeLogic  # Import ShapeLogic namespace
 
 if TYPE_CHECKING:
     from ..core.game_state import GameState
@@ -19,21 +18,18 @@ def calculate_reward(
 ) -> float:
     """
     Calculates the reward based on placed triangles and cleared lines.
-    - +1 point per triangle placed.
-    - +2 points per triangle in each cleared line (triangles in multiple cleared lines count multiple times).
+    +1 per placed triangle.
+    +2 per unique triangle in cleared lines.
     """
     placement_reward = float(placed_count)
     line_clear_reward = 0.0
-    unique_triangles_cleared = set()
-
-    if cleared_lines_set:
-        for line in cleared_lines_set:
-            line_clear_reward += len(line) * 2.0
-            unique_triangles_cleared.update(line)
-
+    unique_triangles_cleared: set[Triangle] = set()
+    for line in cleared_lines_set:
+        unique_triangles_cleared.update(line)
+    line_clear_reward = len(unique_triangles_cleared) * 2.0
     total_reward = placement_reward + line_clear_reward
     logger.debug(
-        f"Reward calculated: Placement={placement_reward}, LineClear={line_clear_reward} (Lines: {len(cleared_lines_set)}, Unique Tris: {len(unique_triangles_cleared)}), Total={total_reward}"
+        f"Reward calculated: Placement={placement_reward}, LineClear={line_clear_reward} ({len(unique_triangles_cleared)} tris), Total={total_reward}"
     )
     return total_reward
 
@@ -42,80 +38,69 @@ def execute_placement(
     game_state: "GameState", shape_idx: int, r: int, c: int, rng: random.Random
 ) -> float:
     """
-    Executes placing a shape on the grid, updates state, checks for line clears,
-    and potentially refills shape slots *if all are empty*.
-
-    Args:
-        game_state: The current game state (will be modified).
-        shape_idx: Index of the shape to place.
-        r: Target row for the shape's origin.
-        c: Target column for the shape's origin.
-        rng: Random number generator instance.
-
-    Returns:
-        The reward obtained from this placement.
+    Places the shape, updates the grid, calculates reward, clears lines,
+    and handles shape refilling.
+    Returns the calculated reward for the step.
     """
     shape = game_state.shapes[shape_idx]
     if not shape:
-        logger.error(f"Attempted to place an empty shape slot: {shape_idx}")
+        logger.error(f"Attempted to place None shape at index {shape_idx}.")
         return 0.0
 
     if not GridLogic.can_place(game_state.grid_data, shape, r, c):
         logger.error(
-            f"Invalid placement attempted in execute_placement for shape {shape_idx} at ({r},{c}). Should be checked before calling."
+            f"Invalid placement attempted in execute_placement for shape {shape_idx} at ({r},{c})."
         )
-        # Optionally, could set game_over here or return a large negative reward
-        game_state.game_over = True  # Penalize invalid move attempt
-        return -10.0  # Negative reward for trying invalid move
+        # Should not happen if called after valid_actions check, but good safeguard.
+        game_state.game_over = True
+        return 0.0
 
     # Place the shape
     newly_occupied_triangles: set[Triangle] = set()
     placed_count = 0
-    for dr, dc, is_up in shape.triangles:
+    for dr, dc, _is_up in shape.triangles:  # Rename is_up to _is_up
         tri_r, tri_c = r + dr, c + dc
         if game_state.grid_data.valid(tri_r, tri_c):
             tri = game_state.grid_data.triangles[tri_r][tri_c]
-            if not tri.is_occupied and not tri.is_death:
+            if not tri.is_death and not tri.is_occupied:
                 tri.is_occupied = True
                 tri.color = shape.color
                 game_state.grid_data._occupied_np[tri_r, tri_c] = True
                 newly_occupied_triangles.add(tri)
                 placed_count += 1
             else:
-                # This case should ideally not happen if can_place was checked correctly
+                # This case should ideally be caught by can_place, but log if it occurs
                 logger.warning(
-                    f"Overlap detected during placement at ({tri_r},{tri_c}) even after can_place check."
+                    f"Overlap detected during placement at ({tri_r},{tri_c}) despite can_place=True."
                 )
         else:
-            logger.warning(
-                f"Triangle ({tri_r},{tri_c}) out of bounds during placement."
+            logger.error(
+                f"Invalid coordinates ({tri_r},{tri_c}) derived during placement."
             )
 
+    # Clear the placed shape slot
+    game_state.shapes[shape_idx] = None
+    game_state.pieces_placed_this_episode += 1
+
     # Check for line clears
-    lines_cleared_count, unique_tris_cleared, cleared_lines_set = (
-        GridLogic.check_and_clear_lines(game_state.grid_data, newly_occupied_triangles)
-    )
+    (
+        lines_cleared_count,
+        unique_triangles_cleared,
+        cleared_lines_set,
+    ) = GridLogic.check_and_clear_lines(game_state.grid_data, newly_occupied_triangles)
+    game_state.triangles_cleared_this_episode += len(unique_triangles_cleared)
 
     # Calculate reward
     reward = calculate_reward(placed_count, cleared_lines_set)
     game_state.game_score += reward
-    game_state.pieces_placed_this_episode += 1
-    game_state.triangles_cleared_this_episode += len(unique_tris_cleared)
 
-    # Clear the used shape slot
-    game_state.shapes[shape_idx] = None
-    logger.debug(f"Cleared shape slot {shape_idx} after placement.")
-
-    # --- Refill Logic Change ---
-    # Check if ALL shape slots are now empty
+    # Check if all shape slots are now empty and refill if necessary
     if all(s is None for s in game_state.shapes):
-        logger.info("All shape slots are empty. Refilling all slots.")
-        # Call the modified refill function (no index needed)
-        ShapeLogic.refill_shape_slots(game_state, rng)
-        # After refilling, check if the game is now over (no valid moves with new shapes)
+        logger.debug("All shape slots empty, triggering batch refill.")
+        shapes.refill_shape_slots(game_state, rng)
+        # Check if game is over *after* refill
         if not game_state.valid_actions():
-            logger.info("Game over: No valid moves after refilling shape slots.")
+            logger.info("Game over: No valid moves after shape refill.")
             game_state.game_over = True
-    # --- End Refill Logic Change ---
 
     return reward

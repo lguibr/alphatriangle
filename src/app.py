@@ -17,6 +17,7 @@ class Application:
     """Main application integrating visualization and interaction."""
 
     def __init__(self, mode: str = "play"):
+        # Provide default values for VisConfig and EnvConfig
         self.vis_config = config.VisConfig()
         self.env_config = config.EnvConfig()
         self.mode = mode
@@ -58,9 +59,10 @@ class Application:
         """Main application loop."""
         logger.info(f"Starting application in {self.mode} mode.")
         while self.running:
-            dt = (
-                self.clock.tick(self.vis_config.FPS) / 1000.0
-            )  # Delta time (unused currently)
+            # dt = ( # Unused variable
+            #     self.clock.tick(self.vis_config.FPS) / 1000.0
+            # )  # Delta time (unused currently)
+            self.clock.tick(self.vis_config.FPS)  # Still tick the clock
 
             # Handle Input using InputHandler
             if self.input_handler:
@@ -75,18 +77,18 @@ class Application:
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                         self.running = False
                     # Basic resize handling needed even without input handler
-                    if event.type == pygame.VIDEORESIZE:
-                        if self.visualizer:
-                            try:
-                                w, h = max(320, event.w), max(240, event.h)
-                                # Update visualizer's screen reference
-                                self.visualizer.screen = pygame.display.set_mode(
-                                    (w, h), pygame.RESIZABLE
-                                )
-                                # Invalidate visualizer's layout cache
-                                self.visualizer.layout_rects = None
-                            except pygame.error as e:
-                                logger.error(f"Error resizing window: {e}")
+                    # Combine nested if statements
+                    if event.type == pygame.VIDEORESIZE and self.visualizer:
+                        try:
+                            w, h = max(320, event.w), max(240, event.h)
+                            # Update visualizer's screen reference
+                            self.visualizer.screen = pygame.display.set_mode(
+                                (w, h), pygame.RESIZABLE
+                            )
+                            # Invalidate visualizer's layout cache
+                            self.visualizer.layout_rects = None
+                        except pygame.error as e:
+                            logger.error(f"Error resizing window: {e}")
                 if not self.running:
                     break
 

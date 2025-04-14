@@ -1,3 +1,4 @@
+# File: src/utils/geometry.py
 
 
 def is_point_in_polygon(
@@ -20,20 +21,28 @@ def is_point_in_polygon(
     p1x, p1y = polygon[0]
     for i in range(n + 1):
         p2x, p2y = polygon[i % n]
-        if y > min(p1y, p2y):
-            if y <= max(p1y, p2y):
-                if x <= max(p1x, p2x):
-                    if p1y != p2y:
-                        xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                    if abs(p1x - p2x) < 1e-9:
-                        if abs(x - p1x) < 1e-9:
-                            return True
-                    elif abs(x - xinters) < 1e-9:
-                        return True
-                    elif p1x == p2x or x <= xinters:
-                        inside = not inside
+        # Combine nested if statements
+        if y > min(p1y, p2y) and y <= max(p1y, p2y) and x <= max(p1x, p2x):
+            if p1y != p2y:
+                xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+            else:
+                # Handle horizontal lines explicitly if needed, or rely on x <= max(p1x, p2x)
+                xinters = x  # Point is on the horizontal line segment
+
+            # Check if point is on the segment boundary or crosses the ray
+            if abs(p1x - p2x) < 1e-9:  # Vertical line segment
+                if abs(x - p1x) < 1e-9:
+                    return True  # Point is on the vertical segment
+            elif abs(x - xinters) < 1e-9:  # Point is exactly on the intersection
+                return True  # Point is on the boundary
+            elif (
+                p1x == p2x or x <= xinters
+            ):  # Point is to the left or on a non-horizontal segment
+                inside = not inside
+
         p1x, p1y = p2x, p2y
 
+    # Check if the point is exactly one of the vertices
     for px, py in polygon:
         if abs(x - px) < 1e-9 and abs(y - py) < 1e-9:
             return True

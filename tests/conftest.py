@@ -1,18 +1,22 @@
 # File: tests/conftest.py
 # Top-level conftest for sharing session-scoped fixtures
+import random
+from typing import Any
+
+import numpy as np
 import pytest
 import torch
 import torch.optim as optim  # Added for mock_optimizer
-import numpy as np  # Added for mock_state_type
-import random  # Added for mock_experience
-from collections import deque  # Added for filled_mock_buffer
 
-from src.config import EnvConfig, ModelConfig, TrainConfig, MCTSConfig
+from src.config import EnvConfig, MCTSConfig, ModelConfig, TrainConfig
 
 # Added imports for moved fixtures
-from src.utils.types import StateType, Experience
-from src.nn import NeuralNetwork, AlphaTriangleNet
+from src.nn import NeuralNetwork
 from src.rl import ExperienceBuffer, Trainer
+from src.utils.types import Experience, StateType
+
+# Use default NumPy random number generator
+rng = np.random.default_rng()
 
 
 @pytest.fixture(scope="session")
@@ -22,7 +26,13 @@ def mock_env_config() -> EnvConfig:
     rows = 3
     cols = 3
     cols_per_row = [cols] * rows
-    return EnvConfig(ROWS=rows, COLS=cols, COLS_PER_ROW=cols_per_row, NUM_SHAPE_SLOTS=1)
+    return EnvConfig(
+        ROWS=rows,
+        COLS=cols,
+        COLS_PER_ROW=cols_per_row,
+        NUM_SHAPE_SLOTS=1,
+        MIN_LINE_LENGTH=3,  # Provide default
+    )
 
 
 @pytest.fixture(scope="session")
@@ -36,11 +46,18 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
         CONV_STRIDES=[1],
         CONV_PADDING=[1],
         NUM_RESIDUAL_BLOCKS=0,
+        RESIDUAL_BLOCK_FILTERS=4,  # Provide default
         USE_TRANSFORMER=False,
+        TRANSFORMER_DIM=16,  # Provide default
+        TRANSFORMER_HEADS=2,  # Provide default
+        TRANSFORMER_LAYERS=0,  # Provide default
+        TRANSFORMER_FC_DIM=32,  # Provide default
         FC_DIMS_SHARED=[8],
         POLICY_HEAD_DIMS=[mock_env_config.ACTION_DIM],  # Match action dim
         VALUE_HEAD_DIMS=[1],
         OTHER_NN_INPUT_FEATURES_DIM=10,  # Simplified feature dim for testing
+        ACTIVATION_FUNCTION="ReLU",  # Provide default
+        USE_BATCH_NORM=True,  # Provide default
     )
 
 
@@ -52,6 +69,29 @@ def mock_train_config() -> TrainConfig:
         BUFFER_CAPACITY=100,
         MIN_BUFFER_SIZE_TO_TRAIN=10,
         USE_PER=False,  # Default to uniform for simpler tests unless specified
+        # Provide defaults for other required fields
+        LOAD_CHECKPOINT_PATH=None,
+        LOAD_BUFFER_PATH=None,
+        AUTO_RESUME_LATEST=False,
+        DEVICE="cpu",
+        RANDOM_SEED=42,
+        NUM_SELF_PLAY_WORKERS=1,
+        WORKER_DEVICE="cpu",
+        WORKER_UPDATE_FREQ_STEPS=10,
+        OPTIMIZER_TYPE="Adam",
+        LEARNING_RATE=1e-3,
+        WEIGHT_DECAY=1e-4,
+        LR_SCHEDULER_ETA_MIN=1e-6,
+        POLICY_LOSS_WEIGHT=1.0,
+        VALUE_LOSS_WEIGHT=1.0,
+        ENTROPY_BONUS_WEIGHT=0.0,
+        CHECKPOINT_SAVE_FREQ_STEPS=50,
+        PER_ALPHA=0.6,
+        PER_BETA_INITIAL=0.4,
+        PER_BETA_FINAL=1.0,
+        PER_BETA_ANNEAL_STEPS=100,
+        PER_EPSILON=1e-5,
+        MAX_TRAINING_STEPS=200,  # Set a finite value for tests
     )
 
 
@@ -85,8 +125,8 @@ def mock_state_type(
     )
     other_shape = (mock_model_config.OTHER_NN_INPUT_FEATURES_DIM,)
     return {
-        "grid": np.random.rand(*grid_shape).astype(np.float32),
-        "other_features": np.random.rand(*other_shape).astype(np.float32),
+        "grid": rng.random(grid_shape, dtype=np.float32),
+        "other_features": rng.random(other_shape, dtype=np.float32),
     }
 
 
@@ -96,7 +136,9 @@ def mock_experience(
 ) -> Experience:
     """Creates a mock Experience tuple."""
     policy_target = (
-        {a: 1.0 / mock_env_config.ACTION_DIM for a in range(mock_env_config.ACTION_DIM)}
+        dict.fromkeys(
+            range(mock_env_config.ACTION_DIM), 1.0 / mock_env_config.ACTION_DIM
+        )
         if mock_env_config.ACTION_DIM > 0
         else {0: 1.0}
     )
@@ -147,15 +189,17 @@ def filled_mock_buffer(
     mock_experience_buffer: ExperienceBuffer, mock_experience: Experience
 ) -> ExperienceBuffer:
     """Provides a buffer filled with some mock experiences."""
-    for i in range(mock_experience_buffer.min_size_to_train + 5):
+    for _ in range(mock_experience_buffer.min_size_to_train + 5):
         # Create slightly different experiences
-        state_copy = {k: v.copy() for k, v in mock_experience[0].items()}
+        # Ensure dict values are copied correctly
+        state_copy: StateType = {k: v.copy() for k, v in mock_experience[0].items()}
         # Ensure grid is writeable before modifying
         if not state_copy["grid"].flags.writeable:
             state_copy["grid"] = state_copy["grid"].copy()
         state_copy["grid"] += (
-            np.random.randn(*state_copy["grid"].shape).astype(np.float32) * 0.1
+            rng.standard_normal(state_copy["grid"].shape, dtype=np.float32) * 0.1
         )
-        exp_copy = (state_copy, mock_experience[1], random.uniform(-1, 1))
+        # Cast state_copy to the correct type for the buffer
+        exp_copy: Experience = (state_copy, mock_experience[1], random.uniform(-1, 1))
         mock_experience_buffer.add(exp_copy)
     return mock_experience_buffer

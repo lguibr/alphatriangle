@@ -13,7 +13,9 @@ def render_hud(
     # Removed: game_state: "GameState", # No longer needed
     mode: str,
     fonts: dict[str, pygame.font.Font | None],
-    display_stats: dict[str, Any] | None = None,  # Renamed from global_stats for clarity
+    display_stats: (
+        dict[str, Any] | None
+    ) = None,  # Renamed from global_stats for clarity
 ) -> None:
     """
     Renders global information (like step count, worker status) at the bottom.
@@ -54,7 +56,8 @@ def render_hud(
 
         stats_items.append(f"Episodes: {episodes}")
         # Format simulations nicely
-        if isinstance(sims, (int, float)):
+        # Use isinstance with | for multiple types
+        if isinstance(sims, int | float):
             sims_str = (
                 f"{sims / 1e6:.2f}M"
                 if sims >= 1e6

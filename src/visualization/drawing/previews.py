@@ -20,7 +20,7 @@ def render_previews(
     surface: pygame.Surface,
     game_state: "GameState",
     area_topleft: tuple[int, int],
-    mode: str,  # Keep mode for potential future differences
+    _mode: str,  # Mark mode as unused
     env_config: "EnvConfig",
     vis_config: "VisConfig",
     selected_shape_idx: int = -1,  # Add the new parameter with default
@@ -43,11 +43,11 @@ def render_previews(
     slot_h = available_h / num_slots if num_slots > 0 else 0
     slot_w = surface.get_width() - 2 * pad
 
-    current_y = pad  # Start y position
+    current_y = float(pad)  # Start y position as float
 
     for i in range(num_slots):
         # Calculate local rectangle for the slot within the preview surface
-        slot_rect_local = pygame.Rect(pad, current_y, slot_w, slot_h)
+        slot_rect_local = pygame.Rect(pad, int(current_y), int(slot_w), int(slot_h))
         # Calculate screen rectangle by offsetting local rect
         slot_rect_screen = slot_rect_local.move(area_topleft)
         preview_rects_screen[i] = (
@@ -105,10 +105,11 @@ def render_previews(
                 )
 
                 # Draw the shape onto the local preview surface
+                # Cast float coordinates to int for draw_shape
                 draw_shape(
                     surface,
                     shape,
-                    (draw_topleft_x, draw_topleft_y),
+                    (int(draw_topleft_x), int(draw_topleft_y)),
                     cell_size,
                     is_selected=is_selected,  # Pass selection status (might affect shape drawing later)
                     origin_offset=(
@@ -173,7 +174,7 @@ def draw_floating_preview(
     surface: pygame.Surface,
     shape: "Shape",
     screen_pos: tuple[int, int],  # Position relative to the surface being drawn on
-    config: "EnvConfig",  # EnvConfig might not be strictly needed here if cell_size is fixed
+    _config: "EnvConfig",  # Mark config as unused
 ) -> None:
     """Draws a semi-transparent shape floating at the screen position."""
     if not shape or not shape.triangles:

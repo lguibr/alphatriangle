@@ -1,10 +1,14 @@
 # File: src/interaction/input_handler.py
 import logging
+from typing import TYPE_CHECKING
 
 import pygame
 
 from src import environment, visualization
-from src.structs import Shape  # Import Shape
+
+# Move Shape import into TYPE_CHECKING block
+if TYPE_CHECKING:
+    from src.structs import Shape
 
 from . import debug_mode_handler, event_processor, play_mode_handler
 
@@ -33,7 +37,8 @@ class InputHandler:
         self.selected_shape_idx: int = -1
         self.hover_grid_coord: tuple[int, int] | None = None
         self.hover_is_valid: bool = False
-        self.hover_shape: Shape | None = None
+        # Use TYPE_CHECKING import for Shape type hint
+        self.hover_shape: "Shape" | None = None
         self.debug_highlight_coord: tuple[int, int] | None = None
         self.mouse_pos: tuple[int, int] = (0, 0)
 

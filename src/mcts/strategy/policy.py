@@ -1,4 +1,6 @@
+# File: src/mcts/strategy/policy.py
 import logging
+import random
 
 import numpy as np
 
@@ -7,6 +9,8 @@ from ..core.node import Node
 from ..core.types import ActionPolicyMapping
 
 logger = logging.getLogger(__name__)
+# Use default NumPy random number generator for reproducibility if seed is set elsewhere
+rng = np.random.default_rng()
 
 
 class PolicyGenerationError(Exception):
@@ -45,7 +49,8 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
         logger.warning(
             f"[PolicySelect] Total visit count for children is zero at root node (Step {root_node.state.current_step}). MCTS might have failed. Selecting uniformly."
         )
-        selected_action = np.random.choice(actions)
+        # Use standard library random for uniform choice
+        selected_action = random.choice(actions)
         logger.debug(
             f"[PolicySelect] Uniform random action selected: {selected_action}"
         )
@@ -60,7 +65,8 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
         logger.debug(
             f"[PolicySelect] Greedy selection. Best action indices: {best_action_indices}"
         )
-        chosen_index = np.random.choice(best_action_indices)
+        # Use standard library random for tie-breaking
+        chosen_index = random.choice(best_action_indices)
         selected_action = actions[chosen_index]
         logger.debug(f"[PolicySelect] Greedy action selected: {selected_action}")
         return selected_action
@@ -68,8 +74,10 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
     else:
         logger.debug(f"[PolicySelect] Probabilistic selection: Temp={temperature:.4f}")
         logger.debug(f"  Visit Counts: {visit_counts}")
+        # Add small epsilon to prevent log(0)
         log_visits = np.log(np.maximum(visit_counts, 1e-9))
         scaled_log_visits = log_visits / temperature
+        # Subtract max for numerical stability before exponentiating
         scaled_log_visits -= np.max(scaled_log_visits)
         probabilities = np.exp(scaled_log_visits)
         sum_probs = np.sum(probabilities)
@@ -99,11 +107,13 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
         logger.debug(f"  Final Probabilities Sum: {np.sum(probabilities):.6f}")
 
         try:
-            selected_action = np.random.choice(actions, p=probabilities)
+            # Use NumPy's default_rng for weighted choice
+            selected_action = rng.choice(actions, p=probabilities)
             logger.debug(
                 f"[PolicySelect] Sampled action (temp={temperature:.2f}): {selected_action}"
             )
-            return selected_action
+            # Ensure return type is ActionType (int)
+            return int(selected_action)
         except ValueError as e:
             raise PolicyGenerationError(
                 f"Error during np.random.choice: {e}. Probs: {probabilities}, Sum: {np.sum(probabilities)}"
@@ -129,6 +139,7 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
     }
     actions = list(child_visits.keys())
     visits = np.array(list(child_visits.values()), dtype=np.float64)
+    total_visits = np.sum(visits)  # Define total_visits here
 
     if not actions:
         logger.warning(
@@ -188,6 +199,7 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
                 )
 
     final_sum = sum(full_target.values())
+    # Use the defined total_visits
     if abs(final_sum - 1.0) > 1e-5 and total_visits > 0:
         logger.error(
             f"[PolicyTarget] Final policy target does not sum to 1 ({final_sum:.6f}). Target: {full_target}"

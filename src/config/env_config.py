@@ -15,6 +15,8 @@ class EnvConfig(BaseModel):
     def check_cols_per_row_length(cls, v: list[int], info) -> list[int]:
         rows = info.data.get("ROWS")
         if rows is None:
+            # This might happen during initial validation before ROWS is processed
+            # Pydantic v2 should handle dependencies better, but let's be safe
             return v
         if len(v) != rows:
             raise ValueError(f"COLS_PER_ROW length ({len(v)}) must equal ROWS ({rows})")
@@ -30,14 +32,9 @@ class EnvConfig(BaseModel):
             raise ValueError(
                 f"COLS ({self.COLS}) must be >= the maximum value in COLS_PER_ROW ({max_row_width})"
             )
-        if max_row_width != self.COLS:
-            print(
-                f"Warning: COLS ({self.COLS}) is greater than the maximum value in COLS_PER_ROW ({max_row_width}). This might lead to unused columns."
-            )
         return self
 
     @computed_field
-    @property
     def ACTION_DIM(self) -> int:
         """Total number of possible actions (shape_slot * row * col)."""
         return self.NUM_SHAPE_SLOTS * self.ROWS * self.COLS

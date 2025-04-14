@@ -1,4 +1,6 @@
+# File: src/nn/model.py
 import math
+from typing import Type  # Import Type
 
 import torch
 import torch.nn as nn
@@ -7,8 +9,15 @@ from src.config import EnvConfig, ModelConfig
 
 
 def conv_block(
-    in_channels, out_channels, kernel_size, stride, padding, use_batch_norm, activation
-):
+    in_channels: int,
+    out_channels: int,
+    kernel_size: int | tuple[int, int],
+    stride: int | tuple[int, int],
+    padding: int | tuple[int, int] | str,
+    use_batch_norm: bool,
+    activation: Type[nn.Module],
+) -> nn.Sequential:
+    """Creates a standard convolutional block."""
     layers = [
         nn.Conv2d(
             in_channels,
@@ -26,14 +35,18 @@ def conv_block(
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, channels, use_batch_norm, activation):
+    """Standard Residual Block."""
+
+    def __init__(
+        self, channels: int, use_batch_norm: bool, activation: Type[nn.Module]
+    ):
         super().__init__()
         self.conv1 = conv_block(channels, channels, 3, 1, 1, use_batch_norm, activation)
         self.conv2 = nn.Conv2d(channels, channels, 3, 1, 1, bias=not use_batch_norm)
         self.bn2 = nn.BatchNorm2d(channels) if use_batch_norm else nn.Identity()
         self.activation = activation()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         residual = x
         out = self.conv1(x)
         out = self.conv2(out)
@@ -44,6 +57,8 @@ class ResidualBlock(nn.Module):
 
 
 class PositionalEncoding(nn.Module):
+    """Sinusoidal Positional Encoding."""
+
     def __init__(self, d_model: int, max_len: int = 5000):
         super().__init__()
         position = torch.arange(max_len).unsqueeze(1)
@@ -52,7 +67,8 @@ class PositionalEncoding(nn.Module):
         )
         pe = torch.zeros(max_len, 1, d_model)
         pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        # Ensure the second slice doesn't go out of bounds if d_model is odd
+        pe[:, 0, 1::2] = torch.cos(position * div_term[: pe[:, 0, 1::2].size(1)])
         self.register_buffer("pe", pe)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -76,8 +92,9 @@ class AlphaTriangleNet(nn.Module):
         self.env_config = env_config
         self.action_dim = env_config.ACTION_DIM
 
-        activation = getattr(nn, model_config.ACTIVATION_FUNCTION)
+        activation_cls: Type[nn.Module] = getattr(nn, model_config.ACTIVATION_FUNCTION)
 
+        # --- CNN Body ---
         conv_layers = []
         in_channels = model_config.GRID_INPUT_CHANNELS
         for i, out_channels in enumerate(model_config.CONV_FILTERS):
@@ -89,16 +106,18 @@ class AlphaTriangleNet(nn.Module):
                     model_config.CONV_STRIDES[i],
                     model_config.CONV_PADDING[i],
                     model_config.USE_BATCH_NORM,
-                    activation,
+                    activation_cls,
                 )
             )
             in_channels = out_channels
         self.conv_body = nn.Sequential(*conv_layers)
 
+        # --- Residual Body ---
         res_layers = []
         if model_config.NUM_RESIDUAL_BLOCKS > 0:
             res_channels = model_config.RESIDUAL_BLOCK_FILTERS
             if in_channels != res_channels:
+                # Add projection layer if channels don't match
                 res_layers.append(
                     conv_block(
                         in_channels,
@@ -107,63 +126,64 @@ class AlphaTriangleNet(nn.Module):
                         1,
                         0,
                         model_config.USE_BATCH_NORM,
-                        activation,
+                        activation_cls,
                     )
                 )
                 in_channels = res_channels
             for _ in range(model_config.NUM_RESIDUAL_BLOCKS):
                 res_layers.append(
-                    ResidualBlock(in_channels, model_config.USE_BATCH_NORM, activation)
+                    ResidualBlock(
+                        in_channels, model_config.USE_BATCH_NORM, activation_cls
+                    )
                 )
         self.res_body = nn.Sequential(*res_layers)
+        self.cnn_output_channels = in_channels  # Channels after CNN/Res blocks
 
+        # --- Transformer Body (Optional) ---
         self.transformer_body = None
         self.pos_encoder = None
+        self.input_proj: nn.Module = nn.Identity()
         self.transformer_output_size = 0
-        self.cnn_output_channels = in_channels
 
-        if model_config.USE_TRANSFORMER:
-            if self.cnn_output_channels != model_config.TRANSFORMER_DIM:
+        if model_config.USE_TRANSFORMER and model_config.TRANSFORMER_LAYERS > 0:
+            transformer_input_dim = model_config.TRANSFORMER_DIM
+            if self.cnn_output_channels != transformer_input_dim:
                 self.input_proj = nn.Conv2d(
-                    self.cnn_output_channels,
-                    model_config.TRANSFORMER_DIM,
-                    kernel_size=1,
+                    self.cnn_output_channels, transformer_input_dim, kernel_size=1
                 )
-                self.transformer_input_dim = model_config.TRANSFORMER_DIM
             else:
                 self.input_proj = nn.Identity()
-                self.transformer_input_dim = self.cnn_output_channels
 
-            self.pos_encoder = PositionalEncoding(self.transformer_input_dim)
+            self.pos_encoder = PositionalEncoding(transformer_input_dim)
             encoder_layer = nn.TransformerEncoderLayer(
-                d_model=self.transformer_input_dim,
+                d_model=transformer_input_dim,
                 nhead=model_config.TRANSFORMER_HEADS,
                 dim_feedforward=model_config.TRANSFORMER_FC_DIM,
                 activation=model_config.ACTIVATION_FUNCTION.lower(),
-                batch_first=False,
+                batch_first=False,  # Expects (Seq, Batch, Dim)
                 norm_first=True,
             )
-            transformer_norm = nn.LayerNorm(self.transformer_input_dim)
+            transformer_norm = nn.LayerNorm(transformer_input_dim)
             self.transformer_body = nn.TransformerEncoder(
                 encoder_layer,
                 num_layers=model_config.TRANSFORMER_LAYERS,
                 norm=transformer_norm,
             )
+
+            # Calculate transformer output size using a dummy forward pass
             dummy_input_grid = torch.zeros(
                 1, model_config.GRID_INPUT_CHANNELS, env_config.ROWS, env_config.COLS
             )
             with torch.no_grad():
                 cnn_out = self.conv_body(dummy_input_grid)
-                res_out = self.res_body(cnn_out)  # B, C, H, W
-                proj_out = self.input_proj(res_out)  # B, D, H, W
+                res_out = self.res_body(cnn_out)
+                proj_out = self.input_proj(res_out)
                 b, d, h, w = proj_out.shape
                 # Reshape for transformer: (Seq, Batch, Dim) -> (H*W, B, D)
-                transformer_input = proj_out.flatten(2).permute(
-                    2, 0, 1
-                )  # Seq=H*W, Batch=B, Dim=D
-                # Positional encoding is added inside forward pass
+                transformer_input_dummy = proj_out.flatten(2).permute(2, 0, 1)
+                # Positional encoding added in forward pass
                 # Transformer output shape is (Seq, Batch, Dim)
-                self.transformer_output_size = h * w * self.transformer_input_dim
+                self.transformer_output_size = h * w * d  # Dim is d here
         else:
             # Calculate flattened size after conv/res blocks if no transformer
             dummy_input_grid = torch.zeros(
@@ -175,7 +195,7 @@ class AlphaTriangleNet(nn.Module):
                 self.flattened_cnn_size = res_output.numel()
 
         # --- Shared Fully Connected Layers ---
-        if model_config.USE_TRANSFORMER:
+        if model_config.USE_TRANSFORMER and model_config.TRANSFORMER_LAYERS > 0:
             combined_input_size = (
                 self.transformer_output_size + model_config.OTHER_NN_INPUT_FEATURES_DIM
             )
@@ -189,38 +209,41 @@ class AlphaTriangleNet(nn.Module):
         for hidden_dim in model_config.FC_DIMS_SHARED:
             shared_fc_layers.append(nn.Linear(in_features, hidden_dim))
             if model_config.USE_BATCH_NORM:
-                # Use LayerNorm if coming from Transformer, BatchNorm otherwise?
-                # Let's stick to BatchNorm for consistency with original design for now.
+                # Use BatchNorm1d for FC layers
                 shared_fc_layers.append(nn.BatchNorm1d(hidden_dim))
-            shared_fc_layers.append(activation())
+            shared_fc_layers.append(activation_cls())
             in_features = hidden_dim
         self.shared_fc = nn.Sequential(*shared_fc_layers)
 
         # --- Policy Head ---
         policy_head_layers = []
         policy_in_features = in_features
+        # Iterate through hidden dims if any
         for hidden_dim in model_config.POLICY_HEAD_DIMS:
             policy_head_layers.append(nn.Linear(policy_in_features, hidden_dim))
             if model_config.USE_BATCH_NORM:
                 policy_head_layers.append(nn.BatchNorm1d(hidden_dim))
-            policy_head_layers.append(activation())
+            policy_head_layers.append(activation_cls())
             policy_in_features = hidden_dim
+        # Final layer to output action dimension logits
         policy_head_layers.append(nn.Linear(policy_in_features, self.action_dim))
         self.policy_head = nn.Sequential(*policy_head_layers)
 
         # --- Value Head ---
         value_head_layers = []
         value_in_features = in_features
+        # Iterate through hidden dims, excluding the final output dim (1)
         for hidden_dim in model_config.VALUE_HEAD_DIMS[:-1]:
             value_head_layers.append(nn.Linear(value_in_features, hidden_dim))
             if model_config.USE_BATCH_NORM:
                 value_head_layers.append(nn.BatchNorm1d(hidden_dim))
-            value_head_layers.append(activation())
+            value_head_layers.append(activation_cls())
             value_in_features = hidden_dim
+        # Final layer to output the single value
         value_head_layers.append(
             nn.Linear(value_in_features, model_config.VALUE_HEAD_DIMS[-1])
         )
-        value_head_layers.append(nn.Tanh())
+        value_head_layers.append(nn.Tanh())  # Apply Tanh activation
         self.value_head = nn.Sequential(*value_head_layers)
 
     def forward(
@@ -236,8 +259,8 @@ class AlphaTriangleNet(nn.Module):
         # Optional Transformer Body
         if (
             self.model_config.USE_TRANSFORMER
-            and self.transformer_body
-            and self.pos_encoder
+            and self.transformer_body is not None  # Check if transformer exists
+            and self.pos_encoder is not None
         ):
             proj_out = self.input_proj(res_out)  # Shape: (B, D, H, W)
             b, d, h, w = proj_out.shape

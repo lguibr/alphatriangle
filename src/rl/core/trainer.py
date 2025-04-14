@@ -1,4 +1,6 @@
+# File: src/rl/core/trainer.py
 import logging
+from typing import Any
 
 import numpy as np
 import torch
@@ -54,11 +56,15 @@ class Trainer:
 
     def _create_scheduler(self, optimizer: optim.Optimizer) -> _LRScheduler | None:
         """Creates the learning rate scheduler based on TrainConfig."""
-        scheduler_type = self.train_config.LR_SCHEDULER_TYPE
-        if not scheduler_type or scheduler_type.lower() == "none":
+        scheduler_type_config = self.train_config.LR_SCHEDULER_TYPE
+        scheduler_type: str | None = None  # Initialize as None
+        if scheduler_type_config:
+            scheduler_type = scheduler_type_config.lower()
+
+        if not scheduler_type or scheduler_type == "none":
             logger.info("No LR scheduler configured.")
             return None
-        scheduler_type = scheduler_type.lower()
+
         logger.info(f"Creating LR scheduler: {scheduler_type}")
         if scheduler_type == "steplr":
             step_size = getattr(self.train_config, "LR_SCHEDULER_STEP_SIZE", 100000)
@@ -80,7 +86,7 @@ class Trainer:
                 optimizer, T_max=t_max, eta_min=eta_min
             )
         else:
-            raise ValueError(f"Unsupported scheduler type: {scheduler_type}")
+            raise ValueError(f"Unsupported scheduler type: {scheduler_type_config}")
 
     def _prepare_batch(
         self, batch: ExperienceBatch
@@ -140,7 +146,7 @@ class Trainer:
         Returns loss info dictionary and TD errors for priority updates.
         """
         batch = per_sample["batch"]
-        indices = per_sample["indices"]
+        # indices = per_sample["indices"] # Unused variable
         is_weights = per_sample["weights"]
 
         if not batch:
@@ -170,14 +176,14 @@ class Trainer:
         policy_loss_elementwise = -torch.sum(policy_target_t * log_probs, dim=1)
         policy_loss = (policy_loss_elementwise * is_weights_t).mean()
 
-        entropy = 0.0
+        entropy: float = 0.0  # Initialize entropy as float
         entropy_loss = 0.0
         if self.train_config.ENTROPY_BONUS_WEIGHT > 0:
             policy_probs = F.softmax(policy_logits, dim=1)
             entropy_term = -torch.sum(
                 policy_probs * torch.log(policy_probs + 1e-9), dim=1
             )
-            entropy = entropy_term.mean().item()
+            entropy = entropy_term.mean().item()  # This is already float
             entropy_loss = -self.train_config.ENTROPY_BONUS_WEIGHT * entropy_term.mean()
 
         total_loss = (
@@ -207,7 +213,7 @@ class Trainer:
             "policy_loss": policy_loss.item(),
             "value_loss": value_loss.item(),
             "entropy": entropy,
-            "mean_td_error": np.mean(np.abs(td_errors)),
+            "mean_td_error": float(np.mean(np.abs(td_errors))),  # Cast to float
         }
 
         return loss_info, td_errors
@@ -215,7 +221,8 @@ class Trainer:
     def get_current_lr(self) -> float:
         """Returns the current learning rate from the optimizer."""
         try:
-            return self.optimizer.param_groups[0]["lr"]
+            # Ensure return type is float
+            return float(self.optimizer.param_groups[0]["lr"])
         except (IndexError, KeyError):
             logger.warning("Could not retrieve learning rate from optimizer.")
             return 0.0

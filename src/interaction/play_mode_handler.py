@@ -6,7 +6,11 @@ import pygame
 
 from src.environment import core as env_core
 from src.environment import grid as env_grid
-from src.structs import Shape
+
+# Move Shape import into TYPE_CHECKING block
+if TYPE_CHECKING:
+    from src.structs import Shape
+
 from src.visualization import core as vis_core
 
 if TYPE_CHECKING:
@@ -69,7 +73,8 @@ def handle_play_click(event: pygame.event.Event, handler: "InputHandler") -> Non
         grid_coords = vis_core.coord_mapper.get_grid_coords_from_screen(
             mouse_pos, grid_rect, game_state.env_config
         )
-        shape_to_place: Shape | None = game_state.shapes[selected_idx]
+        # Use TYPE_CHECKING import for Shape type hint
+        shape_to_place: "Shape" | None = game_state.shapes[selected_idx]
 
         # Check if the placement is valid *at the clicked location*
         if (
@@ -120,7 +125,8 @@ def update_play_hover(handler: "InputHandler") -> None:
     shape_idx = handler.selected_shape_idx
     if not (0 <= shape_idx < len(game_state.shapes)):
         return
-    shape: Shape | None = game_state.shapes[shape_idx]
+    # Use TYPE_CHECKING import for Shape type hint
+    shape: "Shape" | None = game_state.shapes[shape_idx]
     if not shape:
         return
 

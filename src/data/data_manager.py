@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 from collections import deque
+from pathlib import Path  # Import Path
 from typing import TYPE_CHECKING, Any
 
 import cloudpickle
@@ -49,7 +50,8 @@ class DataManager:
                 "DataManager RUN_NAME not set in TrainConfig. Using default."
             )
 
-        os.makedirs(self.persist_config.ROOT_DATA_DIR, exist_ok=True)
+        self.root_data_dir = Path(self.persist_config.ROOT_DATA_DIR)
+        self.root_data_dir.mkdir(parents=True, exist_ok=True)
         self._update_paths()
         self._create_directories()
         logger.info(
@@ -58,25 +60,21 @@ class DataManager:
 
     def _update_paths(self):
         """Updates paths based on the current RUN_NAME."""
-        self.run_base_dir = self.persist_config.get_run_base_dir()
-        self.checkpoint_dir = os.path.join(
-            self.run_base_dir, self.persist_config.CHECKPOINT_SAVE_DIR_NAME
+        self.run_base_dir = Path(self.persist_config.get_run_base_dir())
+        self.checkpoint_dir = (
+            self.run_base_dir / self.persist_config.CHECKPOINT_SAVE_DIR_NAME
         )
-        self.buffer_dir = os.path.join(
-            self.run_base_dir, self.persist_config.BUFFER_SAVE_DIR_NAME
-        )
-        self.log_dir = os.path.join(self.run_base_dir, self.persist_config.LOG_DIR_NAME)
-        self.config_path = os.path.join(
-            self.run_base_dir, self.persist_config.CONFIG_FILENAME
-        )
+        self.buffer_dir = self.run_base_dir / self.persist_config.BUFFER_SAVE_DIR_NAME
+        self.log_dir = self.run_base_dir / self.persist_config.LOG_DIR_NAME
+        self.config_path = self.run_base_dir / self.persist_config.CONFIG_FILENAME
 
     def _create_directories(self):
         """Creates necessary temporary directories for the current run."""
-        os.makedirs(self.run_base_dir, exist_ok=True)
-        os.makedirs(self.checkpoint_dir, exist_ok=True)
-        os.makedirs(self.log_dir, exist_ok=True)
+        self.run_base_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
         if self.persist_config.SAVE_BUFFER:
-            os.makedirs(self.buffer_dir, exist_ok=True)
+            self.buffer_dir.mkdir(parents=True, exist_ok=True)
 
     def get_checkpoint_path(
         self,
@@ -85,13 +83,11 @@ class DataManager:
         is_latest: bool = False,
         is_best: bool = False,
         is_final: bool = False,
-    ) -> str:
+    ) -> Path:
         """Constructs the path for a checkpoint file."""
         target_run_name = run_name if run_name else self.persist_config.RUN_NAME
-        base_dir = self.persist_config.get_run_base_dir(target_run_name)
-        checkpoint_dir = os.path.join(
-            base_dir, self.persist_config.CHECKPOINT_SAVE_DIR_NAME
-        )
+        base_dir = Path(self.persist_config.get_run_base_dir(target_run_name))
+        checkpoint_dir = base_dir / self.persist_config.CHECKPOINT_SAVE_DIR_NAME
         if is_latest:
             filename = self.persist_config.LATEST_CHECKPOINT_FILENAME
         elif is_best:
@@ -103,20 +99,20 @@ class DataManager:
         else:
             # Default to latest if no specific type is given
             filename = self.persist_config.LATEST_CHECKPOINT_FILENAME
-        base, _ = os.path.splitext(filename)
-        filename_pkl = base + ".pkl"
-        return os.path.join(checkpoint_dir, filename_pkl)
+        # Ensure filename ends with .pkl
+        filename_pkl = Path(filename).with_suffix(".pkl")
+        return checkpoint_dir / filename_pkl
 
     def get_buffer_path(
         self,
         run_name: str | None = None,
         step: int | None = None,
         is_final: bool = False,
-    ) -> str:
+    ) -> Path:
         """Constructs the path for the replay buffer file."""
         target_run_name = run_name if run_name else self.persist_config.RUN_NAME
-        base_dir = self.persist_config.get_run_base_dir(target_run_name)
-        buffer_dir = os.path.join(base_dir, self.persist_config.BUFFER_SAVE_DIR_NAME)
+        base_dir = Path(self.persist_config.get_run_base_dir(target_run_name))
+        buffer_dir = base_dir / self.persist_config.BUFFER_SAVE_DIR_NAME
         if is_final and step is not None:
             filename = f"buffer_final_step_{step}.pkl"
         elif step is not None and self.persist_config.BUFFER_SAVE_FREQ_STEPS > 0:
@@ -124,22 +120,19 @@ class DataManager:
             filename = self.persist_config.BUFFER_FILENAME
         else:
             filename = self.persist_config.BUFFER_FILENAME
-        return os.path.join(buffer_dir, filename)
+        return buffer_dir / Path(filename).with_suffix(".pkl")
 
     def find_latest_run_dir(self, current_run_name: str) -> str | None:
         """Finds the most recent *previous* run directory based on name sorting."""
-        runs_root_dir = os.path.join(
-            self.persist_config.ROOT_DATA_DIR, self.persist_config.RUNS_DIR_NAME
-        )
+        runs_root_dir = self.root_data_dir / self.persist_config.RUNS_DIR_NAME
         try:
-            if not os.path.exists(runs_root_dir):
+            if not runs_root_dir.exists():
                 return None
             # Get all subdirectories in the runs directory
             potential_dirs = [
-                d
-                for d in os.listdir(runs_root_dir)
-                if os.path.isdir(os.path.join(runs_root_dir, d))
-                and d != current_run_name  # Exclude the current run
+                d.name
+                for d in runs_root_dir.iterdir()
+                if d.is_dir() and d.name != current_run_name  # Exclude the current run
             ]
             if not potential_dirs:
                 return None
@@ -155,17 +148,18 @@ class DataManager:
             logger.error(f"Error finding latest run directory: {e}", exc_info=True)
             return None
 
-    def _determine_checkpoint_to_load(self) -> str | None:
+    def _determine_checkpoint_to_load(self) -> Path | None:
         """Determines the absolute path of the checkpoint file to load."""
         load_path_config = self.train_config.LOAD_CHECKPOINT_PATH
         auto_resume = self.train_config.AUTO_RESUME_LATEST
         current_run_name = self.persist_config.RUN_NAME
-        checkpoint_to_load = None
+        checkpoint_to_load: Path | None = None
 
         # 1. Priority: Explicit path from config
         if load_path_config:
-            if os.path.exists(load_path_config):
-                checkpoint_to_load = os.path.abspath(load_path_config)
+            load_path = Path(load_path_config)
+            if load_path.exists():
+                checkpoint_to_load = load_path.resolve()
                 logger.info(f"Using specified checkpoint path: {checkpoint_to_load}")
             else:
                 logger.warning(
@@ -179,8 +173,8 @@ class DataManager:
                 potential_latest_path = self.get_checkpoint_path(
                     run_name=latest_run_name, is_latest=True
                 )
-                if os.path.exists(potential_latest_path):
-                    checkpoint_to_load = os.path.abspath(potential_latest_path)
+                if potential_latest_path.exists():
+                    checkpoint_to_load = potential_latest_path.resolve()
                     logger.info(
                         f"Auto-resuming from latest checkpoint in previous run '{latest_run_name}': {checkpoint_to_load}"
                     )
@@ -196,9 +190,7 @@ class DataManager:
 
         return checkpoint_to_load
 
-    def _determine_buffer_to_load(
-        self, checkpoint_run_name: str | None
-    ) -> str | None:
+    def _determine_buffer_to_load(self, checkpoint_run_name: str | None) -> Path | None:
         """
         Determines the buffer file path to load.
         Prioritizes explicit path, then the run corresponding to the loaded checkpoint,
@@ -206,11 +198,12 @@ class DataManager:
         """
         # 1. Priority: Explicit path from config
         if self.train_config.LOAD_BUFFER_PATH:
-            if os.path.exists(self.train_config.LOAD_BUFFER_PATH):
+            load_path = Path(self.train_config.LOAD_BUFFER_PATH)
+            if load_path.exists():
                 logger.info(
                     f"Using specified buffer path: {self.train_config.LOAD_BUFFER_PATH}"
                 )
-                return os.path.abspath(self.train_config.LOAD_BUFFER_PATH)
+                return load_path.resolve()
             else:
                 logger.warning(
                     f"Specified buffer path not found: {self.train_config.LOAD_BUFFER_PATH}"
@@ -221,11 +214,11 @@ class DataManager:
             potential_buffer_path = self.get_buffer_path(
                 run_name=checkpoint_run_name
             )  # Use default buffer name
-            if os.path.exists(potential_buffer_path):
+            if potential_buffer_path.exists():
                 logger.info(
                     f"Loading buffer from checkpoint run '{checkpoint_run_name}': {potential_buffer_path}"
                 )
-                return os.path.abspath(potential_buffer_path)
+                return potential_buffer_path.resolve()
             else:
                 logger.info(
                     f"Default buffer file not found in checkpoint run directory '{checkpoint_run_name}'."
@@ -240,11 +233,11 @@ class DataManager:
                 potential_buffer_path = self.get_buffer_path(
                     run_name=latest_previous_run_name
                 )
-                if os.path.exists(potential_buffer_path):
+                if potential_buffer_path.exists():
                     logger.info(
                         f"Auto-resuming buffer from latest previous run '{latest_previous_run_name}' (no checkpoint loaded): {potential_buffer_path}"
                     )
-                    return os.path.abspath(potential_buffer_path)
+                    return potential_buffer_path.resolve()
                 else:
                     logger.info(
                         f"Default buffer file not found in latest run directory '{latest_previous_run_name}'."
@@ -260,14 +253,14 @@ class DataManager:
         Handles AUTO_RESUME_LATEST logic for checkpoint and buffer.
         """
         loaded_state = LoadedTrainingState()
-        checkpoint_to_load = self._determine_checkpoint_to_load()
+        checkpoint_path = self._determine_checkpoint_to_load()
         checkpoint_run_name: str | None = None
 
         # --- Load Checkpoint (Model + Optimizer + Stats) ---
-        if checkpoint_to_load:
-            logger.info(f"Loading checkpoint: {checkpoint_to_load}")
+        if checkpoint_path:
+            logger.info(f"Loading checkpoint: {checkpoint_path}")
             try:
-                with open(checkpoint_to_load, "rb") as f:
+                with checkpoint_path.open("rb") as f:
                     loaded_checkpoint_model = cloudpickle.load(f)
                 if isinstance(loaded_checkpoint_model, CheckpointData):
                     loaded_state.checkpoint_data = loaded_checkpoint_model
@@ -279,27 +272,27 @@ class DataManager:
                     )
                 else:
                     logger.error(
-                        f"Loaded checkpoint file {checkpoint_to_load} did not contain a CheckpointData object (type: {type(loaded_checkpoint_model)})."
+                        f"Loaded checkpoint file {checkpoint_path} did not contain a CheckpointData object (type: {type(loaded_checkpoint_model)})."
                     )
             except ValidationError as e:
                 logger.error(
-                    f"Pydantic validation failed for checkpoint {checkpoint_to_load}: {e}",
+                    f"Pydantic validation failed for checkpoint {checkpoint_path}: {e}",
                     exc_info=True,
                 )
             except Exception as e:
                 logger.error(
-                    f"Error loading/validating checkpoint from {checkpoint_to_load}: {e}",
+                    f"Error loading/validating checkpoint from {checkpoint_path}: {e}",
                     exc_info=True,
                 )
 
         # --- Load Buffer ---
         if self.persist_config.SAVE_BUFFER:
             # Pass the run name from the loaded checkpoint (if any)
-            buffer_to_load = self._determine_buffer_to_load(checkpoint_run_name)
-            if buffer_to_load:
-                logger.info(f"Loading buffer: {buffer_to_load}")
+            buffer_path = self._determine_buffer_to_load(checkpoint_run_name)
+            if buffer_path:
+                logger.info(f"Loading buffer: {buffer_path}")
                 try:
-                    with open(buffer_to_load, "rb") as f:
+                    with buffer_path.open("rb") as f:
                         loaded_buffer_model = cloudpickle.load(f)
                     if isinstance(loaded_buffer_model, BufferData):
                         # Basic validation of experience structure
@@ -315,7 +308,8 @@ class DataManager:
                                 and isinstance(exp[0]["grid"], np.ndarray)
                                 and isinstance(exp[0]["other_features"], np.ndarray)
                                 and isinstance(exp[1], dict)
-                                and isinstance(exp[2], (float, int))
+                                # Use isinstance with | for multiple types
+                                and isinstance(exp[2], float | int)
                             ):
                                 valid_experiences.append(exp)
                             else:
@@ -335,16 +329,16 @@ class DataManager:
                         )
                     else:
                         logger.error(
-                            f"Loaded buffer file {buffer_to_load} did not contain a BufferData object (type: {type(loaded_buffer_model)})."
+                            f"Loaded buffer file {buffer_path} did not contain a BufferData object (type: {type(loaded_buffer_model)})."
                         )
                 except ValidationError as e:
                     logger.error(
-                        f"Pydantic validation failed for buffer {buffer_to_load}: {e}",
+                        f"Pydantic validation failed for buffer {buffer_path}: {e}",
                         exc_info=True,
                     )
                 except Exception as e:
                     logger.error(
-                        f"Failed to load/validate experience buffer from {buffer_to_load}: {e}",
+                        f"Failed to load/validate experience buffer from {buffer_path}: {e}",
                         exc_info=True,
                     )
 
@@ -374,7 +368,8 @@ class DataManager:
         stats_collector_state = {}
         if stats_collector_actor:
             try:
-                stats_state_ref = stats_collector_actor.get_state.remote()
+                # Correctly call remote method
+                stats_state_ref = stats_collector_actor.get_state.remote()  # type: ignore
                 stats_collector_state = ray.get(stats_state_ref, timeout=5.0)
             except Exception as e:
                 logger.error(
@@ -419,10 +414,10 @@ class DataManager:
         step_checkpoint_path = self.get_checkpoint_path(
             run_name=run_name, step=global_step, is_final=is_final
         )
-        saved_checkpoint_path = None
+        saved_checkpoint_path: Path | None = None
         try:
-            os.makedirs(os.path.dirname(step_checkpoint_path), exist_ok=True)
-            with open(step_checkpoint_path, "wb") as f:
+            step_checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            with step_checkpoint_path.open("wb") as f:
                 cloudpickle.dump(checkpoint_data, f)
             logger.info(f"Checkpoint temporarily saved to {step_checkpoint_path}")
             saved_checkpoint_path = step_checkpoint_path
@@ -444,7 +439,7 @@ class DataManager:
                 exc_info=True,
             )
 
-        saved_buffer_path = None
+        saved_buffer_path: Path | None = None
         if self.persist_config.SAVE_BUFFER:
             buffer_path = self.get_buffer_path(
                 run_name=run_name, step=global_step, is_final=is_final
@@ -480,7 +475,8 @@ class DataManager:
                         and isinstance(exp[0]["grid"], np.ndarray)
                         and isinstance(exp[0]["other_features"], np.ndarray)
                         and isinstance(exp[1], dict)
-                        and isinstance(exp[2], (float, int))
+                        # Use isinstance with | for multiple types
+                        and isinstance(exp[2], float | int)
                     ):
                         valid_experiences.append(exp)
                     else:
@@ -494,14 +490,14 @@ class DataManager:
                     )
 
                 buffer_data = BufferData(buffer_list=valid_experiences)
-                os.makedirs(os.path.dirname(buffer_path), exist_ok=True)
-                with open(buffer_path, "wb") as f:
+                buffer_path.parent.mkdir(parents=True, exist_ok=True)
+                with buffer_path.open("wb") as f:
                     cloudpickle.dump(buffer_data, f)
                 logger.info(f"Experience buffer temporarily saved to {buffer_path}")
                 saved_buffer_path = buffer_path
                 try:
                     # Always update the default buffer file
-                    with open(default_buffer_path, "wb") as f_default:
+                    with default_buffer_path.open("wb") as f_default:
                         cloudpickle.dump(buffer_data, f_default)
                     logger.debug(f"Updated default buffer file: {default_buffer_path}")
                 except Exception as e_default:
@@ -520,39 +516,47 @@ class DataManager:
 
     def _log_artifacts(
         self,
-        checkpoint_path: str | None,
-        buffer_path: str | None,
+        checkpoint_path: Path | None,
+        buffer_path: Path | None,
         run_name: str,
         is_best: bool,
     ):
         """Logs saved checkpoint and buffer files to MLflow."""
         try:
-            if checkpoint_path and os.path.exists(checkpoint_path):
+            if checkpoint_path and checkpoint_path.exists():
                 ckpt_artifact_path = self.persist_config.CHECKPOINT_SAVE_DIR_NAME
-                mlflow.log_artifact(checkpoint_path, artifact_path=ckpt_artifact_path)
+                mlflow.log_artifact(
+                    str(checkpoint_path), artifact_path=ckpt_artifact_path
+                )
                 latest_path = self.get_checkpoint_path(
                     run_name=run_name, is_latest=True
                 )
-                if os.path.exists(latest_path):
-                    mlflow.log_artifact(latest_path, artifact_path=ckpt_artifact_path)
+                if latest_path.exists():
+                    mlflow.log_artifact(
+                        str(latest_path), artifact_path=ckpt_artifact_path
+                    )
                 if is_best:
                     best_path = self.get_checkpoint_path(
                         run_name=run_name, is_best=True
                     )
-                    if os.path.exists(best_path):
-                        mlflow.log_artifact(best_path, artifact_path=ckpt_artifact_path)
+                    if best_path.exists():
+                        mlflow.log_artifact(
+                            str(best_path), artifact_path=ckpt_artifact_path
+                        )
                 logger.info(
                     f"Logged checkpoint artifacts to MLflow path: {ckpt_artifact_path}"
                 )
-            if buffer_path and os.path.exists(buffer_path):
+            if buffer_path and buffer_path.exists():
                 buffer_artifact_path = self.persist_config.BUFFER_SAVE_DIR_NAME
                 # Log the step-specific buffer if it was created
-                mlflow.log_artifact(buffer_path, artifact_path=buffer_artifact_path)
+                mlflow.log_artifact(
+                    str(buffer_path), artifact_path=buffer_artifact_path
+                )
                 # Always log the default buffer file as well
                 default_buffer_path = self.get_buffer_path(run_name=run_name)
-                if os.path.exists(default_buffer_path):
+                if default_buffer_path.exists():
                     mlflow.log_artifact(
-                        default_buffer_path, artifact_path=buffer_artifact_path
+                        str(default_buffer_path), artifact_path=buffer_artifact_path
                     )
                 logger.info(
                     f"Logged buffer artifacts to MLflow path: {buffer_artifact_path}"
@@ -564,11 +568,11 @@ class DataManager:
         """Saves the combined configuration dictionary as a JSON artifact."""
         try:
             config_path = self.config_path
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            with open(config_path, "w") as f:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with config_path.open("w") as f:
 
                 def default_serializer(obj):
-                    if isinstance(obj, (torch.Tensor, np.ndarray)):
+                    if isinstance(obj, torch.Tensor | np.ndarray):  # Use | for types
                         return "<tensor/array>"
                     if isinstance(obj, deque):
                         return list(obj)
@@ -580,6 +584,6 @@ class DataManager:
                         return f"<object of type {type(obj).__name__}>"
 
                 json.dump(configs, f, indent=4, default=default_serializer)
-            mlflow.log_artifact(config_path, artifact_path="config")
+            mlflow.log_artifact(str(config_path), artifact_path="config")
         except Exception as e:
             logger.error(f"Failed to save/log run config JSON: {e}", exc_info=True)

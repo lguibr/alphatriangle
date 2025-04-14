@@ -1,4 +1,4 @@
-
+# File: src/visualization/drawing/shapes.py
 import pygame
 
 from src.structs import Shape, Triangle
@@ -11,7 +11,7 @@ def draw_shape(
     shape: Shape,
     topleft: tuple[int, int],
     cell_size: float,
-    is_selected: bool = False,
+    _is_selected: bool = False,  # Mark as unused
     origin_offset: tuple[int, int] = (0, 0),
 ) -> None:
     """Draws a single shape onto a surface."""

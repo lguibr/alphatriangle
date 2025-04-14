@@ -1,3 +1,4 @@
+# File: src/rl/core/buffer.py
 import logging
 import random
 from collections import deque
@@ -33,8 +34,9 @@ class ExperienceBuffer:
             self.per_alpha = config.PER_ALPHA
             self.per_beta_initial = config.PER_BETA_INITIAL
             self.per_beta_final = config.PER_BETA_FINAL
-            self.per_beta_anneal_steps = (
-                config.PER_BETA_ANNEAL_STEPS or config.MAX_TRAINING_STEPS or 1
+            # Ensure anneal steps is at least 1 to avoid division by zero
+            self.per_beta_anneal_steps = max(
+                1, config.PER_BETA_ANNEAL_STEPS or config.MAX_TRAINING_STEPS or 1
             )
             self.per_epsilon = config.PER_EPSILON
             logger.info(
@@ -48,7 +50,8 @@ class ExperienceBuffer:
 
     def _get_priority(self, error: float) -> float:
         """Calculates priority from TD error."""
-        return (np.abs(error) + self.per_epsilon) ** self.per_alpha
+        # Ensure return type is float
+        return float((np.abs(error) + self.per_epsilon) ** self.per_alpha)
 
     def add(self, experience: Experience):
         """Adds a single experience. Uses max priority if PER is enabled."""
@@ -109,16 +112,22 @@ class ExperienceBuffer:
                     logger.warning(
                         f"PER sampling encountered non-experience data at index {idx}. Resampling."
                     )
+                    # Resample with a random value across the entire range
                     value = random.uniform(0, self.tree.total_priority)
                     idx, p, data = self.tree.get_leaf(value)
                     if not isinstance(data, tuple):
                         logger.error(f"PER resampling failed. Skipping sample {i}.")
-                        rand_idx = random.randint(0, self.capacity - 1)
-                        idx, p, data = self.tree.get_leaf(
-                            self.tree.tree[rand_idx + self.capacity - 1]
-                        )
-                        if not isinstance(data, tuple):
-                            continue
+                        # Fallback: sample a random valid index if possible
+                        if self.tree.n_entries > 0:
+                            rand_data_idx = random.randint(0, self.tree.n_entries - 1)
+                            rand_tree_idx = rand_data_idx + self.capacity - 1
+                            idx, p, data = self.tree.get_leaf(
+                                self.tree.tree[rand_tree_idx]
+                            )
+                            if not isinstance(data, tuple):
+                                continue  # Give up on this sample if fallback fails
+                        else:
+                            continue  # Cannot sample if tree is empty
 
                 sampling_prob = p / self.tree.total_priority
                 weight = (
@@ -162,7 +171,9 @@ class ExperienceBuffer:
             )
             return
 
-        priorities = self._get_priority(td_errors)
+        # Calculate priorities for each error
+        priorities = np.array([self._get_priority(err) for err in td_errors])
+
         if not np.all(np.isfinite(priorities)):
             logger.warning("Non-finite priorities calculated. Clamping.")
             priorities = np.nan_to_num(
@@ -173,14 +184,16 @@ class ExperienceBuffer:
             )
             priorities = np.maximum(priorities, self.per_epsilon)
 
+        # Use strict=False for zip, although lengths should match after check above
         for idx, p in zip(tree_indices, priorities, strict=False):
             if not (0 <= idx < len(self.tree.tree)):
                 logger.error(f"Invalid tree index {idx} provided for priority update.")
                 continue
             self.tree.update(idx, p)
-        self.tree._max_priority = max(
-            self.tree.max_priority, np.max(priorities) if len(priorities) > 0 else 1.0
-        )
+
+        # Update the overall max priority tracked by the tree
+        if len(priorities) > 0:
+            self.tree._max_priority = max(self.tree.max_priority, np.max(priorities))
 
     def __len__(self) -> int:
         """Returns the current number of experiences in the buffer."""

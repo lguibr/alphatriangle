@@ -1,6 +1,7 @@
 # File: src/utils/helpers.py
 import logging
 import random
+from typing import cast
 
 import numpy as np
 import torch
@@ -24,6 +25,7 @@ def get_device(device_preference: str = "auto") -> torch.device:
         logger.info("Using CPU device.")
         return torch.device("cpu")
 
+    # Auto-detection fallback
     if torch.cuda.is_available():
         logger.info("Auto-selected CUDA device.")
         return torch.device("cuda")
@@ -38,11 +40,16 @@ def get_device(device_preference: str = "auto") -> torch.device:
 def set_random_seeds(seed: int = 42):
     """Sets random seeds for Python, NumPy, and PyTorch."""
     random.seed(seed)
+    # Use NumPy's recommended way to seed the global RNG state if needed,
+    # or preferably use a Generator instance. For simplicity here, we seed global.
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
+        # Optional: Set deterministic algorithms for CuDNN
+        # torch.backends.cudnn.deterministic = True
+        # torch.backends.cudnn.benchmark = False
     logger.info(f"Set random seeds to {seed}")
 
 
@@ -71,7 +78,8 @@ def normalize_color_for_matplotlib(
     if isinstance(color_tuple_0_255, tuple) and len(color_tuple_0_255) == 3:
         # Ensure values are within 0-255 before dividing
         valid_color = tuple(max(0, min(255, c)) for c in color_tuple_0_255)
-        return tuple(c / 255.0 for c in valid_color)
+        # Cast the result to the expected precise tuple type
+        return cast(tuple[float, float, float], tuple(c / 255.0 for c in valid_color))
     logger.warning(
         f"Invalid color format for normalization: {color_tuple_0_255}, returning black."
     )

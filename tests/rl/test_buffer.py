@@ -1,12 +1,14 @@
 # File: tests/rl/test_buffer.py
-import pytest
-import numpy as np
+import random
 from collections import deque
 
-from src.rl import ExperienceBuffer
+import numpy as np
+import pytest
+
 from src.config import TrainConfig
-from src.utils.types import Experience, StateType, PERBatchSample
+from src.rl import ExperienceBuffer
 from src.utils.sumtree import SumTree  # Import SumTree
+from src.utils.types import Experience
 
 # REMOVED: Import only needed fixtures from mcts conftest
 # from tests.mcts.conftest import mock_experience, mock_state_type
@@ -18,7 +20,33 @@ from src.utils.sumtree import SumTree  # Import SumTree
 def uniform_train_config() -> TrainConfig:
     """TrainConfig for uniform buffer."""
     return TrainConfig(
-        BUFFER_CAPACITY=100, MIN_BUFFER_SIZE_TO_TRAIN=10, BATCH_SIZE=4, USE_PER=False
+        BUFFER_CAPACITY=100,
+        MIN_BUFFER_SIZE_TO_TRAIN=10,
+        BATCH_SIZE=4,
+        USE_PER=False,
+        # Provide defaults for other required fields
+        LOAD_CHECKPOINT_PATH=None,
+        LOAD_BUFFER_PATH=None,
+        AUTO_RESUME_LATEST=False,
+        DEVICE="cpu",
+        RANDOM_SEED=42,
+        NUM_SELF_PLAY_WORKERS=1,
+        WORKER_DEVICE="cpu",
+        WORKER_UPDATE_FREQ_STEPS=10,
+        OPTIMIZER_TYPE="Adam",
+        LEARNING_RATE=1e-3,
+        WEIGHT_DECAY=1e-4,
+        LR_SCHEDULER_ETA_MIN=1e-6,
+        POLICY_LOSS_WEIGHT=1.0,
+        VALUE_LOSS_WEIGHT=1.0,
+        ENTROPY_BONUS_WEIGHT=0.0,
+        CHECKPOINT_SAVE_FREQ_STEPS=50,
+        PER_ALPHA=0.6,
+        PER_BETA_INITIAL=0.4,
+        PER_BETA_FINAL=1.0,
+        PER_BETA_ANNEAL_STEPS=100,
+        PER_EPSILON=1e-5,
+        MAX_TRAINING_STEPS=200,  # Set a finite value for tests
     )
 
 
@@ -35,6 +63,24 @@ def per_train_config() -> TrainConfig:
         PER_BETA_FINAL=1.0,
         PER_BETA_ANNEAL_STEPS=50,  # Short anneal for testing
         PER_EPSILON=1e-5,
+        # Provide defaults for other required fields
+        LOAD_CHECKPOINT_PATH=None,
+        LOAD_BUFFER_PATH=None,
+        AUTO_RESUME_LATEST=False,
+        DEVICE="cpu",
+        RANDOM_SEED=42,
+        NUM_SELF_PLAY_WORKERS=1,
+        WORKER_DEVICE="cpu",
+        WORKER_UPDATE_FREQ_STEPS=10,
+        OPTIMIZER_TYPE="Adam",
+        LEARNING_RATE=1e-3,
+        WEIGHT_DECAY=1e-4,
+        LR_SCHEDULER_ETA_MIN=1e-6,
+        POLICY_LOSS_WEIGHT=1.0,
+        VALUE_LOSS_WEIGHT=1.0,
+        ENTROPY_BONUS_WEIGHT=0.0,
+        CHECKPOINT_SAVE_FREQ_STEPS=50,
+        MAX_TRAINING_STEPS=200,  # Set a finite value for tests
     )
 
 
@@ -93,7 +139,7 @@ def test_uniform_buffer_capacity(
     for i in range(uniform_buffer.capacity + 10):
         # Create slightly different experiences
         state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
-        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i)
+        exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
     assert len(uniform_buffer) == uniform_buffer.capacity
     # Check if the first added element is gone
@@ -121,7 +167,7 @@ def test_uniform_buffer_sample(
     # Fill buffer until ready
     for i in range(uniform_buffer.min_size_to_train):
         state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
-        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i)
+        exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
 
     sample = uniform_buffer.sample(uniform_buffer.config.BATCH_SIZE)
@@ -191,7 +237,7 @@ def test_per_buffer_add_batch(
 def test_per_buffer_capacity(per_buffer: ExperienceBuffer, mock_experience: Experience):
     for i in range(per_buffer.capacity + 10):
         state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
-        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i)
+        exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)  # Adds with current max priority
     assert len(per_buffer) == per_buffer.capacity
     # Cannot easily check which element was overwritten without tracking indices
@@ -210,7 +256,7 @@ def test_per_buffer_sample(per_buffer: ExperienceBuffer, mock_experience: Experi
     # Fill buffer until ready
     for i in range(per_buffer.min_size_to_train):
         state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
-        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i)
+        exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
 
     # Need current_step for beta calculation
@@ -248,7 +294,7 @@ def test_per_buffer_update_priorities(
     num_items = per_buffer.min_size_to_train
     for i in range(num_items):
         state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
-        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i)
+        exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
 
     # Sample to get indices
@@ -264,8 +310,10 @@ def test_per_buffer_update_priorities(
     # Instead of comparing the whole batch, compare based on unique indices.
     # Create a mapping from tree index to the *last* expected priority for that index.
     expected_priorities_map = {}
-    calculated_priorities = (td_errors + per_buffer.per_epsilon) ** per_buffer.per_alpha
-    for tree_idx, expected_p in zip(indices, calculated_priorities):
+    calculated_priorities = np.array(
+        [per_buffer._get_priority(err) for err in td_errors]
+    )
+    for tree_idx, expected_p in zip(indices, calculated_priorities, strict=True):
         expected_priorities_map[tree_idx] = expected_p  # Last write wins
 
     # Get the actual updated priorities from the tree for the unique indices involved
@@ -274,9 +322,9 @@ def test_per_buffer_update_priorities(
     expected_final_priorities = [expected_priorities_map[idx] for idx in unique_indices]
 
     # Check if priorities changed (at least one should have)
-    initial_priorities_unique = [
-        per_buffer.tree.tree[idx] for idx in unique_indices
-    ]  # Get initial values for comparison *before* update (this needs adjustment - get before update)
+    # initial_priorities_unique = [
+    #     per_buffer.tree.tree[idx] for idx in unique_indices
+    # ]  # Get initial values for comparison *before* update (this needs adjustment - get before update)
     # Re-sample or store initial priorities before update for a proper check if needed.
     # For now, just check if the final values match the expected final values.
 
@@ -289,16 +337,13 @@ def test_per_buffer_update_priorities(
 def test_per_buffer_beta_annealing(per_buffer: ExperienceBuffer):
     config = per_buffer.config
     assert per_buffer._calculate_beta(0) == config.PER_BETA_INITIAL
-    mid_step = config.PER_BETA_ANNEAL_STEPS // 2
+    # Ensure anneal steps is not None and > 0 before division
+    anneal_steps = per_buffer.per_beta_anneal_steps
+    assert anneal_steps is not None and anneal_steps > 0
+    mid_step = anneal_steps // 2
     expected_mid_beta = config.PER_BETA_INITIAL + 0.5 * (
         config.PER_BETA_FINAL - config.PER_BETA_INITIAL
     )
     assert per_buffer._calculate_beta(mid_step) == pytest.approx(expected_mid_beta)
-    assert (
-        per_buffer._calculate_beta(config.PER_BETA_ANNEAL_STEPS)
-        == config.PER_BETA_FINAL
-    )
-    assert (
-        per_buffer._calculate_beta(config.PER_BETA_ANNEAL_STEPS * 2)
-        == config.PER_BETA_FINAL
-    )
+    assert per_buffer._calculate_beta(anneal_steps) == config.PER_BETA_FINAL
+    assert per_buffer._calculate_beta(anneal_steps * 2) == config.PER_BETA_FINAL

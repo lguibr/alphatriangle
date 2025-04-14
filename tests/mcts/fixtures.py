@@ -1,5 +1,6 @@
 # File: tests/mcts/fixtures.py
 from collections.abc import Mapping
+from typing import Any, Optional
 
 import pytest
 
@@ -26,9 +27,17 @@ class MockGameState:
         self.current_step = current_step
         self._is_over = is_terminal
         self._outcome = outcome
-        self._valid_actions = valid_actions if valid_actions is not None else [0, 1, 2]
         # Use a default EnvConfig if none provided, needed for action dim
-        self.env_config = env_config if env_config else EnvConfig(ROWS=3, COLS=3)
+        self.env_config = (
+            env_config
+            if env_config
+            else EnvConfig(ROWS=3, COLS=3, COLS_PER_ROW=[3, 3, 3], NUM_SHAPE_SLOTS=1)
+        )
+        self._valid_actions = (
+            valid_actions
+            if valid_actions is not None
+            else list(range(self.env_config.ACTION_DIM))
+        )
 
     def is_over(self) -> bool:
         return self._is_over
@@ -51,7 +60,7 @@ class MockGameState:
             self.env_config,
         )
 
-    def step(self, action: ActionType) -> tuple[float, float, bool]:
+    def step(self, action: ActionType) -> tuple[float, bool]:
         # Mock step: advances step, returns dummy values, becomes terminal sometimes
         if action not in self._valid_actions:
             raise ValueError(f"Invalid action {action} for mock state.")
@@ -59,7 +68,8 @@ class MockGameState:
         # Simple logic: become terminal after 5 steps for testing
         self._is_over = self.current_step >= 5
         self._outcome = 1.0 if self._is_over else 0.0
-        return 0.0, 0.0, self._is_over  # placeholder_val, reward, done
+        # Return dummy reward and done status
+        return 0.0, self._is_over
 
     def __hash__(self):
         # Simple hash for testing purposes
@@ -157,8 +167,12 @@ def mock_evaluator(mock_env_config: EnvConfig) -> MockNetworkEvaluator:
 @pytest.fixture
 def root_node_mock_state(mock_env_config: EnvConfig) -> Node:
     """Provides a root Node with a MockGameState."""
-    state = MockGameState(valid_actions=[0, 1, 2], env_config=mock_env_config)
-    return Node(state=state)
+    state = MockGameState(
+        valid_actions=list(range(mock_env_config.ACTION_DIM)),
+        env_config=mock_env_config,
+    )
+    # Cast MockGameState to Any temporarily to satisfy Node's type hint
+    return Node(state=state)  # type: ignore [arg-type]
 
 
 @pytest.fixture
@@ -167,16 +181,21 @@ def expanded_node_mock_state(
 ) -> Node:
     """Provides an expanded root node with mock children."""
     root = root_node_mock_state
-    policy, value = mock_evaluator.evaluate(root.state)
+    # Cast root.state back to MockGameState for the evaluator
+    mock_state = root.state
+    policy, value = mock_evaluator.evaluate(mock_state)  # type: ignore [arg-type]
     # Manually expand for testing setup
-    for action in root.state.valid_actions():
+    for action in mock_state.valid_actions():
         prior = policy.get(action, 0.0)
         # Create mock child state (doesn't need to be accurate step)
         child_state = MockGameState(
-            current_step=1, valid_actions=[0, 1], env_config=root.state.env_config
+            current_step=1, valid_actions=[0, 1], env_config=mock_state.env_config
         )
         child = Node(
-            state=child_state, parent=root, action_taken=action, prior_probability=prior
+            state=child_state,  # type: ignore [arg-type]
+            parent=root,
+            action_taken=action,
+            prior_probability=prior,
         )
         root.children[action] = child
     # Simulate one backpropagation

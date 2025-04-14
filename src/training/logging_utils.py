@@ -1,91 +1,48 @@
 # File: src/training/logging_utils.py
-import io  # Import io module
+import io
+import json
 import logging
 import os
 import sys
+from pathlib import Path  # Import Path
+from typing import TYPE_CHECKING, Any
 
-# Import TrainingComponents for type hinting
-from typing import TYPE_CHECKING, TextIO
-
-import mlflow  # Import mlflow here
-import numpy as np  # Import numpy here
-
-from src.config import PersistenceConfig
+import mlflow
+import numpy as np
+import torch
 
 if TYPE_CHECKING:
     from .components import TrainingComponents
+    from src.config import PersistenceConfig
+
+logger = logging.getLogger(__name__)
 
 
-# --- Tee Class ---
 class Tee:
-    """
-    Helper class to duplicate stream output to multiple targets.
-    Includes fileno() method for compatibility with modules like faulthandler.
-    """
+    """Helper class to redirect stdout/stderr to both console and a file."""
 
-    def __init__(
-        self, *streams: TextIO, main_stream_for_fileno: TextIO | None = None
-    ):
-        self.streams = streams
-        # Store the stream whose fileno should be reported (usually original stderr/stdout)
-        self.main_stream_for_fileno = main_stream_for_fileno
+    def __init__(self, stream1, stream2, main_stream_for_fileno):
+        self.stream1 = stream1
+        self.stream2 = stream2
+        self._main_stream_for_fileno = main_stream_for_fileno
 
-    def write(self, message: str):
-        for stream in self.streams:
-            try:
-                stream.write(message)
-            except Exception as e:
-                # Write error to the original stderr to avoid recursion if logging fails
-                print(f"Tee Error writing: {e}", file=sys.__stderr__)
+    def write(self, data):
+        self.stream1.write(data)
+        self.stream2.write(data)
         self.flush()
 
     def flush(self):
-        for stream in self.streams:
-            try:
-                if hasattr(stream, "flush"):
-                    stream.flush()
-            except Exception as e:
-                print(f"Tee Error flushing: {e}", file=sys.__stderr__)
+        self.stream1.flush()
+        self.stream2.flush()
 
-    def isatty(self) -> bool:
-        # Return True if any underlying stream is a TTY
-        # Prioritize the main_stream if it exists and has isatty
-        if self.main_stream_for_fileno and hasattr(
-            self.main_stream_for_fileno, "isatty"
-        ):
-            return self.main_stream_for_fileno.isatty()
-        # Otherwise, check other streams
-        return any(getattr(s, "isatty", lambda: False)() for s in self.streams)
+    def fileno(self):
+        # Return the fileno of the main stream (e.g., original stdout/stderr)
+        # This is needed for some libraries that check fileno (like tqdm)
+        return self._main_stream_for_fileno.fileno()
 
-    def fileno(self) -> int:
-        """
-        Return the file descriptor of the main_stream_for_fileno.
-        Required by modules like faulthandler.
-        """
-        if self.main_stream_for_fileno and hasattr(
-            self.main_stream_for_fileno, "fileno"
-        ):
-            try:
-                return self.main_stream_for_fileno.fileno()
-            except io.UnsupportedOperation:
-                # If the main stream doesn't support fileno, raise the error
-                raise
-            except Exception as e:
-                print(
-                    f"Tee Error getting fileno from main stream: {e}",
-                    file=sys.__stderr__,
-                )
-                raise io.UnsupportedOperation("Main stream fileno failed") from e
-        # If no main stream specified or it lacks fileno, raise error
-        raise io.UnsupportedOperation(
-            "Tee object does not have a valid file descriptor."
-        )
-
-
-# --- End Tee Class ---
-
-# Get logger instance for this module
-logger = logging.getLogger(__name__)
+    def isatty(self):
+        # Report based on the main stream
+        return self._main_stream_for_fileno.isatty()
 
 
 def get_root_logger() -> logging.Logger:
@@ -94,75 +51,70 @@ def get_root_logger() -> logging.Logger:
 
 
 def setup_file_logging(
-    persist_config: PersistenceConfig, run_name: str, mode_suffix: str
+    persist_config: "PersistenceConfig", run_name: str, mode_suffix: str
 ) -> str:
     """Sets up file logging for the current run."""
-    run_base_dir = persist_config.get_run_base_dir(run_name)
-    log_dir = os.path.join(run_base_dir, persist_config.LOG_DIR_NAME)
-    os.makedirs(log_dir, exist_ok=True)
-    log_file_path = os.path.join(log_dir, f"{run_name}_{mode_suffix}.log")
+    run_base_dir = Path(persist_config.get_run_base_dir(run_name))
+    log_dir = run_base_dir / persist_config.LOG_DIR_NAME
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file_path = log_dir / f"{run_name}_{mode_suffix}.log"
 
     file_handler = logging.FileHandler(log_file_path, mode="w")
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     file_handler.setFormatter(formatter)
 
     root_logger = get_root_logger()
-    # Remove existing file handlers to avoid duplicates if called multiple times
-    for handler in root_logger.handlers[:]:
-        if isinstance(handler, logging.FileHandler):
-            try:
-                handler.close()  # Close before removing
-            except Exception as e:
-                logger.error(f"Error closing existing file handler: {e}")
-            root_logger.removeHandler(handler)
+    # Ensure we don't add duplicate handlers if called multiple times
+    if not any(isinstance(h, logging.FileHandler) for h in root_logger.handlers):
+        root_logger.addHandler(file_handler)
+        logger.info(f"Added file handler logging to: {log_file_path}")
+    else:
+        logger.warning("File handler already exists for root logger.")
 
-    root_logger.addHandler(file_handler)
-    return log_file_path
+    return str(log_file_path)
 
 
 def log_configs_to_mlflow(components: "TrainingComponents"):
     """Logs configuration parameters to MLflow."""
-    try:
-        from src.config import APP_NAME
+    if not mlflow.active_run():
+        logger.warning("No active MLflow run found. Cannot log configs.")
+        return
 
-        mlflow.log_param("APP_NAME", APP_NAME)
-        # Use model_dump for Pydantic v2
-        mlflow.log_params(components.train_config.model_dump())
+    logger.info("Logging configuration parameters to MLflow...")
+    try:
         mlflow.log_params(components.env_config.model_dump())
         mlflow.log_params(components.model_config.model_dump())
+        mlflow.log_params(components.train_config.model_dump())
         mlflow.log_params(components.mcts_config.model_dump())
-        persist_params = components.persist_config.model_dump(
-            exclude={"MLFLOW_TRACKING_URI"}
-        )
-        mlflow.log_params(persist_params)
-        logger.info("Logged configuration parameters to MLflow.")
-
-        # Save config JSON artifact
-        all_configs = {
-            "train_config": components.train_config.model_dump(),
-            "env_config": components.env_config.model_dump(),
-            "model_config": components.model_config.model_dump(),
-            "mcts_config": components.mcts_config.model_dump(),
-            "persist_config": components.persist_config.model_dump(),
-        }
-        components.data_manager.save_run_config(all_configs)
-
+        mlflow.log_params(components.persist_config.model_dump())
+        logger.info("Configuration parameters logged to MLflow.")
     except Exception as e:
-        logger.error(f"Failed to log parameters/configs to MLflow: {e}", exc_info=True)
+        logger.error(f"Failed to log parameters to MLflow: {e}", exc_info=True)
 
 
-def log_metrics_to_mlflow(metrics: dict, step: int):
-    """Logs a dictionary of metrics to MLflow."""
+def log_metrics_to_mlflow(metrics: dict[str, Any], step: int):
+    """Logs metrics to MLflow."""
+    if not mlflow.active_run():
+        logger.warning("No active MLflow run found. Cannot log metrics.")
+        return
+
     try:
+        # Filter only numeric, finite metrics
         numeric_metrics = {}
         for k, v in metrics.items():
-            if isinstance(v, (int, float, np.number)) and np.isfinite(v):
+            # Use isinstance with | for multiple types
+            if isinstance(v, int | float | np.number) and np.isfinite(v):
                 numeric_metrics[k] = float(v)
             else:
                 logger.debug(
-                    f"Skipping non-finite/non-numeric metric for MLflow: {k}={v} (type: {type(v)})"
+                    f"Skipping non-numeric or non-finite metric for MLflow: {k}={v} (type: {type(v)})"
                 )
         if numeric_metrics:
             mlflow.log_metrics(numeric_metrics, step=step)
+            logger.debug(
+                f"Logged {len(numeric_metrics)} metrics to MLflow at step {step}."
+            )
+        else:
+            logger.debug(f"No valid numeric metrics to log at step {step}.")
     except Exception as e:
-        logger.error(f"Failed to log metrics to MLflow: {e}")
+        logger.error(f"Failed to log metrics to MLflow: {e}", exc_info=True)

@@ -10,6 +10,7 @@ from src.structs import Shape  # Import Shape
 @pytest.fixture(scope="session")
 def default_env_config() -> EnvConfig:
     """Provides the default EnvConfig used in the specification (session-scoped)."""
+    # Provide default values for missing arguments
     return EnvConfig()
 
 

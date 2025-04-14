@@ -3,9 +3,8 @@ import logging
 import queue
 import threading
 import time
-
-# Add Tuple to the import
-from typing import Any
+from collections import deque
+from typing import TYPE_CHECKING, Any
 
 import numpy as np  # Import numpy
 import ray
@@ -17,8 +16,9 @@ from src.utils import format_eta
 from src.utils.types import Experience, PERBatchSample, StatsCollectorData
 from src.visualization.ui import ProgressBar
 
-# Import TrainingComponents type hint
-from .components import TrainingComponents
+# Import TrainingComponents only for type hinting
+if TYPE_CHECKING:
+    from .components import TrainingComponents
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +180,8 @@ class TrainingLoop:
         self.last_stats_fetch_time = current_time
         if self.stats_collector_actor:
             try:
-                data_ref = self.stats_collector_actor.get_data.remote()
+                # Correctly call remote method
+                data_ref = self.stats_collector_actor.get_data.remote()  # type: ignore
                 self.latest_stats_data = ray.get(data_ref, timeout=1.0)
             except Exception as e:
                 logger.warning(f"Failed to fetch latest stats: {e}")
@@ -249,7 +250,8 @@ class TrainingLoop:
         # Fetch latest worker states from the collector actor
         latest_worker_states: dict[int, GameState] = {}
         try:
-            states_ref = self.stats_collector_actor.get_latest_worker_states.remote()
+            # Correctly call remote method
+            states_ref = self.stats_collector_actor.get_latest_worker_states.remote()  # type: ignore
             latest_worker_states = ray.get(states_ref, timeout=VIS_STATE_FETCH_TIMEOUT)
             if not isinstance(latest_worker_states, dict):
                 logger.warning(
@@ -364,7 +366,8 @@ class TrainingLoop:
                         and isinstance(state_type["grid"], np.ndarray)
                         and isinstance(state_type["other_features"], np.ndarray)
                         and isinstance(policy_map, dict)
-                        and isinstance(value, (float, int))
+                        # Use isinstance with | for multiple types
+                        and isinstance(value, float | int)
                     ):
                         if np.all(np.isfinite(state_type["grid"])) and np.all(
                             np.isfinite(state_type["other_features"])
@@ -458,7 +461,8 @@ class TrainingLoop:
                 "Buffer/Fill_Percent": (buffer_fill_perc, global_step),
             }
             try:
-                self.stats_collector_actor.log_batch.remote(stats_batch)
+                # Correctly call remote method
+                self.stats_collector_actor.log_batch.remote(stats_batch)  # type: ignore
                 logger.debug(
                     f"Logged self-play batch to StatsCollectorActor for Ep {episode_num} / Step {global_step}."
                 )
@@ -521,7 +525,8 @@ class TrainingLoop:
             if per_beta is not None:
                 stats_batch["PER/Beta"] = (per_beta, step)
             try:
-                self.stats_collector_actor.log_batch.remote(stats_batch)
+                # Correctly call remote method
+                self.stats_collector_actor.log_batch.remote(stats_batch)  # type: ignore
                 logger.debug(
                     f"Logged training batch to StatsCollectorActor for Step {step}."
                 )

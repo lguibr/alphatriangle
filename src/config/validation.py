@@ -1,4 +1,6 @@
+# File: src/config/validation.py
 import logging
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -12,15 +14,15 @@ from .vis_config import VisConfig
 logger = logging.getLogger(__name__)
 
 
-def print_config_info_and_validate(mcts_config_instance: MCTSConfig):
+def print_config_info_and_validate(mcts_config_instance: MCTSConfig | None):
     """Prints configuration summary and performs validation using Pydantic."""
     print("-" * 40)
     print("Configuration Validation & Summary")
     print("-" * 40)
     all_valid = True
-    configs_validated = {}
+    configs_validated: dict[str, Any] = {}
 
-    config_classes = {
+    config_classes: dict[str, type[BaseModel]] = {
         "Environment": EnvConfig,
         "Model": ModelConfig,
         "Training": TrainConfig,
@@ -30,10 +32,19 @@ def print_config_info_and_validate(mcts_config_instance: MCTSConfig):
     }
 
     for name, ConfigClass in config_classes.items():
+        instance: BaseModel | None = None  # Initialize instance as None
         try:
-            if name == "MCTS" and mcts_config_instance is not None:
-                instance = mcts_config_instance
-                print(f"[{name}] - Instance provided OK")
+            if name == "MCTS":
+                if mcts_config_instance is not None:
+                    # Validate the provided instance
+                    instance = MCTSConfig.model_validate(
+                        mcts_config_instance.model_dump()
+                    )
+                    print(f"[{name}] - Instance provided & validated OK")
+                else:
+                    # Instantiate if not provided (shouldn't happen based on signature, but safe)
+                    instance = ConfigClass()
+                    print(f"[{name}] - Validated OK (Instantiated Default)")
             else:
                 instance = ConfigClass()
                 print(f"[{name}] - Validated OK")

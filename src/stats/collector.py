@@ -26,7 +26,7 @@ class StatsCollectorActor:
         self.max_history = max_history
         self._data: StatsCollectorData = {}
         # Store the latest GameState reported by each worker
-        self._latest_worker_states: dict[int, GameState] = {}
+        self._latest_worker_states: dict[int, "GameState"] = {}
         self._last_state_update_time: dict[int, float] = {}  # Track update times
 
         print(f"[StatsCollectorActor] Initialized with max_history={max_history}.")
@@ -115,9 +115,8 @@ class StatsCollectorActor:
 
     def get_state(self) -> dict[str, Any]:
         """Returns the internal state for saving."""
-        # --- CHANGE: Convert deques to lists for serialization ---
+        # Convert deques to lists for serialization compatibility with cloudpickle/json
         serializable_metrics = {key: list(dq) for key, dq in self._data.items()}
-        # --- END CHANGE ---
 
         # Note: GameState objects are complex and might be large.
         # Saving them frequently might be slow and consume disk space.
@@ -153,9 +152,8 @@ class StatsCollectorActor:
                         logger.warning(
                             f"Skipping invalid item {item} in metric '{key}' during state restore."
                         )
-                # --- CHANGE: Convert list back to deque ---
+                # Convert list back to deque with maxlen
                 self._data[key] = deque(valid_items, maxlen=self.max_history)
-                # --- END CHANGE ---
                 restored_metrics_count += 1
             else:
                 logger.warning(

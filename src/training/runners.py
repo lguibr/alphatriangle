@@ -6,18 +6,14 @@ import sys
 import threading
 import time
 import traceback
+from pathlib import Path  # Import Path
 from typing import Any
 
 import mlflow
 import pygame
 
-# Ensure the src directory is in the Python path *if running directly*
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(os.path.dirname(script_dir))  # Go up two levels
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-from src import config, environment, utils, visualization  # utils is imported here
+# Move imports to the top before potentially modifying sys.path
+from src import config, environment, utils, visualization
 from src.data import DataManager
 from src.nn import NeuralNetwork
 from src.rl import ExperienceBuffer, Trainer
@@ -28,6 +24,13 @@ from src.training.logging_utils import (
     get_root_logger,
     setup_file_logging,
 )
+
+# Ensure the src directory is in the Python path *if running directly*
+script_dir = Path(__file__).parent
+project_root = script_dir.parent.parent  # Go up two levels
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 
 # Queue for pipeline to send combined state dict {worker_id: state, -1: global_stats}
 # Define it here so it's accessible by the visual runner function
@@ -45,6 +48,7 @@ def _setup_training_components(
         # Use the potentially overridden configs passed in
         train_config = train_config_override
         persist_config = persist_config_override
+        # Provide defaults for missing arguments
         env_config = config.EnvConfig()
         model_config = config.ModelConfig()
         mcts_config = config.MCTSConfig()
@@ -53,14 +57,13 @@ def _setup_training_components(
         config.print_config_info_and_validate(mcts_config)
 
         # --- Setup ---
-        # --- CORRECTED CALL ---
         utils.set_random_seeds(train_config.RANDOM_SEED)
-        # --- END CORRECTION ---
         device = utils.get_device(train_config.DEVICE)
 
         # --- Initialize Core Components ---
         # Note: Ray initialization is handled within TrainingPipeline
-        stats_collector_actor = StatsCollectorActor.remote(max_history=100_000)
+        # Correctly call remote method
+        stats_collector_actor = StatsCollectorActor.remote(max_history=100_000)  # type: ignore
         neural_net = NeuralNetwork(model_config, env_config, train_config, device)
         buffer = ExperienceBuffer(train_config)
         trainer = Trainer(neural_net, train_config, env_config)
@@ -266,7 +269,8 @@ def run_training_visual_mode(
         logger.info("Training pipeline thread launched.")
 
         # --- Initialize Visualization ---
-        vis_config = config.VisConfig()  # Get vis config
+        # Provide defaults for VisConfig
+        vis_config = config.VisConfig()
         pygame.init()
         pygame.font.init()
         screen = pygame.display.set_mode(
@@ -316,7 +320,8 @@ def run_training_visual_mode(
                         logger.info("Received exit signal from training thread.")
                 elif isinstance(visual_data, dict):
                     has_received_data = True
-                    current_global_stats = visual_data.pop(-1, {})
+                    # Use update for global stats to handle potential overlaps
+                    current_global_stats.update(visual_data.pop(-1, {}))
                     current_worker_states = {
                         k: v
                         for k, v in visual_data.items()
@@ -324,6 +329,7 @@ def run_training_visual_mode(
                         and k >= 0
                         and isinstance(v, environment.GameState)
                     }
+                    # Update global stats with any remaining items (shouldn't be any ideally)
                     current_global_stats.update(visual_data)
                 else:
                     logger.warning(
@@ -353,9 +359,10 @@ def run_training_visual_mode(
                         )
                         screen.blit(err_surf, (10, screen.get_height() // 2))
             else:
-                if fonts.get("help"):
-                    wait_font = fonts["help"]
-                    wait_surf = wait_font.render(
+                # Check font exists before using it
+                help_font = fonts.get("help")
+                if help_font:
+                    wait_surf = help_font.render(
                         "Waiting for first data from training...",
                         True,
                         visualization.colors.LIGHT_GRAY,

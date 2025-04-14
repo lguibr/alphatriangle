@@ -1,6 +1,7 @@
 # File: tests/environment/test_step.py
 import random
 from time import sleep
+from typing import Set  # Import Set
 
 import pytest
 
@@ -79,7 +80,8 @@ def test_calculate_reward_multi_line_clear(simple_shape: Shape):
 
 
 def test_execute_placement_simple_no_refill(
-    game_state_with_fixed_shapes: GameState, simple_shape: Shape
+    game_state_with_fixed_shapes: GameState,
+    # Removed: simple_shape: Shape # Not used directly
 ):
     """Test placing a shape without clearing lines, verify NO immediate refill."""
     gs = game_state_with_fixed_shapes  # Uses 3 slots, initially filled
@@ -182,6 +184,8 @@ def test_execute_placement_batch_refill(game_state_with_fixed_shapes: GameState)
 
     print(f"Initial shapes: {gs.shapes}")
     shape_1_coordinates = (0, 4)
+    # Check shape exists before calling can_place
+    assert gs.shapes[0] is not None
     assert GridLogic.can_place(gs.grid_data, gs.shapes[0], *shape_1_coordinates)
     _ = execute_placement(gs, 0, 0, 4, mock_rng)
 
@@ -190,6 +194,8 @@ def test_execute_placement_batch_refill(game_state_with_fixed_shapes: GameState)
     assert gs.shapes[2] is not None
 
     shape_2_coordinates = (0, 3)
+    # Check shape exists before calling can_place
+    assert gs.shapes[1] is not None
     assert GridLogic.can_place(gs.grid_data, gs.shapes[1], *shape_2_coordinates)
     _ = execute_placement(gs, 1, 0, 3, mock_rng)
     assert gs.shapes[0] is None
@@ -197,9 +203,11 @@ def test_execute_placement_batch_refill(game_state_with_fixed_shapes: GameState)
     assert gs.shapes[2] is not None
 
     shape_3_coordinates = (2, 2)
+    # Check shape exists before calling can_place
+    assert gs.shapes[2] is not None
     assert GridLogic.can_place(gs.grid_data, gs.shapes[2], *shape_3_coordinates)
     _ = execute_placement(gs, 2, 2, 2, mock_rng)
-    sleep(0.01)  # Allow time for refill to happen
+    sleep(0.01)  # Allow time for refill to happen (though it should be synchronous)
     assert gs.shapes[0] is not None
     assert gs.shapes[1] is not None
     assert gs.shapes[2] is not None

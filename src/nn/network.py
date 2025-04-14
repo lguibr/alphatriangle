@@ -1,5 +1,6 @@
+# File: src/nn/network.py
 import logging
-from collections.abc import Mapping
+from typing import TYPE_CHECKING, Mapping  # Import Mapping here
 
 import numpy as np
 import torch
@@ -11,6 +12,10 @@ from src.features import extract_state_features
 from src.utils.types import ActionType, PolicyValueOutput, StateType
 
 from .model import AlphaTriangleNet
+
+# Move Mapping import into TYPE_CHECKING block if only used for hints
+if TYPE_CHECKING:
+    from collections.abc import Mapping as MappingABC
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +136,7 @@ class NeuralNetwork:
 
             value_scalar = value.squeeze(0).item()
 
+            # Use Mapping from typing for the type hint
             action_policy: Mapping[ActionType, float] = {
                 i: float(p) for i, p in enumerate(policy_probs)
             }
@@ -195,6 +201,7 @@ class NeuralNetwork:
                         )
                     probs_i /= prob_sum_i
 
+                # Use Mapping from typing for the type hint
                 policy_i: Mapping[ActionType, float] = {
                     i: float(p) for i, p in enumerate(probs_i)
                 }

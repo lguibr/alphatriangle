@@ -21,60 +21,62 @@ def generate_random_shape(rng: random.Random) -> Shape:
 
 
 def refill_shape_slots(game_state: "GameState", rng: random.Random):
-    """Refills ALL empty shape slots in the game state."""
+    """
+    Refills ALL empty shape slots in the game state with new random shapes.
+    This is typically called only when all slots are empty.
+    """
     refilled_count = 0
-    for i in range(len(game_state.shapes)):
+    for i in range(game_state.env_config.NUM_SHAPE_SLOTS):
         if game_state.shapes[i] is None:
             game_state.shapes[i] = generate_random_shape(rng)
             refilled_count += 1
     if refilled_count > 0:
-        # Changed log level from INFO to DEBUG
         logger.debug(f"Refilled {refilled_count} shape slots.")
 
 
 def get_neighbors(r: int, c: int, is_up: bool) -> list[tuple[int, int]]:
-    """Gets potential neighbor coordinates for connectivity check."""
-    neighbors = []
-    # Horizontal neighbors
-    neighbors.append((r, c - 1))
-    neighbors.append((r, c + 1))
-    vertical_neighbors = (r + 1, c) if is_up else (r - 1, c)
-    neighbors.append(vertical_neighbors)
-    return neighbors
+    """Gets potential neighbor coordinates for a triangle."""
+    if is_up:
+        # Up-pointing triangle neighbors: Left, Right, Below
+        return [(r, c - 1), (r, c + 1), (r + 1, c)]
+    else:
+        # Down-pointing triangle neighbors: Left, Right, Above
+        return [(r, c - 1), (r, c + 1), (r - 1, c)]
 
 
 def is_shape_connected(triangles: list[tuple[int, int, bool]]) -> bool:
     """Checks if all triangles in a shape definition are connected."""
-    if not triangles or len(triangles) <= 1:
+    if not triangles or len(triangles) == 1:
         return True
 
     adj: dict[tuple[int, int], list[tuple[int, int]]] = {}
-    triangle_coords = set((r, c) for r, c, _ in triangles)
+    # Use set comprehension
+    triangle_coords = {(r, c) for r, c, _ in triangles}
 
     for r, c, is_up in triangles:
-        coord = (r, c)
-        if coord not in adj:
-            adj[coord] = []
+        pos = (r, c)
+        if pos not in adj:
+            adj[pos] = []
         for nr, nc in get_neighbors(r, c, is_up):
-            neighbor_coord = (nr, nc)
-            if neighbor_coord in triangle_coords:
-                if neighbor_coord not in adj:
-                    adj[neighbor_coord] = []
-                if neighbor_coord not in adj[coord]:
-                    adj[coord].append(neighbor_coord)
-                if coord not in adj[neighbor_coord]:
-                    adj[neighbor_coord].append(coord)
+            neighbor_pos = (nr, nc)
+            if neighbor_pos in triangle_coords:
+                if neighbor_pos not in adj:
+                    adj[neighbor_pos] = []
+                if neighbor_pos not in adj[pos]:
+                    adj[pos].append(neighbor_pos)
+                if pos not in adj[neighbor_pos]:
+                    adj[neighbor_pos].append(pos)
 
     # Perform BFS or DFS to check connectivity
-    start_node = next(iter(triangle_coords))
+    start_node = (triangles[0][0], triangles[0][1])
     visited = {start_node}
     queue = [start_node]
     while queue:
-        u = queue.pop(0)
-        if u in adj:
-            for v in adj[u]:
-                if v not in visited:
-                    visited.add(v)
-                    queue.append(v)
+        node = queue.pop(0)
+        if node in adj:
+            for neighbor in adj[node]:
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
 
     return len(visited) == len(triangle_coords)

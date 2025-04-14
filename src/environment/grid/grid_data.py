@@ -1,5 +1,6 @@
 # File: src/environment/grid/grid_data.py
 import logging
+from pathlib import Path  # Import Path
 
 import numpy as np
 
@@ -45,24 +46,26 @@ def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
     # Link neighbors for the temporary grid to trace lines
     # Need GridData class definition here - use a temporary structure
     class TempGridHolder:
-        def __init__(self, r, c, t):
+        def __init__(self, r: int, c: int, t: list[list[Triangle | None]]):
             self.rows = r
             self.cols = c
             self.triangles = t
 
-        # Add the missing 'valid' method
+        # Add the missing 'valid' method with correct type hint
         def valid(self, r_coord: int, c_coord: int) -> bool:
             """Checks if coordinates are within grid bounds."""
             return 0 <= r_coord < self.rows and 0 <= c_coord < self.cols
 
     temp_grid_data = TempGridHolder(rows, cols, temp_grid)
-    GridLogic.link_neighbors(temp_grid_data)  # Link neighbors on temp grid
+    # Cast to GridData temporarily to satisfy mypy, although it's not strictly correct.
+    # A better solution might involve a protocol or refactoring.
+    GridLogic.link_neighbors(temp_grid_data)  # type: ignore [arg-type]
 
     visited_in_line: set[tuple[int, int, str]] = set()  # (r, c, direction)
 
     for r_start in range(rows):
         for c_start in range(cols):
-            start_tri = temp_grid[r_start][c_start]
+            start_tri: Triangle | None = temp_grid[r_start][c_start]
             if not start_tri:
                 continue  # Skip death cells
 
@@ -70,7 +73,7 @@ def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
             if (r_start, c_start, "h") not in visited_in_line:
                 current_line_h = []
                 # Trace left to find the true start
-                curr = start_tri
+                curr: Triangle | None = start_tri
                 while curr and curr.neighbor_left:
                     curr = curr.neighbor_left
                 # Trace right from the true start
@@ -88,7 +91,9 @@ def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
                 curr = start_tri
                 while curr:
                     is_up = (curr.row + curr.col) % 2 != 0
-                    prev_tri = curr.neighbor_left if is_up else curr.neighbor_vert
+                    prev_tri: Triangle | None = (
+                        curr.neighbor_left if is_up else curr.neighbor_vert
+                    )
                     if prev_tri:
                         curr = prev_tri
                     else:
@@ -208,7 +213,7 @@ class GridData:
             for r, c in line_coords:
                 if self.valid(r, c):
                     # Use the actual grid_data triangles now
-                    tri = self.triangles[r][c]
+                    tri: Triangle = self.triangles[r][c]  # No longer Triangle | None
                     if not tri.is_death:
                         line_triangles.add(tri)
                     else:
@@ -279,7 +284,7 @@ class GridData:
             new_line_triangles: set[Triangle] = set()
             valid_new_line = True
             for old_tri in old_frozen_line:
-                new_tri = old_to_new_tri_map.get(hash(old_tri))
+                new_tri: Triangle | None = old_to_new_tri_map.get(hash(old_tri))
                 if new_tri:
                     new_line_triangles.add(new_tri)
                 else:

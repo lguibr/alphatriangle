@@ -2,23 +2,16 @@
 import logging
 import os
 import sys
+from pathlib import Path  # Import Path
 from typing import Annotated
 
 import typer
 
-# Ensure the src directory is in the Python path *if running directly*,
-# but this shouldn't be necessary when installed as a package.
-# Keep it for potential direct script execution during development.
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(script_dir)
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-# Import necessary functions/classes AFTER potentially modifying sys.path
+# Move imports to the top
 try:
     from src import config
     from src.app import Application
-    from src.mcts import MCTSConfig  # Import Pydantic MCTSConfig
+    from src.config import MCTSConfig  # Import Pydantic MCTSConfig
     from src.training.runners import (
         run_training_headless_mode,
         run_training_visual_mode,
@@ -29,6 +22,15 @@ except ImportError as e:
     print("This might happen if the package is not installed correctly or")
     print("if running the script directly without the project root in PYTHONPATH.")
     sys.exit(1)
+
+
+# Ensure the src directory is in the Python path *if running directly*,
+# but this shouldn't be necessary when installed as a package.
+# Keep it for potential direct script execution during development.
+script_dir = Path(__file__).parent
+project_root = script_dir.parent  # Go up one level
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 
 app = typer.Typer(
@@ -90,7 +92,8 @@ def run_interactive_mode(mode: str, seed: int, log_level: str):
     set_random_seeds(seed)
 
     # Instantiate MCTSConfig needed for validation function
-    mcts_config = MCTSConfig()  # Instantiate Pydantic model
+    # Provide default values
+    mcts_config = MCTSConfig()
     # Pass MCTSConfig instance to validation
     config.print_config_info_and_validate(mcts_config)
 
@@ -152,7 +155,7 @@ def train(
     logger = logging.getLogger(__name__)  # Get logger after setup
 
     # --- Configuration Overrides ---
-    # Create default configs first
+    # Create default configs first, providing all required args
     train_config_override = config.TrainConfig()
     persist_config_override = config.PersistenceConfig()
 

@@ -1,5 +1,6 @@
 # File: src/stats/plot_utils.py
 import logging
+from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,13 +18,15 @@ def calculate_rolling_average(data: list[float], window: int) -> list[float]:
     if window > len(data):
         # If window is larger than data, return average of all data for all points
         avg = np.mean(data)
-        return [avg] * len(data)
+        # Cast to float explicitly
+        return [float(avg)] * len(data)
     # Use convolution for efficient rolling average
     weights = np.ones(window) / window
     rolling_avg = np.convolve(data, weights, mode="valid")
     # Pad the beginning to match the original length
-    padding = [np.mean(data[:i]) for i in range(1, window)]
-    return padding + list(rolling_avg)
+    padding = [float(np.mean(data[:i])) for i in range(1, window)]
+    # Cast result to list of floats
+    return padding + [float(x) for x in rolling_avg]
 
 
 def calculate_trend_line(
@@ -153,13 +156,15 @@ def render_single_plot(
     # Format x-axis (steps)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=4, integer=True))
     ax.xaxis.set_major_formatter(
-        FuncFormatter(lambda x, p: f"{int(x / 1000)}k" if x >= 1000 else f"{int(x)}")
+        # Remove unused 'p' argument
+        FuncFormatter(lambda x, _: f"{int(x / 1000)}k" if x >= 1000 else f"{int(x)}")
     )
     ax.set_xlabel("Step", fontsize=8, color="gray")
 
     # Format y-axis
     ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda y, p: format_value(y)))
+    # Remove unused 'p' argument
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: format_value(y)))
 
     # Add current value text
     current_val_str = format_value(values[-1])

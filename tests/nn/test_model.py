@@ -75,9 +75,9 @@ def test_model_forward_pass(
     assert value.dtype == torch.float32
 
     # Check value range (should be within [-1, 1] due to Tanh)
-    assert torch.all(value >= -1.0) and torch.all(value <= 1.0), (
-        f"Value out of range [-1, 1]: {value}"
-    )
+    assert torch.all(value >= -1.0) and torch.all(
+        value <= 1.0
+    ), f"Value out of range [-1, 1]: {value}"
 
 
 @pytest.mark.parametrize(
@@ -85,7 +85,7 @@ def test_model_forward_pass(
 )
 def test_model_forward_transformer_toggle(use_transformer: bool, env_config: EnvConfig):
     """Test forward pass with transformer enabled/disabled."""
-    # Create a specific model config for this test
+    # Create a specific model config for this test, providing all required fields
     model_config_test = ModelConfig(
         GRID_INPUT_CHANNELS=1,
         CONV_FILTERS=[4, 8],  # Simple CNN
@@ -93,6 +93,7 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
         CONV_STRIDES=[1, 1],
         CONV_PADDING=[1, 1],
         NUM_RESIDUAL_BLOCKS=0,
+        RESIDUAL_BLOCK_FILTERS=8,  # Provide default even if blocks=0
         USE_TRANSFORMER=use_transformer,
         TRANSFORMER_DIM=16,  # Make different from CNN output
         TRANSFORMER_HEADS=2,
@@ -102,6 +103,8 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
         POLICY_HEAD_DIMS=[env_config.ACTION_DIM],
         VALUE_HEAD_DIMS=[1],
         OTHER_NN_INPUT_FEATURES_DIM=10,
+        ACTIVATION_FUNCTION="ReLU",  # Provide default
+        USE_BATCH_NORM=True,  # Provide default
     )
     model = AlphaTriangleNet(model_config_test, env_config)
     batch_size = 2

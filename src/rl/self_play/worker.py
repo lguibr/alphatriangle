@@ -2,7 +2,7 @@
 import logging
 import random
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import ray
@@ -19,12 +19,13 @@ from src.mcts import (
 )
 from src.nn import NeuralNetwork
 from src.utils import get_device, set_random_seeds
-from src.utils.types import Experience, PolicyTargetMapping, StateType
 
-from ..types import SelfPlayResult
-
+# Move application type imports into TYPE_CHECKING block
 if TYPE_CHECKING:
     from src.stats import StatsCollectorActor  # Import for type hinting
+    from src.utils.types import Experience, PolicyTargetMapping, StateType
+
+from ..types import SelfPlayResult
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,8 @@ class SelfPlayWorker:
             try:
                 # Send a copy to avoid potential issues with shared state
                 state_copy = game_state.copy()
-                self.stats_collector_actor.update_worker_game_state.remote(
+                # Correctly call remote method
+                self.stats_collector_actor.update_worker_game_state.remote(  # type: ignore
                     self.actor_id, state_copy
                 )
                 logger.debug(
@@ -141,7 +143,8 @@ class SelfPlayWorker:
                         game_state.current_step,
                     ),
                 }
-                self.stats_collector_actor.log_batch.remote(step_stats)
+                # Correctly call remote method
+                self.stats_collector_actor.log_batch.remote(step_stats)  # type: ignore
             except Exception as e:
                 logger.error(f"Failed to log step stats to collector: {e}")
 
@@ -157,7 +160,8 @@ class SelfPlayWorker:
         episode_seed = self.seed + random.randint(0, 1000)
         game = GameState(self.env_config, initial_seed=episode_seed)
 
-        raw_experiences: list[tuple[StateType, PolicyTargetMapping, float]] = []
+        # Use TYPE_CHECKING import for Experience type hint
+        raw_experiences: list[tuple["StateType", "PolicyTargetMapping", float]] = []
         step_root_visits: list[int] = []
         step_tree_depths: list[int] = []
         step_simulations: list[int] = []
@@ -230,7 +234,7 @@ class SelfPlayWorker:
             feature_start_time = time.monotonic()
             try:
                 # Extract features from the state *before* taking the action
-                state_features: StateType = extract_state_features(
+                state_features: "StateType" = extract_state_features(
                     game, self.model_config
                 )
             except Exception as e:
@@ -307,7 +311,8 @@ class SelfPlayWorker:
             f"Episode finished. Outcome: {final_outcome}, Steps: {game.current_step}"
         )
 
-        processed_experiences: list[Experience] = [
+        # Use TYPE_CHECKING import for Experience type hint
+        processed_experiences: list["Experience"] = [
             (state_type, policy, final_outcome)
             for state_type, policy, _ in raw_experiences
         ]
@@ -317,11 +322,12 @@ class SelfPlayWorker:
         avg_depth_episode = np.mean(step_tree_depths) if step_tree_depths else 0.0
 
         # No longer need to return final_game_state
+        # Cast numpy floats to standard floats for Pydantic model
         return SelfPlayResult(
             episode_experiences=processed_experiences,
             final_score=final_outcome,
             episode_steps=game.current_step,
             total_simulations=total_sims_episode,
-            avg_root_visits=avg_visits_episode,
-            avg_tree_depth=avg_depth_episode,
+            avg_root_visits=float(avg_visits_episode),
+            avg_tree_depth=float(avg_depth_episode),
         )

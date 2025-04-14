@@ -1,4 +1,6 @@
 # File: tests/mcts/test_expansion.py
+from typing import Any
+
 import pytest
 
 from src.mcts.core.node import Node
@@ -17,7 +19,9 @@ from .conftest import (  # Import from conftest (local fixtures)
 def test_expand_node_with_policy_basic(root_node_mock_state: Node):
     """Test basic node expansion with a valid policy."""
     node = root_node_mock_state
-    valid_actions = node.state.valid_actions()
+    # Cast node.state to Any temporarily to access mock method
+    mock_state: Any = node.state
+    valid_actions = mock_state.valid_actions()
     # Simple policy: uniform over valid actions
     policy = {action: 1.0 / len(valid_actions) for action in valid_actions}
 
@@ -43,7 +47,9 @@ def test_expand_node_with_policy_basic(root_node_mock_state: Node):
 def test_expand_node_with_policy_partial(root_node_mock_state: Node):
     """Test expansion when policy doesn't cover all valid actions (should assign 0 prior)."""
     node = root_node_mock_state
-    valid_actions = node.state.valid_actions()  # e.g., [0, 1, ..., 8] for 3x3
+    # Cast node.state to Any temporarily to access mock method
+    mock_state: Any = node.state
+    valid_actions = mock_state.valid_actions()  # e.g., [0, 1, ..., 8] for 3x3
     # Policy only covers action 0 and 1
     policy = {0: 0.6, 1: 0.4}
 
@@ -67,7 +73,9 @@ def test_expand_node_with_policy_partial(root_node_mock_state: Node):
 def test_expand_node_with_policy_empty_valid_actions(root_node_mock_state: Node):
     """Test expansion when the node's state has no valid actions (but isn't terminal yet)."""
     node = root_node_mock_state
-    node.state._valid_actions = []  # No valid actions
+    # Cast node.state to Any temporarily to access mock attribute
+    mock_state: Any = node.state
+    mock_state._valid_actions = []  # No valid actions
     policy = {0: 1.0}  # Policy doesn't matter here
 
     expansion.expand_node_with_policy(node, policy)
@@ -86,7 +94,7 @@ def test_expand_node_with_policy_already_expanded(root_node_mock_state: Node):
     # Manually add a child to simulate expansion
     # Pass the env_config from the root node's state
     node.children[0] = Node(
-        state=MockGameState(current_step=1, env_config=node.state.env_config),
+        state=MockGameState(current_step=1, env_config=node.state.env_config),  # type: ignore [arg-type]
         parent=node,
         action_taken=0,
     )
@@ -102,7 +110,9 @@ def test_expand_node_with_policy_already_expanded(root_node_mock_state: Node):
 def test_expand_node_with_policy_terminal_node(root_node_mock_state: Node):
     """Test that expanding a terminal node does nothing."""
     node = root_node_mock_state
-    node.state._is_over = True  # Mark as terminal
+    # Cast node.state to Any temporarily to access mock attribute
+    mock_state: Any = node.state
+    mock_state._is_over = True  # Mark as terminal
     policy = {0: 1.0}
 
     assert not node.is_expanded
@@ -115,7 +125,9 @@ def test_expand_node_with_invalid_policy_content(root_node_mock_state: Node):
     # Note: The main search loop should validate policy *before* calling expand.
     # This test checks if expand handles it defensively (it currently clamps).
     node = root_node_mock_state
-    valid_actions = node.state.valid_actions()
+    # Cast node.state to Any temporarily to access mock method
+    mock_state: Any = node.state
+    valid_actions = mock_state.valid_actions()
     policy = {0: 1.5, 1: -0.5}  # Invalid priors
 
     expansion.expand_node_with_policy(node, policy)

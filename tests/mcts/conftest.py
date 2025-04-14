@@ -1,36 +1,24 @@
 # File: tests/mcts/conftest.py
-import pytest
-import numpy as np
-from typing import Dict, List, Tuple, Mapping, Optional
+import os
 import random
-import torch
+import sys
+from collections.abc import Mapping
+from typing import Any, Optional
 
-# REMOVED: import torch.optim as optim
+import numpy as np
+import pytest
 
 # Import necessary classes from the source code
-import sys
-import os
-
 src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-from src.environment import GameState, EnvConfig
+from src.environment import EnvConfig
 from src.mcts.core.node import Node
+from src.utils.types import ActionType, PolicyValueOutput
 
-# REMOVED: Import ModelConfig and TrainConfig here as they are used in fixtures below
-# from src.config import MCTSConfig, ModelConfig, TrainConfig
-from src.config import (
-    MCTSConfig,
-)  # Keep MCTSConfig if needed locally, but it's top-level now
-from src.utils.types import (
-    ActionType,
-    PolicyValueOutput,
-    # REMOVED: StateType, Experience,
-)
-
-# REMOVED: from src.nn import NeuralNetwork, AlphaTriangleNet
-# REMOVED: from src.rl import ExperienceBuffer, Trainer
+# Use default NumPy random number generator
+rng = np.random.default_rng()
 
 
 # --- Mock GameState ---
@@ -42,25 +30,23 @@ class MockGameState:
         current_step: int = 0,
         is_terminal: bool = False,
         outcome: float = 0.0,
-        valid_actions: Optional[List[ActionType]] = None,
-        env_config: Optional[EnvConfig] = None,
+        valid_actions: list[ActionType] | None = None,
+        env_config: EnvConfig | None = None,
     ):
         self.current_step = current_step
         self._is_over = is_terminal
         self._outcome = outcome
-        if env_config:
-            self.env_config = env_config
-        else:
-            # Use a smaller default for faster tests if not specified
-            self.env_config = EnvConfig(ROWS=3, COLS=3, COLS_PER_ROW=[3, 3, 3])
-
-        default_valid = list(range(self.env_config.ACTION_DIM))
-        if valid_actions is None:
-            self._valid_actions = default_valid
-        else:
-            self._valid_actions = [
-                a for a in valid_actions if 0 <= a < self.env_config.ACTION_DIM
-            ]
+        # Use a default EnvConfig if none provided, needed for action dim
+        self.env_config = (
+            env_config
+            if env_config
+            else EnvConfig(ROWS=3, COLS=3, COLS_PER_ROW=[3, 3, 3], NUM_SHAPE_SLOTS=1)
+        )
+        self._valid_actions = (
+            valid_actions
+            if valid_actions is not None
+            else list(range(self.env_config.ACTION_DIM))
+        )
 
     def is_over(self) -> bool:
         return self._is_over
@@ -70,10 +56,11 @@ class MockGameState:
             raise ValueError("Cannot get outcome of non-terminal state.")
         return self._outcome
 
-    def valid_actions(self) -> List[ActionType]:
+    def valid_actions(self) -> list[ActionType]:
         return self._valid_actions
 
     def copy(self) -> "MockGameState":
+        # Simple copy for testing, doesn't need full state copy
         return MockGameState(
             self.current_step,
             self._is_over,
@@ -82,9 +69,7 @@ class MockGameState:
             self.env_config,
         )
 
-    def step(
-        self, action: ActionType
-    ) -> Tuple[float, bool]:  # MODIFIED: Return signature changed
+    def step(self, action: ActionType) -> tuple[float, bool]:
         """
         Simulates taking a step. Returns (reward, done).
         Matches the real GameState.step signature.
@@ -105,7 +90,7 @@ class MockGameState:
             self._valid_actions.pop(random.randrange(len(self._valid_actions)))
 
         # Return dummy reward and the 'done' status
-        return 0.0, self._is_over  # MODIFIED: Return only two values
+        return 0.0, self._is_over
 
     def __hash__(self):
         return hash(
@@ -129,15 +114,15 @@ class MockNetworkEvaluator:
 
     def __init__(
         self,
-        default_policy: Optional[Mapping[ActionType, float]] = None,
+        default_policy: Mapping[ActionType, float] | None = None,
         default_value: float = 0.5,
         action_dim: int = 9,
     ):
         self._default_policy = default_policy
         self._default_value = default_value
         self._action_dim = action_dim
-        self.evaluation_history: List[MockGameState] = []
-        self.batch_evaluation_history: List[List[MockGameState]] = []
+        self.evaluation_history: list[MockGameState] = []
+        self.batch_evaluation_history: list[list[MockGameState]] = []
 
     def _get_policy(self, state: MockGameState) -> Mapping[ActionType, float]:
         if self._default_policy is not None:
@@ -151,7 +136,7 @@ class MockNetworkEvaluator:
                 policy = {a: p / policy_sum for a, p in policy.items()}
             elif not policy and valid_actions:  # Handle empty policy for valid actions
                 prob = 1.0 / len(valid_actions)
-                policy = {a: prob for a in valid_actions}
+                policy = dict.fromkeys(valid_actions, prob)
             return policy
 
         # Default uniform policy
@@ -159,18 +144,18 @@ class MockNetworkEvaluator:
         if not valid_actions:
             return {}
         prob = 1.0 / len(valid_actions)
-        return {a: prob for a in valid_actions}
+        return dict.fromkeys(valid_actions, prob)
 
     def evaluate(self, state: MockGameState) -> PolicyValueOutput:
         self.evaluation_history.append(state)
         self._action_dim = state.env_config.ACTION_DIM
         policy = self._get_policy(state)
         # Create full policy map respecting action_dim
-        full_policy = {a: 0.0 for a in range(self._action_dim)}
+        full_policy = dict.fromkeys(range(self._action_dim), 0.0)
         full_policy.update(policy)
         return full_policy, self._default_value
 
-    def evaluate_batch(self, states: List[MockGameState]) -> List[PolicyValueOutput]:
+    def evaluate_batch(self, states: list[MockGameState]) -> list[PolicyValueOutput]:
         self.batch_evaluation_history.append(states)
         results = []
         for state in states:
@@ -196,7 +181,8 @@ def root_node_mock_state(mock_env_config: EnvConfig) -> Node:
         valid_actions=list(range(mock_env_config.ACTION_DIM)),
         env_config=mock_env_config,
     )
-    return Node(state=state)
+    # Cast MockGameState to Any temporarily to satisfy Node's type hint
+    return Node(state=state)  # type: ignore [arg-type]
 
 
 @pytest.fixture
@@ -205,26 +191,30 @@ def expanded_node_mock_state(
 ) -> Node:
     """Provides an expanded root node with mock children using mock EnvConfig."""
     root = root_node_mock_state
-    mock_evaluator._action_dim = root.state.env_config.ACTION_DIM
-    policy, value = mock_evaluator.evaluate(root.state)
+    # Cast root.state back to MockGameState for the evaluator
+    mock_state = root.state
+    mock_evaluator._action_dim = mock_state.env_config.ACTION_DIM
+    policy, value = mock_evaluator.evaluate(mock_state)  # type: ignore [arg-type]
     # Ensure policy is not empty before expanding
     if not policy:
         policy = (
-            {
-                a: 1.0 / len(root.state.valid_actions())
-                for a in root.state.valid_actions()
-            }
-            if root.state.valid_actions()
+            dict.fromkeys(
+                mock_state.valid_actions(), 1.0 / len(mock_state.valid_actions())
+            )
+            if mock_state.valid_actions()
             else {}
         )
 
-    for action in root.state.valid_actions():
+    for action in mock_state.valid_actions():
         prior = policy.get(action, 0.0)
         child_state = MockGameState(
-            current_step=1, valid_actions=[0, 1], env_config=root.state.env_config
+            current_step=1, valid_actions=[0, 1], env_config=mock_state.env_config
         )
         child = Node(
-            state=child_state, parent=root, action_taken=action, prior_probability=prior
+            state=child_state,  # type: ignore [arg-type]
+            parent=root,
+            action_taken=action,
+            prior_probability=prior,
         )
         root.children[action] = child
     root.visit_count = 1  # Simulate one visit to root after expansion
@@ -254,7 +244,7 @@ def deep_expanded_node_mock_state(
     # --- Configure Root Node to strongly prefer Action 0 ---
     root.visit_count = 100  # Give root significant visits
     child0 = root.children[0]
-    child1 = root.children[1]
+    # child1 = root.children[1] # Unused variable
 
     # Child 0: High visit count, good value, high prior (after potential noise)
     child0.visit_count = 80
@@ -271,18 +261,20 @@ def deep_expanded_node_mock_state(
     # --- Configure Child 0 to strongly prefer Action 1 ---
     # Ensure Child 0 has children (expand it manually)
     # Use evaluator to get a policy, then manually create children
-    policy_gc, value_gc = mock_evaluator.evaluate(child0.state)
+    # Cast child0.state back to MockGameState for the evaluator
+    mock_child0_state = child0.state
+    policy_gc, value_gc = mock_evaluator.evaluate(mock_child0_state)  # type: ignore [arg-type]
     if not policy_gc:  # Handle case where mock state has no valid actions
         policy_gc = (
-            {
-                a: 1.0 / len(child0.state.valid_actions())
-                for a in child0.state.valid_actions()
-            }
-            if child0.state.valid_actions()
+            dict.fromkeys(
+                mock_child0_state.valid_actions(),
+                1.0 / len(mock_child0_state.valid_actions()),
+            )
+            if mock_child0_state.valid_actions()
             else {}
         )
 
-    valid_gc_actions = child0.state.valid_actions()
+    valid_gc_actions = mock_child0_state.valid_actions()
     if (
         1 not in valid_gc_actions and valid_gc_actions
     ):  # If action 1 not valid, pick first valid one
@@ -296,10 +288,10 @@ def deep_expanded_node_mock_state(
     for action_gc in valid_gc_actions:
         prior_gc = policy_gc.get(action_gc, 0.0)
         grandchild_state = MockGameState(
-            current_step=2, valid_actions=[0], env_config=child0.state.env_config
+            current_step=2, valid_actions=[0], env_config=mock_child0_state.env_config
         )
         grandchild = Node(
-            state=grandchild_state,
+            state=grandchild_state,  # type: ignore [arg-type]
             parent=child0,
             action_taken=action_gc,
             prior_probability=prior_gc,

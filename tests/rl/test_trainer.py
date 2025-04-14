@@ -2,7 +2,7 @@
 import pytest
 import torch
 import numpy as np
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from src.rl import Trainer, ExperienceBuffer
 from src.nn import NeuralNetwork
@@ -88,8 +88,14 @@ def buffer_uniform(
     """Provides a filled uniform buffer."""
     buffer = ExperienceBuffer(train_config_uniform)
     for i in range(buffer.min_size_to_train + 5):
-        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
-        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i * 0.1)
+        # Ensure dict values are copied correctly
+        state_copy: StateType = {k: v.copy() for k, v in mock_experience[0].items()}
+        state_copy["grid"] += i  # Modify state slightly
+        exp_copy: Experience = (
+            state_copy,
+            mock_experience[1],
+            mock_experience[2] + i * 0.1,
+        )
         buffer.add(exp_copy)
     return buffer
 
@@ -102,8 +108,14 @@ def buffer_per(
     """Provides a filled PER buffer."""
     buffer = ExperienceBuffer(train_config_per)
     for i in range(buffer.min_size_to_train + 5):
-        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
-        exp_copy = (state_copy, mock_experience[1], mock_experience[2] + i * 0.1)
+        # Ensure dict values are copied correctly
+        state_copy: StateType = {k: v.copy() for k, v in mock_experience[0].items()}
+        state_copy["grid"] += i  # Modify state slightly
+        exp_copy: Experience = (
+            state_copy,
+            mock_experience[1],
+            mock_experience[2] + i * 0.1,
+        )
         buffer.add(exp_copy)  # Adds with max priority
     return buffer
 
@@ -169,7 +181,9 @@ def test_train_step_uniform(trainer_uniform: Trainer, buffer_uniform: Experience
 
     # Check if model parameters changed
     params_changed = False
-    for p_initial, p_final in zip(initial_params, trainer_uniform.model.parameters()):
+    for p_initial, p_final in zip(
+        initial_params, trainer_uniform.model.parameters(), strict=True
+    ):
         if not torch.equal(p_initial, p_final):
             params_changed = True
             break
@@ -202,7 +216,9 @@ def test_train_step_per(trainer_per: Trainer, buffer_per: ExperienceBuffer):
 
     # Check if model parameters changed
     params_changed = False
-    for p_initial, p_final in zip(initial_params, trainer_per.model.parameters()):
+    for p_initial, p_final in zip(
+        initial_params, trainer_per.model.parameters(), strict=True
+    ):
         if not torch.equal(p_initial, p_final):
             params_changed = True
             break

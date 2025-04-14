@@ -77,13 +77,17 @@ class ModelConfig(BaseModel):
     @model_validator(mode="after")
     def check_residual_filter_match(self) -> "ModelConfig":
         # Check if the input to the first residual block matches the last conv filter
-        if self.NUM_RESIDUAL_BLOCKS > 0 and self.CONV_FILTERS:
-            if self.CONV_FILTERS[-1] != self.RESIDUAL_BLOCK_FILTERS:
-                # This warning is now handled by the projection layer in the model if needed
-                # print(
-                #     f"Warning: RESIDUAL_BLOCK_FILTERS ({self.RESIDUAL_BLOCK_FILTERS}) does not match last CONV_FILTER ({self.CONV_FILTERS[-1]}). Ensure the model handles this transition (e.g., with a 1x1 conv)."
-                # )
-                pass  # Model handles projection if needed
+        # Combine nested if statements
+        if (
+            self.NUM_RESIDUAL_BLOCKS > 0
+            and self.CONV_FILTERS
+            and self.CONV_FILTERS[-1] != self.RESIDUAL_BLOCK_FILTERS
+        ):
+            # This warning is now handled by the projection layer in the model if needed
+            # print(
+            #     f"Warning: RESIDUAL_BLOCK_FILTERS ({self.RESIDUAL_BLOCK_FILTERS}) does not match last CONV_FILTER ({self.CONV_FILTERS[-1]}). Ensure the model handles this transition (e.g., with a 1x1 conv)."
+            # )
+            pass  # Model handles projection if needed
         return self
 
     @model_validator(mode="after")

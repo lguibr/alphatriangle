@@ -1,15 +1,20 @@
+# File: src/features/extractor.py
 import logging
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from src.config import ModelConfig
-from src.environment import GameState
+
+# Import GameState only for type checking
+if TYPE_CHECKING:
+    from src.environment import GameState
+
 from src.utils.types import StateType
 
 from . import grid_features
 
 logger = logging.getLogger(__name__)
-
 
 
 class GameStateFeatures:
@@ -25,27 +30,27 @@ class GameStateFeatures:
         Returns grid state as a single channel numpy array.
         Values: 1.0 (occupied), 0.0 (empty playable), -1.0 (death cell).
         Orientation is implicit.
+        Shape: (C, H, W) where C is GRID_INPUT_CHANNELS
         """
         rows, cols = self.env_config.ROWS, self.env_config.COLS
-        grid_state = np.zeros((rows, cols), dtype=np.float32)
+        # Initialize with correct number of channels
+        grid_state = np.zeros(
+            (self.model_config.GRID_INPUT_CHANNELS, rows, cols), dtype=np.float32
+        )
 
+        # Populate the first channel (or the only channel if C=1)
         for r in range(rows):
             for c in range(cols):
                 tri = self.gs.grid_data.triangles[r][c]
                 if tri.is_death:
-                    grid_state[r, c] = -1.0
+                    grid_state[0, r, c] = -1.0
                 elif tri.is_occupied:
-                    grid_state[r, c] = 1.0
+                    grid_state[0, r, c] = 1.0
                 else:
-                    grid_state[r, c] = 0.0
+                    grid_state[0, r, c] = 0.0
 
-        grid_state = np.expand_dims(grid_state, axis=0)
-
-        expected_channels = self.model_config.GRID_INPUT_CHANNELS
-        if grid_state.shape[0] != expected_channels:
-            raise ValueError(
-                f"Mismatch between extracted grid channels ({grid_state.shape[0]}) and ModelConfig.GRID_INPUT_CHANNELS ({expected_channels})"
-            )
+        # Add more channels here if GRID_INPUT_CHANNELS > 1
+        # Example: grid_state[1, :, :] = ... (e.g., color features)
 
         if not np.all(np.isfinite(grid_state)):
             logger.error(
@@ -117,6 +122,7 @@ class GameStateFeatures:
         features[4] = (bump / (cols - 1)) / rows if cols > 1 and rows > 0 else 0
         features[5] = np.clip(self.gs.pieces_placed_this_episode / 100.0, 0, 1)
 
+        # Ensure return type is ndarray and handle potential NaNs
         return np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
 
     def get_combined_other_features(self) -> np.ndarray:

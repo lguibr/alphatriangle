@@ -6,11 +6,12 @@ import pytest
 import torch
 
 from src.config import EnvConfig, ModelConfig, TrainConfig
+from src.environment import GameState  # Import real GameState
 from src.nn import AlphaTriangleNet, NeuralNetwork
 from src.utils.types import StateType
 
 # REMOVED: from ..mcts.conftest import mock_env_config, mock_model_config, mock_train_config, MockGameState # Import shared fixtures
-from tests.mcts.conftest import MockGameState  # Import only MockGameState
+# from tests.mcts.conftest import MockGameState  # Import only MockGameState
 
 
 # Use shared fixtures implicitly via pytest injection
@@ -48,10 +49,10 @@ def nn_interface(
 
 
 @pytest.fixture
-def mock_game_state(env_config: EnvConfig) -> MockGameState:
-    """Provides a mock GameState object."""
-    # Use the mock game state from MCTS tests for simplicity
-    return MockGameState(env_config=env_config)
+def mock_game_state(env_config: EnvConfig) -> GameState:
+    """Provides a real GameState object for testing NN interface."""
+    # Use a real GameState instance
+    return GameState(config=env_config, initial_seed=123)
 
 
 @pytest.fixture
@@ -83,7 +84,7 @@ def test_nn_initialization(nn_interface: NeuralNetwork, device: torch.device):
 def test_state_to_tensors(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
-    mock_game_state: MockGameState,
+    mock_game_state: GameState,  # Use real GameState
     mock_state_type_nn: StateType,
 ):
     """Test the internal _state_to_tensors method mocks feature extraction."""
@@ -105,7 +106,7 @@ def test_state_to_tensors(
 def test_batch_states_to_tensors(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
-    mock_game_state: MockGameState,
+    mock_game_state: GameState,  # Use real GameState
     mock_state_type_nn: StateType,
 ):
     """Test the internal _batch_states_to_tensors method."""
@@ -113,7 +114,8 @@ def test_batch_states_to_tensors(
     mock_states = [mock_game_state.copy() for _ in range(batch_size)]
     # Make mock return slightly different arrays each time if needed
     mock_extract.side_effect = [
-        {k: v + i * 0.1 for k, v in mock_state_type_nn.items()}
+        # Ensure features are copied correctly
+        {k: v.copy() + i * 0.1 for k, v in mock_state_type_nn.items()}
         for i in range(batch_size)
     ]
 
@@ -135,7 +137,7 @@ def test_batch_states_to_tensors(
 def test_evaluate_single(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
-    mock_game_state: MockGameState,
+    mock_game_state: GameState,  # Use real GameState
     mock_state_type_nn: StateType,
     env_config: EnvConfig,
 ):
@@ -150,9 +152,9 @@ def test_evaluate_single(
     assert all(
         isinstance(k, int) and isinstance(v, float) for k, v in policy_map.items()
     )
-    assert abs(sum(policy_map.values()) - 1.0) < 1e-5, (
-        f"Policy probs sum to {sum(policy_map.values())}"
-    )
+    assert (
+        abs(sum(policy_map.values()) - 1.0) < 1e-5
+    ), f"Policy probs sum to {sum(policy_map.values())}"
     assert -1.0 <= value <= 1.0
 
 
@@ -160,7 +162,7 @@ def test_evaluate_single(
 def test_evaluate_batch(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
-    mock_game_state: MockGameState,
+    mock_game_state: GameState,  # Use real GameState
     mock_state_type_nn: StateType,
     env_config: EnvConfig,
 ):
@@ -168,7 +170,8 @@ def test_evaluate_batch(
     batch_size = 3
     mock_states = [mock_game_state.copy() for _ in range(batch_size)]
     mock_extract.side_effect = [
-        {k: v + i * 0.1 for k, v in mock_state_type_nn.items()}
+        # Ensure features are copied correctly
+        {k: v.copy() + i * 0.1 for k, v in mock_state_type_nn.items()}
         for i in range(batch_size)
     ]
 
@@ -217,18 +220,18 @@ def test_get_set_weights(nn_interface: NeuralNetwork):
         assert key in new_weights
         # Compare on CPU
         if initial_weights[key].dtype.is_floating_point:
-            assert torch.allclose(modified_weights[key], new_weights[key], atol=1e-6), (
-                f"Weight mismatch for key {key}"
-            )
+            assert torch.allclose(
+                modified_weights[key], new_weights[key], atol=1e-6
+            ), f"Weight mismatch for key {key}"
         else:
-            assert torch.equal(initial_weights[key], new_weights[key]), (
-                f"Non-float tensor mismatch for key {key}"
-            )
+            assert torch.equal(
+                initial_weights[key], new_weights[key]
+            ), f"Non-float tensor mismatch for key {key}"
 
     # Test setting back original weights
     nn_interface.set_weights(initial_weights)
     final_weights = nn_interface.get_weights()
     for key in initial_weights:
-        assert torch.equal(initial_weights[key], final_weights[key]), (
-            f"Weight mismatch after setting back original for key {key}"
-        )
+        assert torch.equal(
+            initial_weights[key], final_weights[key]
+        ), f"Weight mismatch after setting back original for key {key}"

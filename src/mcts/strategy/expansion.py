@@ -1,7 +1,11 @@
 # File: src/mcts/strategy/expansion.py
 import logging
+from typing import TYPE_CHECKING
 
-from ...utils.types import ActionType
+# Move ActionType import into TYPE_CHECKING block
+if TYPE_CHECKING:
+    from ...utils.types import ActionType
+
 from ..core.node import Node
 from ..core.types import (
     ActionPolicyMapping,
@@ -26,7 +30,8 @@ def expand_node_with_policy(node: Node, action_policy: ActionPolicyMapping):
 
     logger.debug(f"[Expand] Expanding Node: {node}")
 
-    valid_actions: list[ActionType] = node.state.valid_actions()
+    # Use TYPE_CHECKING import for ActionType type hint
+    valid_actions: list["ActionType"] = node.state.valid_actions()
     logger.debug(
         f"[Expand] Found {len(valid_actions)} valid actions for state step {node.state.current_step}."
     )

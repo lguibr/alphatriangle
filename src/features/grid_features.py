@@ -1,3 +1,4 @@
+# File: src/features/grid_features.py
 import numpy as np
 from numba import njit, prange
 
@@ -19,7 +20,7 @@ def get_column_heights(
 
 @njit(cache=True)
 def count_holes(
-    occupied: np.ndarray, death: np.ndarray, heights: np.ndarray, rows: int, cols: int
+    occupied: np.ndarray, death: np.ndarray, heights: np.ndarray, _rows: int, cols: int
 ) -> int:
     """Counts the number of empty, non-death cells below the column height."""
     holes = 0
