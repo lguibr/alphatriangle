@@ -66,6 +66,18 @@ def mock_game_state(env_config: EnvConfig) -> GameState:
     return GameState(config=env_config, initial_seed=123)
 
 
+# --- Fixture providing the batch of copied states ---
+@pytest.fixture
+def mock_game_state_batch(mock_game_state: GameState) -> list[GameState]:
+    """Provides a list of copied GameState objects."""
+    batch_size = 3
+    # The .copy() call happens here, where mypy knows mock_game_state is GameState
+    return [mock_game_state.copy() for _ in range(batch_size)]
+
+
+# --- End fixture ---
+
+
 @pytest.fixture
 def mock_state_type_nn(model_config: ModelConfig, env_config: EnvConfig) -> StateType:
     """Creates a mock StateType dictionary compatible with the NN test config."""
@@ -91,9 +103,7 @@ def test_nn_initialization(nn_interface: NeuralNetwork, device: torch.device):
 
 
 # --- Test Feature Extraction Integration (using mock) ---
-# --- CHANGE: Patch target changed from 'alphatriangle...' to 'alphatriangle...' ---
 @patch("alphatriangle.nn.network.extract_state_features")
-# --- END CHANGE ---
 def test_state_to_tensors(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
@@ -115,25 +125,29 @@ def test_state_to_tensors(
     assert other_t.shape[1] == nn_interface.model_config.OTHER_NN_INPUT_FEATURES_DIM
 
 
-# --- CHANGE: Patch target changed from 'alphatriangle...' to 'alphatriangle...' ---
 @patch("alphatriangle.nn.network.extract_state_features")
-# --- END CHANGE ---
 def test_batch_states_to_tensors(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
-    mock_game_state: GameState,  # Use real GameState
+    # --- Use the fixture that provides the already copied batch ---
+    mock_game_state_batch: list[GameState],
     mock_state_type_nn: StateType,
 ):
     """Test the internal _batch_states_to_tensors method."""
-    batch_size = 3
-    # Use the copy method of the real GameState
-    mock_states = [mock_game_state.copy() for _ in range(batch_size)]
+    # --- Use the fixture directly, no more .copy() needed here ---
+    mock_states = mock_game_state_batch
+    batch_size = len(mock_states)
+    # --- End change ---
     # Make mock return slightly different arrays each time if needed
+    # --- CHANGE: Add isinstance check before v.copy() ---
     mock_extract.side_effect = [
-        # Ensure features are copied correctly
-        {k: v.copy() + i * 0.1 for k, v in mock_state_type_nn.items()}
+        {
+            k: (v.copy() + i * 0.1 if isinstance(v, np.ndarray) else v)
+            for k, v in mock_state_type_nn.items()
+        }
         for i in range(batch_size)
     ]
+    # --- END CHANGE ---
 
     grid_t, other_t = nn_interface._batch_states_to_tensors(mock_states)
 
@@ -149,9 +163,7 @@ def test_batch_states_to_tensors(
 
 
 # --- Test Evaluation Methods ---
-# --- CHANGE: Patch target changed from 'alphatriangle...' to 'alphatriangle...' ---
 @patch("alphatriangle.nn.network.extract_state_features")
-# --- END CHANGE ---
 def test_evaluate_single(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
@@ -178,25 +190,29 @@ def test_evaluate_single(
     assert -1.0 <= value <= 1.0
 
 
-# --- CHANGE: Patch target changed from 'alphatriangle...' to 'alphatriangle...' ---
 @patch("alphatriangle.nn.network.extract_state_features")
-# --- END CHANGE ---
 def test_evaluate_batch(
     mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
-    mock_game_state: GameState,  # Use real GameState
+    # --- Use the fixture that provides the already copied batch ---
+    mock_game_state_batch: list[GameState],
     mock_state_type_nn: StateType,
     env_config: EnvConfig,
 ):
     """Test the evaluate_batch method."""
-    batch_size = 3
-    # Use the copy method of the real GameState
-    mock_states = [mock_game_state.copy() for _ in range(batch_size)]
+    # --- Use the fixture directly, no more .copy() needed here ---
+    mock_states = mock_game_state_batch
+    batch_size = len(mock_states)
+    # --- End change ---
+    # --- CHANGE: Add isinstance check before v.copy() ---
     mock_extract.side_effect = [
-        # Ensure features are copied correctly
-        {k: v.copy() + i * 0.1 for k, v in mock_state_type_nn.items()}
+        {
+            k: (v.copy() + i * 0.1 if isinstance(v, np.ndarray) else v)
+            for k, v in mock_state_type_nn.items()
+        }
         for i in range(batch_size)
     ]
+    # --- END CHANGE ---
     # Cast ACTION_DIM to int
     action_dim_int = int(env_config.ACTION_DIM)
 

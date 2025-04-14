@@ -38,7 +38,7 @@ jobs:
       run: ruff format --check .
 
     - name: Run MyPy Type Checker
-      run: mypy src tests
+      run: mypy alphatriangle tests
 
   test:
     name: Test & Coverage
