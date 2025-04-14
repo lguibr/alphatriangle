@@ -41,7 +41,7 @@ def handle_debug_click(event: pygame.event.Event, handler: "InputHandler") -> No
     r, c = grid_coords
     if game_state.grid_data.valid(r, c):
         # Use TYPE_CHECKING import for Triangle type hint
-        tri: "Triangle" = game_state.grid_data.triangles[r][c]
+        tri: Triangle = game_state.grid_data.triangles[r][c]
         if not tri.is_death:
             # Toggle state directly on the GameState's GridData
             tri.is_occupied = not tri.is_occupied

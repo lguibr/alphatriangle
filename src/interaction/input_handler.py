@@ -40,7 +40,7 @@ class InputHandler:
         self.hover_grid_coord: tuple[int, int] | None = None
         self.hover_is_valid: bool = False
         # Use TYPE_CHECKING import for Shape type hint
-        self.hover_shape: "Shape" | None = None
+        self.hover_shape: Shape | None = None
         self.debug_highlight_coord: tuple[int, int] | None = None
         self.mouse_pos: tuple[int, int] = (0, 0)
 

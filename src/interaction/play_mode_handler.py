@@ -73,7 +73,7 @@ def handle_play_click(event: pygame.event.Event, handler: "InputHandler") -> Non
             mouse_pos, grid_rect, game_state.env_config
         )
         # Use TYPE_CHECKING import for Shape type hint
-        shape_to_place: "Shape" | None = game_state.shapes[selected_idx]
+        shape_to_place: Shape | None = game_state.shapes[selected_idx]
 
         # Check if the placement is valid *at the clicked location*
         if (
@@ -125,7 +125,7 @@ def update_play_hover(handler: "InputHandler") -> None:
     if not (0 <= shape_idx < len(game_state.shapes)):
         return
     # Use TYPE_CHECKING import for Shape type hint
-    shape: "Shape" | None = game_state.shapes[shape_idx]
+    shape: Shape | None = game_state.shapes[shape_idx]
     if not shape:
         return
 

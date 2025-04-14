@@ -5,7 +5,7 @@ import queue
 import time
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import mlflow
 import ray
@@ -19,10 +19,6 @@ from ..utils.sumtree import SumTree
 from .components import TrainingComponents
 from .logging_utils import log_configs_to_mlflow
 from .loop import TrainingLoop
-
-if TYPE_CHECKING:
-    from ..environment import GameState
-
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,6 @@
 # File: tests/mcts/conftest.py
 import random
 from collections.abc import Mapping
-from typing import Any
 
 import numpy as np
 import pytest

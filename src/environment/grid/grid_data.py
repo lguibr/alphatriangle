@@ -1,7 +1,6 @@
 # File: src/environment/grid/grid_data.py
 # File: src/environment/grid/grid_data.py
 import logging
-from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -12,11 +11,6 @@ from . import logic as GridLogic
 
 logger = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    # Define a protocol for the temporary grid holder if needed,
-    # or adjust the type hint for link_neighbors if possible.
-    # For now, we keep the ignore comment.
-    pass
 
 
 # --- Line Precomputation (Moved here to break circular import) ---

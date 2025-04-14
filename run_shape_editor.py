@@ -4,7 +4,6 @@ import contextlib
 import logging
 import random
 import sys
-from pathlib import Path
 
 import pygame
 

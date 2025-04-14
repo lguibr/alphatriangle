@@ -8,12 +8,12 @@ import pytest
 # or absolute imports if package is installed
 try:
     # Try absolute imports first (for installed package)
-    from alphatriangle.config import MCTSConfig, EnvConfig
+    from alphatriangle.config import EnvConfig, MCTSConfig
     from alphatriangle.mcts.core.node import Node
     from alphatriangle.utils.types import ActionType, PolicyValueOutput
 except ImportError:
     # Fallback to relative imports (for running tests directly)
-    from src.config import MCTSConfig, EnvConfig
+    from src.config import EnvConfig, MCTSConfig
     from src.mcts.core.node import Node
     from src.utils.types import ActionType, PolicyValueOutput
 

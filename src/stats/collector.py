@@ -28,7 +28,7 @@ class StatsCollectorActor:
         self.max_history = max_history
         self._data: StatsCollectorData = {}
         # Store the latest GameState reported by each worker
-        self._latest_worker_states: dict[int, "GameState"] = {}
+        self._latest_worker_states: dict[int, GameState] = {}
         self._last_state_update_time: dict[int, float] = {}  # Track update times
 
         print(f"[StatsCollectorActor] Initialized with max_history={max_history}.")
