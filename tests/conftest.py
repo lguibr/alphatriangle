@@ -2,6 +2,7 @@
 # File: tests/conftest.py
 # Top-level conftest for sharing session-scoped fixtures
 import random
+from typing import cast
 
 import numpy as np
 import pytest
@@ -195,7 +196,9 @@ def mock_trainer(
 @pytest.fixture(scope="session")  # Make session-scoped if appropriate
 def mock_optimizer(mock_trainer: Trainer) -> optim.Optimizer:
     """Provides the optimizer from the mock_trainer."""
-    return mock_trainer.optimizer
+    # --- CHANGE: Explicitly cast return type ---
+    return cast("optim.Optimizer", mock_trainer.optimizer)
+    # --- END CHANGE ---
 
 
 @pytest.fixture  # Buffer should likely be function-scoped unless state doesn't matter

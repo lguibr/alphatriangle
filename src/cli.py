@@ -6,43 +6,33 @@ from typing import Annotated
 
 import typer
 
+# --- CHANGE: Simplified Imports ---
 # Use absolute imports based on the package structure defined in pyproject.toml
 # Assumes 'src' is the package root directory for editable installs,
 # or the package 'alphatriangle' is installed.
+# RELY on the package being installed correctly (`pip install -e .`).
 try:
-    # Try importing assuming 'alphatriangle' is the installed package name
     from alphatriangle import config, utils
     from alphatriangle.app import Application
-    from alphatriangle.config import MCTSConfig  # Import Pydantic MCTSConfig
+    from alphatriangle.config import (  # Import specific Pydantic configs needed
+        MCTSConfig,
+        PersistenceConfig,
+        TrainConfig,
+    )
     from alphatriangle.training.runners import (
         run_training_headless_mode,
         run_training_visual_mode,
     )
-except ImportError:
-    # Fallback for running directly from source root (e.g., during development)
-    # This might be needed if the editable install isn't perfect or running scripts directly
-    try:
-        # Import necessary modules/classes directly for fallback
-        from config import MCTSConfig
-        from config import PersistenceConfig as ConfigPersistenceConfig
-        from config import TrainConfig as ConfigTrainConfig
-        from training.runners import (
-            run_training_headless_mode,
-            run_training_visual_mode,
-        )
-
-        # Import the modules themselves to access functions via aliases
-        config = __import__("config")
-        utils = __import__("utils")
-        Application = __import__("app", fromlist=["Application"]).Application
-
-    except ImportError as e_dev:
-        print(f"ImportError in cli.py: {e_dev}")
-        print("Could not import modules.")
-        print("Ensure the package is installed (`pip install -e .`)")
-        print("or run the command from the project root directory.")
-        sys.exit(1)
-
+except ImportError as e:
+    print(f"ImportError in cli.py: {e}", file=sys.stderr)
+    print(
+        "Could not import modules from 'alphatriangle'. Ensure the package is installed correctly:",
+        file=sys.stderr,
+    )
+    print("1. Make sure you are in your virtual environment.", file=sys.stderr)
+    print("2. Run `pip install -e .` from the project root directory.", file=sys.stderr)
+    sys.exit(1)
+# --- END CHANGE ---
 
 app = typer.Typer(
     name="alphatriangle",
@@ -106,24 +96,16 @@ def run_interactive_mode(mode: str, seed: int, log_level: str):
     # Pydantic models with defaults can be instantiated without args
     mcts_config = MCTSConfig()
     # Pass MCTSConfig instance to validation
-    # Use the config alias imported in the try block
     config.print_config_info_and_validate(mcts_config)
 
     try:
         app_instance = Application(mode=mode)
         app_instance.run()
     except ImportError as e:
-        logger.error(f"ImportError: {e}")
-        logger.error("Please ensure:")
-        logger.error(
-            "1. You are running from the project root directory (if developing)."
-        )
-        logger.error(
-            "2. The package is installed correctly (`pip install -e .` or `pip install alphatriangle`)."
-        )
-        logger.error(
-            "3. Dependencies are installed (`pip install -r requirements.txt`)."
-        )
+        # This catch block might be less relevant now imports are simplified,
+        # but keep it for general import issues during runtime.
+        logger.error(f"Runtime ImportError: {e}")
+        logger.error("Please ensure all dependencies are installed.")
         sys.exit(1)
     except Exception as e:
         logger.critical(f"An unhandled error occurred: {e}", exc_info=True)
@@ -168,9 +150,7 @@ def train(
 
     # --- Configuration Overrides ---
     # Create default configs first by calling constructors without args
-    # Use the potentially aliased names if fallback import was used
-    TrainConfig = getattr(config, "TrainConfig", ConfigTrainConfig)
-    PersistenceConfig = getattr(config, "PersistenceConfig", ConfigPersistenceConfig)
+    # Pydantic models with defaults are expected to work correctly.
     train_config_override = TrainConfig()
     persist_config_override = PersistenceConfig()
 

@@ -194,8 +194,9 @@ class Trainer:
             entropy_term = -torch.sum(
                 policy_probs * torch.log(policy_probs + 1e-9), dim=1
             )
-            # Cast entropy to float
-            entropy = float(entropy_term.mean().item())  # type: ignore[assignment]
+            # --- CHANGE: Explicitly cast entropy value to float ---
+            entropy = float(entropy_term.mean().item())
+            # --- END CHANGE ---
             entropy_loss = -self.train_config.ENTROPY_BONUS_WEIGHT * entropy_term.mean()
 
         total_loss = (

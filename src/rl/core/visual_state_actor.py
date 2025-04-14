@@ -40,12 +40,19 @@ class VisualStateActor:
             # Don't reset, just ignore the update
             # self.global_stats = {}
 
+    # --- CHANGE: Correct return type hint ---
     def get_all_states(self) -> dict[int, Any]:
-        """Called by the orchestrator to get states for the visual queue."""
+        """
+        Called by the orchestrator to get states for the visual queue.
+        Key -1 holds the global_stats dictionary.
+        Other keys hold GameState objects.
+        """
         # Use dict() constructor instead of comprehension for ruff C416
-        combined_states = dict(self.worker_states)
+        # Cast worker_states to dict[int, Any] before combining
+        combined_states: dict[int, Any] = dict(self.worker_states)
         combined_states[-1] = self.global_stats.copy()
         return combined_states
+        # --- END CHANGE ---
 
     def get_state(self, worker_id: int) -> GameState | None:
         """Get state for a specific worker (unused currently)."""

@@ -70,14 +70,25 @@ class PositionalEncoding(nn.Module):
         pe[:, 0, 0::2] = torch.sin(position * div_term)
         # Ensure the second slice doesn't go out of bounds if d_model is odd
         # Corrected slicing for odd d_model
+        # --- CHANGE: Add check for numel() before slicing ---
         if d_model % 2 != 0:
             # Check if div_term has elements before slicing
             if div_term.numel() > 0:
+                # The slice `[:-1]` might become empty if div_term has only 1 element
+                # This happens if d_model is 1. If d_model=1, range(0, 1, 2) is empty,
+                # so div_term is empty tensor, and this block isn't reached.
+                # If d_model=2, range(0, 2, 2) is [0], div_term has 1 element.
+                # Then div_term[:-1] is empty. torch.cos(position * empty) is empty.
+                # So the assignment pe[:, 0, 1::2] = empty is valid but does nothing.
+                # The type ignore might still be needed for mypy, but the logic seems safe.
                 pe[:, 0, 1::2] = torch.cos(position * div_term[:-1])  # type: ignore[index]
             # Handle case where d_model is 1 (div_term is empty) - unlikely but safe
             # else: pass or handle appropriately if needed
         else:
-            pe[:, 0, 1::2] = torch.cos(position * div_term)
+            # Only try to slice if div_term is not empty
+            if div_term.numel() > 0:
+                pe[:, 0, 1::2] = torch.cos(position * div_term)
+        # --- END CHANGE ---
 
         self.register_buffer("pe", pe)
 
