@@ -12,14 +12,14 @@ import typer
 # or the package 'alphatriangle' is installed.
 # RELY on the package being installed correctly (`pip install -e .`).
 try:
-    from alphatriangle import config, utils
-    from alphatriangle.app import Application
-    from alphatriangle.config import (  # Import specific Pydantic configs needed
+    from . import config, utils
+    from .app import Application
+    from .config import (  # Import specific Pydantic configs needed
         MCTSConfig,
         PersistenceConfig,
         TrainConfig,
     )
-    from alphatriangle.training.runners import (
+    from .training.runners import (
         run_training_headless_mode,
         run_training_visual_mode,
     )

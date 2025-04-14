@@ -29,8 +29,9 @@ class GameState:
     def __init__(
         self, config: EnvConfig | None = None, initial_seed: int | None = None
     ):
-        # Pydantic models with defaults can be instantiated without args
-        self.env_config = config if config else EnvConfig()
+        # --- CHANGE: Add type ignore for Pydantic call-arg error ---
+        self.env_config = config if config else EnvConfig()  # type: ignore[call-arg]
+        # --- END CHANGE ---
         self._rng = (
             random.Random(initial_seed) if initial_seed is not None else random.Random()
         )

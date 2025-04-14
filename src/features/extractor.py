@@ -12,8 +12,6 @@ from . import grid_features
 
 # Import GameState only for type checking
 if TYPE_CHECKING:
-    # Explicitly import ndarray for casting
-    from numpy import ndarray
 
     from ..environment import GameState
 
@@ -128,10 +126,9 @@ class GameStateFeatures:
         features[5] = np.clip(self.gs.pieces_placed_this_episode / 100.0, 0, 1)
 
         # Ensure return type is ndarray and handle potential NaNs
-        # --- CHANGE: Explicitly cast to ndarray ---
+        # --- CHANGE: Use simpler cast ---
         return cast(
-            "ndarray[np.float32]",  # Use more specific type hint if possible
-            np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0),
+            "np.ndarray", np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
         )
         # --- END CHANGE ---
 
@@ -154,7 +151,9 @@ class GameStateFeatures:
             )
             combined = np.nan_to_num(combined, nan=0.0, posinf=0.0, neginf=0.0)
 
-        return combined.astype(np.float32)
+        # --- CHANGE: Explicitly cast return type ---
+        return cast("np.ndarray", combined.astype(np.float32))
+        # --- END CHANGE ---
 
 
 def extract_state_features(

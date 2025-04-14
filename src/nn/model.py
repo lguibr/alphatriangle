@@ -1,6 +1,7 @@
 # File: src/nn/model.py
 # File: src/nn/model.py
 import math
+from typing import cast  # Import cast
 
 import torch
 import torch.nn as nn
@@ -58,36 +59,34 @@ class ResidualBlock(nn.Module):
 
 
 class PositionalEncoding(nn.Module):
-    """Sinusoidal Positional Encoding."""
+    """Injects sinusoidal positional encoding. (Adapted from PyTorch tutorial)"""
 
-    def __init__(self, d_model: int, max_len: int = 5000):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
         super().__init__()
-        position: torch.Tensor = torch.arange(max_len).unsqueeze(1)
-        div_term: torch.Tensor = torch.exp(
+        if d_model <= 0:
+            raise ValueError("d_model must be positive for PositionalEncoding")
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)  # Shape: [max_len, 1]
+        # --- CHANGE: Simplified calculation based on tutorial ---
+        div_term = torch.exp(
             torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)
-        )
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        # Ensure the second slice doesn't go out of bounds if d_model is odd
-        # Corrected slicing for odd d_model
-        # --- CHANGE: Add check for numel() before slicing ---
-        if d_model % 2 != 0:
-            # Check if div_term has elements before slicing
-            if div_term.numel() > 0:
-                # The slice `[:-1]` might become empty if div_term has only 1 element
-                # This happens if d_model is 1. If d_model=1, range(0, 1, 2) is empty,
-                # so div_term is empty tensor, and this block isn't reached.
-                # If d_model=2, range(0, 2, 2) is [0], div_term has 1 element.
-                # Then div_term[:-1] is empty. torch.cos(position * empty) is empty.
-                # So the assignment pe[:, 0, 1::2] = empty is valid but does nothing.
-                # The type ignore might still be needed for mypy, but the logic seems safe.
-                pe[:, 0, 1::2] = torch.cos(position * div_term[:-1])  # type: ignore[index]
-            # Handle case where d_model is 1 (div_term is empty) - unlikely but safe
-            # else: pass or handle appropriately if needed
-        else:
-            # Only try to slice if div_term is not empty
-            if div_term.numel() > 0:
-                pe[:, 0, 1::2] = torch.cos(position * div_term)
+        )  # Shape: [d_model / 2]
+        pe = torch.zeros(max_len, d_model)  # Shape: [max_len, d_model]
+
+        # Apply sin to even indices
+        pe[:, 0::2] = torch.sin(position * div_term)
+
+        # Apply cos to odd indices (if they exist)
+        # Note: div_term is already the correct size for broadcasting with pe[:, 1::2]
+        # because its length is ceil(d_model / 2). If d_model is odd,
+        # the last element of div_term won't be used for the cos calculation anyway.
+        if d_model > 1:
+            pe[:, 1::2] = torch.cos(position * div_term)
+
+        # Add the batch dimension (1) expected by register_buffer and forward pass
+        # Shape becomes [max_len, 1, d_model]
+        pe = pe.unsqueeze(1)
         # --- END CHANGE ---
 
         self.register_buffer("pe", pe)
@@ -96,9 +95,30 @@ class PositionalEncoding(nn.Module):
         """
         Args:
             x: Tensor, shape [seq_len, batch_size, embedding_dim]
+               (Note: AlphaTriangleNet might pass [batch_size, embedding_dim, seq_len (H*W)])
+               It needs to be permuted before applying positional encoding if that's the case.
+               Here, we assume the input is already [seq_len, batch_size, embedding_dim].
+
+        Returns:
+            Tensor with added positional encoding.
         """
-        x = x + self.pe[: x.size(0)]
-        return x
+        pe_buffer = self.pe
+        if not isinstance(pe_buffer, torch.Tensor):
+            raise TypeError("PositionalEncoding buffer 'pe' is not a Tensor.")
+
+        if x.shape[0] > pe_buffer.shape[0]:
+            raise ValueError(
+                f"Input sequence length {x.shape[0]} exceeds max_len {pe_buffer.shape[0]} of PositionalEncoding"
+            )
+        if x.shape[2] != pe_buffer.shape[2]:
+            raise ValueError(
+                f"Input embedding dimension {x.shape[2]} does not match PositionalEncoding dimension {pe_buffer.shape[2]}"
+            )
+
+        # Add positional encoding
+        # Slicing pe_buffer[:x.size(0)] handles variable sequence lengths
+        x = x + pe_buffer[: x.size(0)]
+        return cast("torch.Tensor", self.dropout(x))
 
 
 class AlphaTriangleNet(nn.Module):
@@ -176,7 +196,7 @@ class AlphaTriangleNet(nn.Module):
             else:
                 self.input_proj = nn.Identity()
 
-            self.pos_encoder = PositionalEncoding(transformer_input_dim)
+            self.pos_encoder = PositionalEncoding(transformer_input_dim, dropout=0.1)
             encoder_layer = nn.TransformerEncoderLayer(
                 d_model=transformer_input_dim,
                 nhead=model_config.TRANSFORMER_HEADS,
@@ -201,11 +221,8 @@ class AlphaTriangleNet(nn.Module):
                 res_out = self.res_body(cnn_out)
                 proj_out = self.input_proj(res_out)
                 b, d, h, w = proj_out.shape
-                # Reshape for transformer: (Seq, Batch, Dim) -> (H*W, B, D)
-                # transformer_input_dummy = proj_out.flatten(2).permute(2, 0, 1) # Removed unused variable
-                # Positional encoding added in forward pass
-                # Transformer output shape is (Seq, Batch, Dim)
-                self.transformer_output_size = h * w * d  # Dim is d here
+                # Size after flattening H*W dimensions
+                self.transformer_output_size = h * w * d
         else:
             # Calculate flattened size after conv/res blocks if no transformer
             dummy_input_grid = torch.zeros(
@@ -282,7 +299,7 @@ class AlphaTriangleNet(nn.Module):
         # Optional Transformer Body
         if (
             self.model_config.USE_TRANSFORMER
-            and self.transformer_body is not None  # Check if transformer exists
+            and self.transformer_body is not None
             and self.pos_encoder is not None
         ):
             proj_out = self.input_proj(res_out)  # Shape: (B, D, H, W)

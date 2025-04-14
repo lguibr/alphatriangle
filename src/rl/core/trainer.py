@@ -187,22 +187,33 @@ class Trainer:
         policy_loss_elementwise = -torch.sum(policy_target_t * log_probs, dim=1)
         policy_loss = (policy_loss_elementwise * is_weights_t).mean()
 
-        entropy: float = 0.0  # Initialize entropy as float
-        entropy_loss = 0.0
+        # --- CHANGE: Explicit calculation of entropy for logging ---
+        entropy_scalar: float = 0.0  # Initialize as float
+        entropy_loss_term = torch.tensor(
+            0.0, device=self.device
+        )  # Initialize as tensor
         if self.train_config.ENTROPY_BONUS_WEIGHT > 0:
             policy_probs = F.softmax(policy_logits, dim=1)
-            entropy_term = -torch.sum(
+            # Calculate entropy term: -Sum(p * log(p))
+            entropy_term_elementwise: torch.Tensor = -torch.sum(
                 policy_probs * torch.log(policy_probs + 1e-9), dim=1
             )
-            # --- CHANGE: Explicitly cast entropy value to float ---
-            entropy = float(entropy_term.mean().item())
-            # --- END CHANGE ---
-            entropy_loss = -self.train_config.ENTROPY_BONUS_WEIGHT * entropy_term.mean()
+            # Calculate mean entropy across batch for logging
+            entropy_scalar = float(
+                entropy_term_elementwise.mean().item()
+            )  # Cast result to float
+            # Calculate the loss term (negative entropy bonus)
+            entropy_loss_term = (
+                -self.train_config.ENTROPY_BONUS_WEIGHT
+                * entropy_term_elementwise.mean()
+            )
+            # Use entropy_loss_term in total_loss calculation
+        # --- END CHANGE ---
 
         total_loss = (
             self.train_config.POLICY_LOSS_WEIGHT * policy_loss
             + self.train_config.VALUE_LOSS_WEIGHT * value_loss
-            + entropy_loss
+            + entropy_loss_term  # Use the calculated term
         )
 
         total_loss.backward()
@@ -225,7 +236,9 @@ class Trainer:
             "total_loss": total_loss.item(),
             "policy_loss": policy_loss.item(),
             "value_loss": value_loss.item(),
-            "entropy": entropy,
+            # --- CHANGE: Use the calculated scalar entropy ---
+            "entropy": entropy_scalar,
+            # --- END CHANGE ---
             "mean_td_error": float(np.mean(np.abs(td_errors))),  # Cast to float
         }
 

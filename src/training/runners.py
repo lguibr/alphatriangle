@@ -40,10 +40,12 @@ def _setup_training_components(
         # Use the potentially overridden configs passed in
         train_config = train_config_override
         persist_config = persist_config_override
-        # Pydantic models with defaults can be instantiated without args
+        # Instantiate Pydantic models using defaults
+        # --- CHANGE: Removed type ignore ---
         env_config = config.EnvConfig()
         model_config = config.ModelConfig()
         mcts_config = config.MCTSConfig()
+        # --- END CHANGE ---
 
         # --- Validate Configs ---
         config.print_config_info_and_validate(mcts_config)
@@ -261,8 +263,10 @@ def run_training_visual_mode(
         logger.info("Training pipeline thread launched.")
 
         # --- Initialize Visualization ---
-        # Pydantic models with defaults can be instantiated without args
+        # Instantiate Pydantic models using defaults
+        # --- CHANGE: Removed type ignore ---
         vis_config = config.VisConfig()
+        # --- END CHANGE ---
         pygame.init()
         pygame.font.init()
         screen = pygame.display.set_mode(
