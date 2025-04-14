@@ -7,23 +7,24 @@ from typing import TYPE_CHECKING
 import numpy as np
 import ray
 
-from src.config import MCTSConfig, ModelConfig, TrainConfig
-from src.environment import EnvConfig, GameState
-from src.features import extract_state_features
-from src.mcts import (
+# Use relative imports
+from ...config import MCTSConfig, ModelConfig, TrainConfig
+from ...environment import EnvConfig, GameState
+from ...features import extract_state_features
+from ...mcts import (
     MCTSExecutionError,
     Node,
     get_policy_target,
     run_mcts_simulations,
     select_action_based_on_visits,
 )
-from src.nn import NeuralNetwork
-from src.utils import get_device, set_random_seeds
+from ...nn import NeuralNetwork
+from ...utils import get_device, set_random_seeds
 
 # Move application type imports into TYPE_CHECKING block
 if TYPE_CHECKING:
-    from src.stats import StatsCollectorActor  # Import for type hinting
-    from src.utils.types import Experience, PolicyTargetMapping, StateType
+    from ...stats import StatsCollectorActor  # Import for type hinting
+    from ...utils.types import Experience, PolicyTargetMapping, StateType
 
 from ..types import SelfPlayResult
 

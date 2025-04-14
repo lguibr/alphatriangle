@@ -1,11 +1,13 @@
+# File: src/mcts/core/types.py
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Protocol
 
-from src.utils.types import PolicyValueOutput
+# Use relative imports
+from ...utils.types import PolicyValueOutput
 
 if TYPE_CHECKING:
-    from src.environment import GameState
-    from src.utils.types import ActionType
+    from ...environment import GameState
+    from ...utils.types import ActionType
 
 ActionPolicyMapping = Mapping["ActionType", float]
 

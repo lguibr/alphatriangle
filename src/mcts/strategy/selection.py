@@ -4,8 +4,8 @@ import math
 
 import numpy as np
 
-from src.config import MCTSConfig
-
+# Use relative imports
+from ...config import MCTSConfig
 from ..core.node import Node
 
 logger = logging.getLogger(__name__)

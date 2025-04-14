@@ -16,10 +16,9 @@ import pygame
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# Import normalize_color_for_matplotlib from the new location
-from src.utils.helpers import normalize_color_for_matplotlib
-from src.visualization.core import colors as vis_colors
-
+# Use relative imports
+from ..utils.helpers import normalize_color_for_matplotlib
+from ..visualization.core import colors as vis_colors
 from .collector import StatsCollectorData
 from .plot_utils import render_single_plot  # Keep this import
 

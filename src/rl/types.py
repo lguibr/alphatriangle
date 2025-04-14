@@ -4,7 +4,8 @@ import logging
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from src.utils.types import (
+# Use relative import
+from ..utils.types import (
     Experience,  # Import StateType for validation check
 )
 

@@ -1,38 +1,26 @@
 # File: src/cli.py
-# File: src/cli.py
 import logging
 import sys
 from typing import Annotated
 
 import typer
 
-# --- CHANGE: Simplified Imports ---
 # Use absolute imports based on the package structure defined in pyproject.toml
 # Assumes 'src' is the package root directory for editable installs,
 # or the package 'alphatriangle' is installed.
 # RELY on the package being installed correctly (`pip install -e .`).
-try:
-    from . import config, utils
-    from .app import Application
-    from .config import (  # Import specific Pydantic configs needed
-        MCTSConfig,
-        PersistenceConfig,
-        TrainConfig,
-    )
-    from .training.runners import (
-        run_training_headless_mode,
-        run_training_visual_mode,
-    )
-except ImportError as e:
-    print(f"ImportError in cli.py: {e}", file=sys.stderr)
-    print(
-        "Could not import modules from 'alphatriangle'. Ensure the package is installed correctly:",
-        file=sys.stderr,
-    )
-    print("1. Make sure you are in your virtual environment.", file=sys.stderr)
-    print("2. Run `pip install -e .` from the project root directory.", file=sys.stderr)
-    sys.exit(1)
-# --- END CHANGE ---
+# If these imports fail, the installation or environment is likely the issue.
+from alphatriangle import config, utils
+from alphatriangle.app import Application
+from alphatriangle.config import (
+    MCTSConfig,
+    PersistenceConfig,
+    TrainConfig,
+)
+from alphatriangle.training.runners import (
+    run_training_headless_mode,
+    run_training_visual_mode,
+)
 
 app = typer.Typer(
     name="alphatriangle",

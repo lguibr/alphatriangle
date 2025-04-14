@@ -7,11 +7,11 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from src.config import EnvConfig, ModelConfig, TrainConfig
-from src.environment import GameState
-from src.features import extract_state_features
-from src.utils.types import ActionType, PolicyValueOutput, StateType
-
+# Use relative imports
+from ..config import EnvConfig, ModelConfig, TrainConfig
+from ..environment import GameState
+from ..features import extract_state_features
+from ..utils.types import ActionType, PolicyValueOutput, StateType
 from .model import AlphaTriangleNet
 
 # Move Mapping import into TYPE_CHECKING block if only used for hints
