@@ -1,6 +1,49 @@
-venv/
-.venv/
-.resumed.txt
+# File: .gitignore
+# General
 __pycache__/
-.alphatriangle_data/
+*.py[cod]
+*$py.class
+
+# Build artifacts
+build/
+dist/
 *.egg-info/
+sdist/
+wheel/
+pip-wheel-metadata/
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# IDEs / Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Testing / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+pytestdebug.log
+.ruff_cache/
+
+# Data / MLflow / Logs (Keep user-generated data out of git)
+.alphatriangle_data/
+.resumed.txt
+# Optional: If generated files are expected
+# *.pkl
+# *.json
+
+# Optional: Configuration files you might want to keep local
+# local_config.yaml
