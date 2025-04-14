@@ -3,11 +3,11 @@
 
 import pytest
 
-from src.config import EnvConfig
-from src.environment.core.game_state import GameState
-from src.environment.grid import logic as GridLogic
-from src.environment.grid.grid_data import GridData
-from src.structs import Shape, Triangle
+from alphatriangle.config import EnvConfig
+from alphatriangle.environment.core.game_state import GameState
+from alphatriangle.environment.grid import logic as GridLogic
+from alphatriangle.environment.grid.grid_data import GridData
+from alphatriangle.structs import Shape, Triangle
 
 
 # --- Test Helpers ---

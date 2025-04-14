@@ -5,11 +5,11 @@ from typing import Any
 import pytest
 
 # Import session-scoped fixtures implicitly via pytest injection
-from src.config import MCTSConfig  # Keep MCTSConfig type hint if needed
-from src.mcts.core.node import Node
+from alphatriangle.config import MCTSConfig  # Keep MCTSConfig type hint if needed
+from alphatriangle.mcts.core.node import Node
 
 # Import necessary components and fixtures
-from src.mcts.strategy import selection
+from alphatriangle.mcts.strategy import selection
 
 from .conftest import (  # Import from conftest (local fixtures)
     EnvConfig,  # Keep EnvConfig type hint if needed

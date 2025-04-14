@@ -3,7 +3,7 @@ import logging
 import random
 from typing import TYPE_CHECKING
 
-from src.structs import SHAPE_COLORS, Shape
+from alphatriangle.structs import SHAPE_COLORS, Shape
 
 from .templates import PREDEFINED_SHAPE_TEMPLATES
 

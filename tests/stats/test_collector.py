@@ -6,7 +6,7 @@ import cloudpickle  # Use cloudpickle for state serialization test
 import pytest
 import ray
 
-from src.stats import StatsCollectorActor
+from alphatriangle.stats import StatsCollectorActor
 
 
 # Fixture to initialize and shutdown Ray for the test session

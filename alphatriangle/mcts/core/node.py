@@ -5,8 +5,8 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.environment import GameState
-    from src.utils.types import ActionType
+    from alphatriangle.environment import GameState
+    from alphatriangle.utils.types import ActionType
 
 logger = logging.getLogger(__name__)
 

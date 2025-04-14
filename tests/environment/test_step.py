@@ -4,12 +4,14 @@ from time import sleep
 
 import pytest
 
-from src.config import EnvConfig
-from src.environment.core.game_state import GameState
-from src.environment.grid import logic as GridLogic  # Import GridLogic for setup
-from src.environment.grid.grid_data import GridData
-from src.environment.logic.step import calculate_reward, execute_placement
-from src.structs import Shape, Triangle
+from alphatriangle.config import EnvConfig
+from alphatriangle.environment.core.game_state import GameState
+from alphatriangle.environment.grid import (
+    logic as GridLogic,  # Import GridLogic for setup
+)
+from alphatriangle.environment.grid.grid_data import GridData
+from alphatriangle.environment.logic.step import calculate_reward, execute_placement
+from alphatriangle.structs import Shape, Triangle
 
 # Fixtures are now implicitly injected from tests/environment/conftest.py
 

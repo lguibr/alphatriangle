@@ -12,9 +12,9 @@ try:
     from alphatriangle.structs import Shape
 except ImportError:
     # Fallback to relative imports (for running tests directly)
-    from src.config import EnvConfig
-    from src.environment import GameState
-    from src.structs import Shape
+    from alphatriangle.config import EnvConfig
+    from alphatriangle.environment import GameState
+    from alphatriangle.structs import Shape
 
 
 # Use session-scoped config from top-level conftest

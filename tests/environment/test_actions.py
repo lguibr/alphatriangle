@@ -2,12 +2,12 @@
 
 import pytest
 
-from src.config import EnvConfig
-from src.environment.core.action_codec import decode_action
-from src.environment.core.game_state import GameState
-from src.environment.grid import logic as GridLogic
-from src.environment.logic import actions as ActionLogic
-from src.structs import Shape
+from alphatriangle.config import EnvConfig
+from alphatriangle.environment.core.action_codec import decode_action
+from alphatriangle.environment.core.game_state import GameState
+from alphatriangle.environment.grid import logic as GridLogic
+from alphatriangle.environment.logic import actions as ActionLogic
+from alphatriangle.structs import Shape
 
 # Fixtures are now implicitly injected from tests/environment/conftest.py
 

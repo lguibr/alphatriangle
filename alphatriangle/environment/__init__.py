@@ -6,14 +6,14 @@ This module is now independent of feature extraction for the NN.
 
 # Core components
 # Configuration (often needed alongside environment components)
-from src.config import EnvConfig
+from alphatriangle.config import EnvConfig
 
 from .core.action_codec import decode_action, encode_action
 from .core.game_state import GameState
 
 # Import Triangle and Shape from the new structs module
 # These are implicitly used via GridData and GameState, no need to export directly
-# from src.structs import Triangle, Shape
+# from alphatriangle.structs import Triangle, Shape
 from .grid import logic as GridLogic  # Expose grid logic functions via a namespace
 
 # Grid related components

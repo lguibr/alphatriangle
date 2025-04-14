@@ -19,10 +19,10 @@ try:
     from alphatriangle.utils.types import Experience, StateType
 except ImportError:
     # Fallback to relative imports (for running tests directly)
-    from src.config import EnvConfig, MCTSConfig, ModelConfig, TrainConfig
-    from src.nn import NeuralNetwork
-    from src.rl import ExperienceBuffer, Trainer
-    from src.utils.types import Experience, StateType
+    from alphatriangle.config import EnvConfig, MCTSConfig, ModelConfig, TrainConfig
+    from alphatriangle.nn import NeuralNetwork
+    from alphatriangle.rl import ExperienceBuffer, Trainer
+    from alphatriangle.utils.types import Experience, StateType
 
 
 # Use default NumPy random number generator

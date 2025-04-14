@@ -6,7 +6,7 @@ Provides the core algorithm and components for game tree search.
 
 # Core MCTS components
 # Change: Import MCTSConfig from the central config location
-from src.config import MCTSConfig
+from alphatriangle.config import MCTSConfig
 
 from .core.node import Node
 from .core.search import (

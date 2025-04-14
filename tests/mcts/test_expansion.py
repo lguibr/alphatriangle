@@ -3,13 +3,13 @@ from typing import Any
 
 import pytest
 
-from src.mcts.core.node import Node
+from alphatriangle.mcts.core.node import Node
 
 # Import necessary components and fixtures
-from src.mcts.strategy import expansion
+from alphatriangle.mcts.strategy import expansion
 
 # Import session-scoped fixtures implicitly via pytest injection
-# from src.config import MCTSConfig # REMOVED - Provided by top-level conftest
+# from alphatriangle.config import MCTSConfig # REMOVED - Provided by top-level conftest
 from .conftest import (  # Import from conftest (local fixtures)
     # mock_env_config, # REMOVED - Provided by top-level conftest
     MockGameState,

@@ -2,7 +2,7 @@ import logging
 import random
 from typing import TYPE_CHECKING
 
-from src.structs import Triangle
+from alphatriangle.structs import Triangle
 
 from .. import shapes
 from ..grid import logic as GridLogic

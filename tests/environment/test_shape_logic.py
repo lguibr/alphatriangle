@@ -1,16 +1,16 @@
 # File: tests/environment/test_shape_logic.py
 import random
 
-from src.environment.core.game_state import GameState
+from alphatriangle.environment.core.game_state import GameState
 
 # Correct the import name here
-from src.environment.shapes.logic import (
+from alphatriangle.environment.shapes.logic import (
     PREDEFINED_SHAPE_TEMPLATES,  # Use the correct name
     get_neighbors,
     is_shape_connected,
     refill_shape_slots,
 )
-from src.structs import Shape  # Import SHAPE_COLORS
+from alphatriangle.structs import Shape  # Import SHAPE_COLORS
 
 
 def test_refill_shape_slots_empty(game_state: GameState):

@@ -7,7 +7,7 @@ import mlflow
 import numpy as np
 
 if TYPE_CHECKING:
-    from src.config import PersistenceConfig
+    from alphatriangle.config import PersistenceConfig
 
     from .components import TrainingComponents
 

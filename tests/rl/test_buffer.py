@@ -4,10 +4,10 @@ from collections import deque
 import numpy as np
 import pytest
 
-from src.config import TrainConfig
-from src.rl import ExperienceBuffer
-from src.utils.sumtree import SumTree  # Import SumTree
-from src.utils.types import Experience, StateType
+from alphatriangle.config import TrainConfig
+from alphatriangle.rl import ExperienceBuffer
+from alphatriangle.utils.sumtree import SumTree  # Import SumTree
+from alphatriangle.utils.types import Experience, StateType
 
 # Use module-level rng from tests/conftest.py
 from tests.conftest import rng

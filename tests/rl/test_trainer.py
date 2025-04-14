@@ -4,10 +4,10 @@ import numpy as np
 import pytest
 import torch
 
-from src.config import EnvConfig, ModelConfig, TrainConfig
-from src.nn import NeuralNetwork
-from src.rl import ExperienceBuffer, Trainer
-from src.utils.types import Experience, PERBatchSample, StateType
+from alphatriangle.config import EnvConfig, ModelConfig, TrainConfig
+from alphatriangle.nn import NeuralNetwork
+from alphatriangle.rl import ExperienceBuffer, Trainer
+from alphatriangle.utils.types import Experience, PERBatchSample, StateType
 
 # --- Fixtures ---
 

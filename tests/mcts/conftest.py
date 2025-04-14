@@ -15,9 +15,9 @@ try:
     from alphatriangle.utils.types import ActionType, PolicyValueOutput
 except ImportError:
     # Fallback to relative imports (for running tests directly)
-    from src.config import EnvConfig
-    from src.mcts.core.node import Node
-    from src.utils.types import ActionType, PolicyValueOutput
+    from alphatriangle.config import EnvConfig
+    from alphatriangle.mcts.core.node import Node
+    from alphatriangle.utils.types import ActionType, PolicyValueOutput
 
 
 # Use default NumPy random number generator

@@ -3,17 +3,17 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.config import (
+    from alphatriangle.config import (
         EnvConfig,
         MCTSConfig,
         ModelConfig,
         PersistenceConfig,
         TrainConfig,
     )
-    from src.data import DataManager
-    from src.nn import NeuralNetwork
-    from src.rl import ExperienceBuffer, Trainer
-    from src.stats import StatsCollectorActor
+    from alphatriangle.data import DataManager
+    from alphatriangle.nn import NeuralNetwork
+    from alphatriangle.rl import ExperienceBuffer, Trainer
+    from alphatriangle.stats import StatsCollectorActor
 
 
 @dataclass

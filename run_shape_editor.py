@@ -19,7 +19,7 @@ except ImportError:
     )
     # Attempt relative imports as a last resort for direct execution
     try:
-        from src import config, environment, structs, visualization
+        from alphatriangle import config, environment, structs, visualization
     except ImportError as e_rel:
         print(f"Relative import failed: {e_rel}", file=sys.stderr)
         sys.exit(1)

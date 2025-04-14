@@ -43,18 +43,18 @@ dependencies = [
 "Bug Tracker" = "https://github.com/your_username/alphatriangle/issues" # CHANGE THIS
 
 [project.scripts]
-# Keep this pointing to the installed package name
+# This remains the same
 alphatriangle = "alphatriangle.cli:app"
 
-# --- CHANGE: Remove ALL explicit package discovery ---
-# Rely on setuptools defaults and editable install mechanism
-# Remove [tool.setuptools] and [tool.setuptools.packages.find] sections
+# --- CHANGE: Use default find for standard layout ---
+[tool.setuptools.packages.find]
+# No 'where' needed, find searches from the project root by default
+# It will find the 'alphatriangle' directory now.
 # --- END CHANGE ---
 
 
 [tool.setuptools.package-data]
-# Keep this if you need non-code files included
-"*" = ["*.txt", "*.md", "*.json"]
+"*" = ["*.txt", "*.md", "*.json"] # Include non-code files
 
 # --- Tool Configurations (Optional but Recommended) ---
 
@@ -78,27 +78,31 @@ ignore_missing_imports = true # Start with true, gradually reduce
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --cov=src --cov-report=term-missing"
+# --- CHANGE: Update coverage path ---
+addopts = "-ra -q --cov=alphatriangle --cov-report=term-missing" # Point coverage to the new package dir
+# --- END CHANGE ---
 testpaths = [
     "tests",
 ]
 
 [tool.coverage.run]
+# --- CHANGE: Update coverage omit paths ---
 omit = [
-    "src/cli.py", # Exclude CLI from coverage for now
-    "src/visualization/*", # Exclude visualization for now
-    "src/app.py",
+    "alphatriangle/cli.py", # Exclude CLI from coverage for now
+    "alphatriangle/visualization/*", # Exclude visualization for now
+    "alphatriangle/app.py",
     "run_*.py",
-    "src/training/logging_utils.py", # Logging utils can be hard to cover fully
-    "src/config/*", # Config models are mostly declarative
-    "src/data/schemas.py",
-    "src/structs/*",
-    "src/utils/types.py",
-    "src/mcts/core/types.py",
-    "src/rl/types.py",
+    "alphatriangle/training/logging_utils.py", # Logging utils can be hard to cover fully
+    "alphatriangle/config/*", # Config models are mostly declarative
+    "alphatriangle/data/schemas.py",
+    "alphatriangle/structs/*",
+    "alphatriangle/utils/types.py",
+    "alphatriangle/mcts/core/types.py",
+    "alphatriangle/rl/types.py",
     "*/__init__.py",
     "*/README.md",
 ]
+# --- END CHANGE ---
 
 [tool.coverage.report]
 fail_under = 30 # Set a reasonable initial coverage target

@@ -11,8 +11,8 @@ try:
     from alphatriangle.nn import AlphaTriangleNet
 except ImportError:
     # Fallback to relative imports (for running tests directly)
-    from src.config import EnvConfig, ModelConfig
-    from src.nn import AlphaTriangleNet
+    from alphatriangle.config import EnvConfig, ModelConfig
+    from alphatriangle.nn import AlphaTriangleNet
 
 
 # Use shared fixtures implicitly via pytest injection
