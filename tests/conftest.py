@@ -1,7 +1,6 @@
 # File: tests/conftest.py
 # Top-level conftest for sharing session-scoped fixtures
 import random
-from typing import Any
 
 import numpy as np
 import pytest
@@ -53,7 +52,8 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
         TRANSFORMER_LAYERS=0,  # Provide default
         TRANSFORMER_FC_DIM=32,  # Provide default
         FC_DIMS_SHARED=[8],
-        POLICY_HEAD_DIMS=[mock_env_config.ACTION_DIM],  # Match action dim
+        # Cast ACTION_DIM to int
+        POLICY_HEAD_DIMS=[int(mock_env_config.ACTION_DIM)],
         VALUE_HEAD_DIMS=[1],
         OTHER_NN_INPUT_FEATURES_DIM=10,  # Simplified feature dim for testing
         ACTIVATION_FUNCTION="ReLU",  # Provide default
@@ -135,11 +135,10 @@ def mock_experience(
     mock_state_type: StateType, mock_env_config: EnvConfig
 ) -> Experience:
     """Creates a mock Experience tuple."""
+    action_dim = int(mock_env_config.ACTION_DIM)  # Cast to int
     policy_target = (
-        dict.fromkeys(
-            range(mock_env_config.ACTION_DIM), 1.0 / mock_env_config.ACTION_DIM
-        )
-        if mock_env_config.ACTION_DIM > 0
+        dict.fromkeys(range(action_dim), 1.0 / action_dim)
+        if action_dim > 0
         else {0: 1.0}
     )
     value_target = random.uniform(-1, 1)

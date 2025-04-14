@@ -2,7 +2,7 @@
 import logging
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError  # Import BaseModel
 
 from .env_config import EnvConfig
 from .mcts_config import MCTSConfig

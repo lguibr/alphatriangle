@@ -125,7 +125,7 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
     Calculates the policy target distribution based on MCTS visit counts.
     Raises PolicyGenerationError if target cannot be generated.
     """
-    action_dim = root_node.state.env_config.ACTION_DIM
+    action_dim = int(root_node.state.env_config.ACTION_DIM)  # Cast to int
     full_target = dict.fromkeys(range(action_dim), 0.0)
 
     if not root_node.children or root_node.visit_count == 0:
@@ -158,7 +158,8 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
         best_actions = [actions[i] for i, v in enumerate(visits) if v == max_visits]
         prob = 1.0 / len(best_actions)
         for a in best_actions:
-            if 0 <= a < action_dim:
+            # Cast a to int for comparison
+            if 0 <= int(a) < action_dim:
                 full_target[a] = prob
             else:
                 logger.warning(
@@ -191,7 +192,8 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
 
         raw_policy = {action: probabilities[i] for i, action in enumerate(actions)}
         for action, prob in raw_policy.items():
-            if 0 <= action < action_dim:
+            # Cast action to int for comparison
+            if 0 <= int(action) < action_dim:
                 full_target[action] = prob
             else:
                 logger.warning(

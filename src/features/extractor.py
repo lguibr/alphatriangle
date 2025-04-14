@@ -1,6 +1,6 @@
 # File: src/features/extractor.py
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
@@ -94,7 +94,7 @@ class GameStateFeatures:
                 shape_feature_matrix[i, 6] = np.clip(
                     ((min_c + max_c) / 2.0) / self.env_config.COLS, 0, 1
                 )
-
+        # Flatten the matrix to get a 1D array
         return shape_feature_matrix.flatten()
 
     def _get_shape_availability(self) -> np.ndarray:
@@ -123,7 +123,10 @@ class GameStateFeatures:
         features[5] = np.clip(self.gs.pieces_placed_this_episode / 100.0, 0, 1)
 
         # Ensure return type is ndarray and handle potential NaNs
-        return np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+        # Explicitly cast to satisfy mypy's no-any-return
+        return cast(
+            np.ndarray, np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+        )
 
     def get_combined_other_features(self) -> np.ndarray:
         """Combines all non-grid features into a single flat vector."""

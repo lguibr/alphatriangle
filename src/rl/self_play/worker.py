@@ -2,7 +2,7 @@
 import logging
 import random
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 import ray
@@ -161,7 +161,7 @@ class SelfPlayWorker:
         game = GameState(self.env_config, initial_seed=episode_seed)
 
         # Use TYPE_CHECKING import for Experience type hint
-        raw_experiences: list[tuple["StateType", "PolicyTargetMapping", float]] = []
+        raw_experiences: list[tuple[StateType, PolicyTargetMapping, float]] = []
         step_root_visits: list[int] = []
         step_tree_depths: list[int] = []
         step_simulations: list[int] = []
@@ -234,7 +234,7 @@ class SelfPlayWorker:
             feature_start_time = time.monotonic()
             try:
                 # Extract features from the state *before* taking the action
-                state_features: "StateType" = extract_state_features(
+                state_features: StateType = extract_state_features(
                     game, self.model_config
                 )
             except Exception as e:
@@ -312,7 +312,7 @@ class SelfPlayWorker:
         )
 
         # Use TYPE_CHECKING import for Experience type hint
-        processed_experiences: list["Experience"] = [
+        processed_experiences: list[Experience] = [
             (state_type, policy, final_outcome)
             for state_type, policy, _ in raw_experiences
         ]

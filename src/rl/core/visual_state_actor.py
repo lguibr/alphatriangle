@@ -1,4 +1,5 @@
 # File: src/rl/core/visual_state_actor.py
+import logging
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -6,6 +7,8 @@ import ray
 
 if TYPE_CHECKING:
     from src.environment import GameState
+
+logger = logging.getLogger(__name__)
 
 
 @ray.remote
@@ -29,9 +32,10 @@ class VisualStateActor:
             self.global_stats = stats
         else:
             # Handle error or log warning if stats is not a dict
-            # For mypy, we assume it's a dict based on usage,
-            # but runtime check might be good.
-            pass  # Or log error
+            logger.error(
+                f"VisualStateActor received non-dict type for global stats: {type(stats)}"
+            )
+            self.global_stats = {}  # Reset to empty dict
 
     def get_all_states(self) -> dict[int, Any]:
         """Called by the orchestrator to get states for the visual queue."""
@@ -40,6 +44,6 @@ class VisualStateActor:
         combined_states[-1] = self.global_stats.copy()
         return combined_states
 
-    def get_state(self, worker_id: int) -> "GameState" | None:
+    def get_state(self, worker_id: int) -> GameState | None:
         """Get state for a specific worker (unused currently)."""
         return self.worker_states.get(worker_id)

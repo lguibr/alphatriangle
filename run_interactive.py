@@ -3,7 +3,6 @@
 # The recommended way to run is via the 'alphatriangle' command-line tool.
 
 import argparse
-import os
 import sys
 from pathlib import Path  # Import Path
 

@@ -10,8 +10,8 @@ from src.environment import GameState  # Import real GameState
 from src.nn import AlphaTriangleNet, NeuralNetwork
 from src.utils.types import StateType
 
-# REMOVED: from ..mcts.conftest import mock_env_config, mock_model_config, mock_train_config, MockGameState # Import shared fixtures
-# from tests.mcts.conftest import MockGameState  # Import only MockGameState
+# Use module-level rng from tests/conftest.py
+from tests.conftest import rng
 
 
 # Use shared fixtures implicitly via pytest injection
@@ -65,8 +65,8 @@ def mock_state_type_nn(model_config: ModelConfig, env_config: EnvConfig) -> Stat
     )
     other_shape = (model_config.OTHER_NN_INPUT_FEATURES_DIM,)
     return {
-        "grid": np.random.rand(*grid_shape).astype(np.float32),
-        "other_features": np.random.rand(*other_shape).astype(np.float32),
+        "grid": rng.random(grid_shape).astype(np.float32),
+        "other_features": rng.random(other_shape).astype(np.float32),
     }
 
 
@@ -111,6 +111,7 @@ def test_batch_states_to_tensors(
 ):
     """Test the internal _batch_states_to_tensors method."""
     batch_size = 3
+    # Use the copy method of the real GameState
     mock_states = [mock_game_state.copy() for _ in range(batch_size)]
     # Make mock return slightly different arrays each time if needed
     mock_extract.side_effect = [
@@ -168,6 +169,7 @@ def test_evaluate_batch(
 ):
     """Test the evaluate_batch method."""
     batch_size = 3
+    # Use the copy method of the real GameState
     mock_states = [mock_game_state.copy() for _ in range(batch_size)]
     mock_extract.side_effect = [
         # Ensure features are copied correctly

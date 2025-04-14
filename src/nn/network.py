@@ -1,6 +1,6 @@
 # File: src/nn/network.py
 import logging
-from typing import TYPE_CHECKING, Mapping  # Import Mapping here
+from typing import TYPE_CHECKING, Mapping  # Keep Mapping here for now
 
 import numpy as np
 import torch
@@ -15,7 +15,7 @@ from .model import AlphaTriangleNet
 
 # Move Mapping import into TYPE_CHECKING block if only used for hints
 if TYPE_CHECKING:
-    from collections.abc import Mapping as MappingABC
+    from collections.abc import Mapping
 
 logger = logging.getLogger(__name__)
 

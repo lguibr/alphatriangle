@@ -1,5 +1,4 @@
 # File: tests/rl/test_buffer.py
-import random
 from collections import deque
 
 import numpy as np
@@ -8,10 +7,11 @@ import pytest
 from src.config import TrainConfig
 from src.rl import ExperienceBuffer
 from src.utils.sumtree import SumTree  # Import SumTree
-from src.utils.types import Experience
+from src.utils.types import Experience, StateType
 
-# REMOVED: Import only needed fixtures from mcts conftest
-# from tests.mcts.conftest import mock_experience, mock_state_type
+# Use module-level rng from tests/conftest.py
+from tests.conftest import rng
+
 
 # --- Fixtures ---
 
@@ -138,7 +138,8 @@ def test_uniform_buffer_capacity(
 ):
     for i in range(uniform_buffer.capacity + 10):
         # Create slightly different experiences
-        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        # Correctly copy StateType dict
+        state_copy: StateType = {k: v.copy() + i for k, v in mock_experience[0].items()}
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
     assert len(uniform_buffer) == uniform_buffer.capacity
@@ -166,7 +167,8 @@ def test_uniform_buffer_sample(
 ):
     # Fill buffer until ready
     for i in range(uniform_buffer.min_size_to_train):
-        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        # Correctly copy StateType dict
+        state_copy: StateType = {k: v.copy() + i for k, v in mock_experience[0].items()}
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
 
@@ -236,7 +238,8 @@ def test_per_buffer_add_batch(
 # Use mock_experience directly injected by pytest
 def test_per_buffer_capacity(per_buffer: ExperienceBuffer, mock_experience: Experience):
     for i in range(per_buffer.capacity + 10):
-        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        # Correctly copy StateType dict
+        state_copy: StateType = {k: v.copy() + i for k, v in mock_experience[0].items()}
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)  # Adds with current max priority
     assert len(per_buffer) == per_buffer.capacity
@@ -255,7 +258,8 @@ def test_per_buffer_is_ready(per_buffer: ExperienceBuffer, mock_experience: Expe
 def test_per_buffer_sample(per_buffer: ExperienceBuffer, mock_experience: Experience):
     # Fill buffer until ready
     for i in range(per_buffer.min_size_to_train):
-        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        # Correctly copy StateType dict
+        state_copy: StateType = {k: v.copy() + i for k, v in mock_experience[0].items()}
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
 
@@ -293,7 +297,8 @@ def test_per_buffer_update_priorities(
     # Add some items
     num_items = per_buffer.min_size_to_train
     for i in range(num_items):
-        state_copy = {k: v.copy() + i for k, v in mock_experience[0].items()}
+        # Correctly copy StateType dict
+        state_copy: StateType = {k: v.copy() + i for k, v in mock_experience[0].items()}
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
 
@@ -303,7 +308,7 @@ def test_per_buffer_update_priorities(
     indices = sample["indices"]  # These are tree indices
 
     # Update with some errors
-    td_errors = np.random.rand(per_buffer.config.BATCH_SIZE) * 0.5  # Example errors
+    td_errors = rng.random(per_buffer.config.BATCH_SIZE) * 0.5  # Example errors
     per_buffer.update_priorities(indices, td_errors)
 
     # --- Verification Adjustment ---
@@ -317,7 +322,8 @@ def test_per_buffer_update_priorities(
         expected_priorities_map[tree_idx] = expected_p  # Last write wins
 
     # Get the actual updated priorities from the tree for the unique indices involved
-    unique_indices = sorted(list(expected_priorities_map.keys()))
+    # Remove list() call from sorted()
+    unique_indices = sorted(expected_priorities_map.keys())
     actual_updated_priorities = [per_buffer.tree.tree[idx] for idx in unique_indices]
     expected_final_priorities = [expected_priorities_map[idx] for idx in unique_indices]
 

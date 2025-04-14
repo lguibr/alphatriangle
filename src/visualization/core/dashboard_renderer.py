@@ -7,7 +7,10 @@ from typing import TYPE_CHECKING, Any, Optional
 import pygame
 
 from src.environment import GameState
-from src.stats import StatsCollectorData  # Keep this import
+
+# Move StatsCollectorData import into TYPE_CHECKING block
+if TYPE_CHECKING:
+    from src.stats import StatsCollectorActor, StatsCollectorData
 
 # Import Plotter directly from its module
 from src.stats.plotter import Plotter
@@ -18,8 +21,6 @@ from . import colors, layout
 from .game_renderer import GameRenderer
 
 if TYPE_CHECKING:
-    from src.stats import StatsCollectorActor
-
     from ...config import EnvConfig, ModelConfig, VisConfig  # Add ModelConfig
 
 logger = logging.getLogger(__name__)
@@ -160,10 +161,10 @@ class DashboardRenderer:
 
     def _render_model_info(self, area_rect: pygame.Rect):
         """Renders model configuration details in the specified area."""
-        if not self.model_config or not self.fonts.get("help"):
+        font = self.fonts.get("help")
+        if not self.model_config or not font:
             return
 
-        font = self.fonts["help"]
         text_color = colors.LIGHT_GRAY
         bg_color = colors.DARK_GRAY  # Match stats area background
         border_color = colors.GRAY
@@ -179,7 +180,8 @@ class DashboardRenderer:
             # Truncate long lines if needed
             max_width = area_rect.width - 2 * x_offset
             original_text = text
-            while font.size(text)[0] > max_width and len(text) > 10:
+            # Check font exists before calling size
+            while font and font.size(text)[0] > max_width and len(text) > 10:
                 text = text[:-4] + "..."  # Truncate
             if text != original_text:
                 logger.debug(f"Truncated model info line: {original_text} -> {text}")
@@ -250,8 +252,8 @@ class DashboardRenderer:
 
             self._calculate_worker_sub_layout(worker_grid_area, worker_ids)
 
-            # Render each worker area
-            for worker_id in self.worker_sub_rects.keys():
+            # Render each worker area (use items() to iterate over keys and values)
+            for worker_id in self.worker_sub_rects:  # Iterate over calculated rect keys
                 worker_area_rect = self.worker_sub_rects[worker_id]
                 game_state = worker_states.get(worker_id)
                 step_stats = worker_step_stats.get(
@@ -274,7 +276,8 @@ class DashboardRenderer:
             # Render Plots
             plot_surface = None
             if plots_rect and plots_rect.width > 0 and plots_rect.height > 0:
-                stats_data_for_plot: StatsCollectorData | None = global_stats.get(
+                # Use TYPE_CHECKING import for StatsCollectorData type hint
+                stats_data_for_plot: "StatsCollectorData" | None = global_stats.get(
                     "stats_data"
                 )
 

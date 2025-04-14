@@ -31,7 +31,7 @@ def expand_node_with_policy(node: Node, action_policy: ActionPolicyMapping):
     logger.debug(f"[Expand] Expanding Node: {node}")
 
     # Use TYPE_CHECKING import for ActionType type hint
-    valid_actions: list["ActionType"] = node.state.valid_actions()
+    valid_actions: list[ActionType] = node.state.valid_actions()
     logger.debug(
         f"[Expand] Found {len(valid_actions)} valid actions for state step {node.state.current_step}."
     )

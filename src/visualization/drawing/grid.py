@@ -35,7 +35,7 @@ def draw_grid_triangles(
     for r in range(grid_data.rows):
         for c in range(grid_data.cols):
             # Use TYPE_CHECKING import for Triangle type hint
-            tri: "Triangle" = grid_data.triangles[r][c]
+            tri: Triangle = grid_data.triangles[r][c]
 
             if tri.is_death:
                 color = colors.DARK_GRAY
@@ -79,7 +79,7 @@ def draw_grid_indices(
     for r in range(grid_data.rows):
         for c in range(grid_data.cols):
             # Use TYPE_CHECKING import for Triangle type hint
-            tri: "Triangle" = grid_data.triangles[r][c]
+            tri: Triangle = grid_data.triangles[r][c]
             pts = tri.get_points(ox, oy, cw, ch)
             center_x = sum(p[0] for p in pts) / 3
             center_y = sum(p[1] for p in pts) / 3

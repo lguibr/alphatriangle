@@ -1,21 +1,22 @@
 # File: tests/mcts/conftest.py
-import os
 import random
 import sys
 from collections.abc import Mapping
-from typing import Any, Optional
+from pathlib import Path  # Import Path
 
 import numpy as np
 import pytest
 
-# Import necessary classes from the source code
-src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
-
+# Move imports to the top
 from src.environment import EnvConfig
 from src.mcts.core.node import Node
 from src.utils.types import ActionType, PolicyValueOutput
+
+# Ensure src path is added using pathlib
+src_path = Path(__file__).resolve().parent.parent.parent / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
 
 # Use default NumPy random number generator
 rng = np.random.default_rng()
@@ -40,12 +41,20 @@ class MockGameState:
         self.env_config = (
             env_config
             if env_config
-            else EnvConfig(ROWS=3, COLS=3, COLS_PER_ROW=[3, 3, 3], NUM_SHAPE_SLOTS=1)
+            # Provide default values for EnvConfig
+            else EnvConfig(
+                ROWS=3,
+                COLS=3,
+                COLS_PER_ROW=[3, 3, 3],
+                NUM_SHAPE_SLOTS=1,
+                MIN_LINE_LENGTH=3,
+            )
         )
         self._valid_actions = (
             valid_actions
             if valid_actions is not None
-            else list(range(self.env_config.ACTION_DIM))
+            # Cast ACTION_DIM to int for range
+            else list(range(int(self.env_config.ACTION_DIM)))
         )
 
     def is_over(self) -> bool:
@@ -120,7 +129,7 @@ class MockNetworkEvaluator:
     ):
         self._default_policy = default_policy
         self._default_value = default_value
-        self._action_dim = action_dim
+        self._action_dim = action_dim  # Store as int
         self.evaluation_history: list[MockGameState] = []
         self.batch_evaluation_history: list[list[MockGameState]] = []
 
@@ -148,7 +157,7 @@ class MockNetworkEvaluator:
 
     def evaluate(self, state: MockGameState) -> PolicyValueOutput:
         self.evaluation_history.append(state)
-        self._action_dim = state.env_config.ACTION_DIM
+        self._action_dim = int(state.env_config.ACTION_DIM)  # Ensure int
         policy = self._get_policy(state)
         # Create full policy map respecting action_dim
         full_policy = dict.fromkeys(range(self._action_dim), 0.0)
@@ -171,14 +180,16 @@ class MockNetworkEvaluator:
 @pytest.fixture
 def mock_evaluator(mock_env_config: EnvConfig) -> MockNetworkEvaluator:
     """Provides a MockNetworkEvaluator instance configured with the mock EnvConfig."""
-    return MockNetworkEvaluator(action_dim=mock_env_config.ACTION_DIM)
+    # Cast ACTION_DIM to int
+    return MockNetworkEvaluator(action_dim=int(mock_env_config.ACTION_DIM))
 
 
 @pytest.fixture
 def root_node_mock_state(mock_env_config: EnvConfig) -> Node:
     """Provides a root Node with a MockGameState using the mock EnvConfig."""
     state = MockGameState(
-        valid_actions=list(range(mock_env_config.ACTION_DIM)),
+        # Cast ACTION_DIM to int
+        valid_actions=list(range(int(mock_env_config.ACTION_DIM))),
         env_config=mock_env_config,
     )
     # Cast MockGameState to Any temporarily to satisfy Node's type hint
@@ -193,7 +204,8 @@ def expanded_node_mock_state(
     root = root_node_mock_state
     # Cast root.state back to MockGameState for the evaluator
     mock_state = root.state
-    mock_evaluator._action_dim = mock_state.env_config.ACTION_DIM
+    # Ensure evaluator action_dim is int
+    mock_evaluator._action_dim = int(mock_state.env_config.ACTION_DIM)
     policy, value = mock_evaluator.evaluate(mock_state)  # type: ignore [arg-type]
     # Ensure policy is not empty before expanding
     if not policy:
@@ -233,9 +245,8 @@ def deep_expanded_node_mock_state(
     to encourage traversal down the path leading to action 0, then action 1.
     """
     root = expanded_node_mock_state
-    mock_evaluator._action_dim = (
-        mock_env_config.ACTION_DIM
-    )  # Ensure evaluator has correct action dim
+    # Ensure evaluator has correct action dim (as int)
+    mock_evaluator._action_dim = int(mock_env_config.ACTION_DIM)
 
     # Ensure children exist
     if 0 not in root.children or 1 not in root.children:

@@ -1,6 +1,5 @@
 # File: src/training/runners.py
 import logging
-import os
 import queue
 import sys
 import threading
@@ -48,7 +47,7 @@ def _setup_training_components(
         # Use the potentially overridden configs passed in
         train_config = train_config_override
         persist_config = persist_config_override
-        # Provide defaults for missing arguments
+        # Provide defaults for missing arguments by calling constructors without args
         env_config = config.EnvConfig()
         model_config = config.ModelConfig()
         mcts_config = config.MCTSConfig()
@@ -269,7 +268,7 @@ def run_training_visual_mode(
         logger.info("Training pipeline thread launched.")
 
         # --- Initialize Visualization ---
-        # Provide defaults for VisConfig
+        # Provide defaults for VisConfig by calling constructor without args
         vis_config = config.VisConfig()
         pygame.init()
         pygame.font.init()
@@ -321,7 +320,14 @@ def run_training_visual_mode(
                 elif isinstance(visual_data, dict):
                     has_received_data = True
                     # Use update for global stats to handle potential overlaps
-                    current_global_stats.update(visual_data.pop(-1, {}))
+                    global_stats_update = visual_data.pop(-1, {})
+                    if isinstance(global_stats_update, dict):
+                        current_global_stats.update(global_stats_update)
+                    else:
+                        logger.warning(
+                            f"Received non-dict global stats update: {type(global_stats_update)}"
+                        )
+
                     current_worker_states = {
                         k: v
                         for k, v in visual_data.items()
@@ -330,7 +336,12 @@ def run_training_visual_mode(
                         and isinstance(v, environment.GameState)
                     }
                     # Update global stats with any remaining items (shouldn't be any ideally)
-                    current_global_stats.update(visual_data)
+                    if isinstance(visual_data, dict):
+                        current_global_stats.update(visual_data)
+                    else:
+                        logger.warning(
+                            f"Remaining visual_data is not a dict: {type(visual_data)}"
+                        )
                 else:
                     logger.warning(
                         f"Received unexpected item from visual queue: {type(visual_data)}"

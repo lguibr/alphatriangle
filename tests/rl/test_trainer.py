@@ -1,16 +1,14 @@
 # File: tests/rl/test_trainer.py
+
+import numpy as np
 import pytest
 import torch
-import numpy as np
-from unittest.mock import patch
 
-from src.rl import Trainer, ExperienceBuffer
+from src.config import EnvConfig, ModelConfig, TrainConfig
 from src.nn import NeuralNetwork
-from src.config import TrainConfig, EnvConfig, ModelConfig
-from src.utils.types import Experience, StateType, PERBatchSample
+from src.rl import ExperienceBuffer, Trainer
+from src.utils.types import Experience, PERBatchSample, StateType
 
-# REMOVED: Import only needed fixtures from mcts conftest
-# from tests.mcts.conftest import mock_experience, mock_state_type
 
 # --- Fixtures ---
 

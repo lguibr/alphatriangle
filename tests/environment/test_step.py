@@ -1,7 +1,6 @@
 # File: tests/environment/test_step.py
 import random
 from time import sleep
-from typing import Set  # Import Set
 
 import pytest
 
@@ -46,7 +45,9 @@ def test_calculate_reward_single_line_clear(simple_shape: Shape):
     # Create dummy triangles for the set structure
     line_tris = {Triangle(0, i, False) for i in range(9)}
     cleared_lines_set: set[frozenset[Triangle]] = {frozenset(line_tris)}
-    expected_line_reward = len(line_tris) * 2.0
+    # Correct expected reward calculation based on unique triangles
+    unique_cleared_count = len(line_tris)
+    expected_line_reward = unique_cleared_count * 2.0
     expected_total_reward = float(placed_count) + expected_line_reward
 
     reward = calculate_reward(placed_count, cleared_lines_set)
@@ -69,14 +70,18 @@ def test_calculate_reward_multi_line_clear(simple_shape: Shape):
         frozenset(line1_tris),
         frozenset(line2_tris),
     }
-    expected_line1_reward = len(line1_tris) * 2.0  # 9 * 2 = 18
-    expected_line2_reward = len(line2_tris) * 2.0  # 5 * 2 = 10
+    # Correct expected reward calculation based on unique triangles
+    unique_triangles_cleared: set[Triangle] = set()
+    for line in cleared_lines_set:
+        unique_triangles_cleared.update(line)
+    expected_line_reward = len(unique_triangles_cleared) * 2.0  # 13 * 2.0 = 26.0
     expected_total_reward = (
-        float(placed_count) + expected_line1_reward + expected_line2_reward
-    )
+        float(placed_count) + expected_line_reward
+    )  # 3.0 + 26.0 = 29.0
 
     reward = calculate_reward(placed_count, cleared_lines_set)
-    assert reward == pytest.approx(expected_total_reward)  # 3 + 18 + 10 = 31
+    # Assert against the correctly calculated expected reward
+    assert reward == pytest.approx(expected_total_reward)  # Should assert 29.0 == 29.0
 
 
 def test_execute_placement_simple_no_refill(
@@ -153,7 +158,9 @@ def test_execute_placement_clear_line_no_refill(
 
     # Verify reward (placement + line clear)
     expected_placement_reward = float(len(shape_single_down.triangles))  # 1
-    expected_line_reward = 9 * 2.0  # Line [3..11] has 9 triangles
+    # Correct expected reward calculation based on unique triangles
+    unique_cleared_count = 9  # Line [3..11] has 9 triangles
+    expected_line_reward = unique_cleared_count * 2.0
     expected_total_reward = expected_placement_reward + expected_line_reward
     assert reward == pytest.approx(expected_total_reward)  # 1 + 18 = 19
     assert gs.game_score == reward

@@ -203,7 +203,7 @@ def test_add_dirichlet_noise(
     # original_sum = sum(original_priors.values()) # Unused variable
 
     # Use default_rng for modern NumPy random generation
-    rng = np.random.default_rng(42)
+    # rng = np.random.default_rng(42) # Removed unused variable
     selection.add_dirichlet_noise(node, config_copy)
     # Resetting global seed is less ideal, rely on instance if needed elsewhere
 

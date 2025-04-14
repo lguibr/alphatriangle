@@ -1,19 +1,15 @@
 # File: src/training/logging_utils.py
-import io
-import json
 import logging
-import os
-import sys
 from pathlib import Path  # Import Path
 from typing import TYPE_CHECKING, Any
 
 import mlflow
 import numpy as np
-import torch
 
 if TYPE_CHECKING:
-    from .components import TrainingComponents
     from src.config import PersistenceConfig
+
+    from .components import TrainingComponents
 
 logger = logging.getLogger(__name__)
 

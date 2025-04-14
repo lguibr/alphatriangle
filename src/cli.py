@@ -1,6 +1,5 @@
 # File: src/cli.py
 import logging
-import os
 import sys
 from pathlib import Path  # Import Path
 from typing import Annotated
@@ -92,7 +91,7 @@ def run_interactive_mode(mode: str, seed: int, log_level: str):
     set_random_seeds(seed)
 
     # Instantiate MCTSConfig needed for validation function
-    # Provide default values
+    # Provide default values by calling constructor without args
     mcts_config = MCTSConfig()
     # Pass MCTSConfig instance to validation
     config.print_config_info_and_validate(mcts_config)
@@ -155,7 +154,7 @@ def train(
     logger = logging.getLogger(__name__)  # Get logger after setup
 
     # --- Configuration Overrides ---
-    # Create default configs first, providing all required args
+    # Create default configs first by calling constructors without args
     train_config_override = config.TrainConfig()
     persist_config_override = config.PersistenceConfig()
 

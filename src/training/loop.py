@@ -3,7 +3,6 @@ import logging
 import queue
 import threading
 import time
-from collections import deque
 from typing import TYPE_CHECKING, Any
 
 import numpy as np  # Import numpy

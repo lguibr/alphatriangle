@@ -1,11 +1,9 @@
-# File: tests/nn/test_model.py
+
 import pytest
 import torch
 
 from src.config import EnvConfig, ModelConfig
 from src.nn import AlphaTriangleNet
-
-# REMOVED: from ..mcts.conftest import mock_env_config, mock_model_config # Import shared fixtures
 
 
 # Use shared fixtures implicitly via pytest injection
@@ -100,7 +98,8 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
         TRANSFORMER_LAYERS=1,
         TRANSFORMER_FC_DIM=32,
         FC_DIMS_SHARED=[16],
-        POLICY_HEAD_DIMS=[env_config.ACTION_DIM],
+        # Cast ACTION_DIM to int
+        POLICY_HEAD_DIMS=[int(env_config.ACTION_DIM)],
         VALUE_HEAD_DIMS=[1],
         OTHER_NN_INPUT_FEATURES_DIM=10,
         ACTIVATION_FUNCTION="ReLU",  # Provide default

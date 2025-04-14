@@ -1,6 +1,6 @@
 # File: src/nn/model.py
 import math
-from typing import Type  # Import Type
+from typing import Type
 
 import torch
 import torch.nn as nn
@@ -18,7 +18,7 @@ def conv_block(
     activation: Type[nn.Module],
 ) -> nn.Sequential:
     """Creates a standard convolutional block."""
-    layers = [
+    layers: list[nn.Module] = [  # Explicitly type the list
         nn.Conv2d(
             in_channels,
             out_channels,
@@ -95,7 +95,7 @@ class AlphaTriangleNet(nn.Module):
         activation_cls: Type[nn.Module] = getattr(nn, model_config.ACTIVATION_FUNCTION)
 
         # --- CNN Body ---
-        conv_layers = []
+        conv_layers: list[nn.Module] = []  # Explicitly type the list
         in_channels = model_config.GRID_INPUT_CHANNELS
         for i, out_channels in enumerate(model_config.CONV_FILTERS):
             conv_layers.append(
@@ -113,7 +113,7 @@ class AlphaTriangleNet(nn.Module):
         self.conv_body = nn.Sequential(*conv_layers)
 
         # --- Residual Body ---
-        res_layers = []
+        res_layers: list[nn.Module] = []  # Explicitly type the list
         if model_config.NUM_RESIDUAL_BLOCKS > 0:
             res_channels = model_config.RESIDUAL_BLOCK_FILTERS
             if in_channels != res_channels:
@@ -180,7 +180,7 @@ class AlphaTriangleNet(nn.Module):
                 proj_out = self.input_proj(res_out)
                 b, d, h, w = proj_out.shape
                 # Reshape for transformer: (Seq, Batch, Dim) -> (H*W, B, D)
-                transformer_input_dummy = proj_out.flatten(2).permute(2, 0, 1)
+                # transformer_input_dummy = proj_out.flatten(2).permute(2, 0, 1) # Removed unused variable
                 # Positional encoding added in forward pass
                 # Transformer output shape is (Seq, Batch, Dim)
                 self.transformer_output_size = h * w * d  # Dim is d here
@@ -204,7 +204,7 @@ class AlphaTriangleNet(nn.Module):
                 self.flattened_cnn_size + model_config.OTHER_NN_INPUT_FEATURES_DIM
             )
 
-        shared_fc_layers = []
+        shared_fc_layers: list[nn.Module] = []  # Explicitly type the list
         in_features = combined_input_size
         for hidden_dim in model_config.FC_DIMS_SHARED:
             shared_fc_layers.append(nn.Linear(in_features, hidden_dim))
@@ -216,7 +216,7 @@ class AlphaTriangleNet(nn.Module):
         self.shared_fc = nn.Sequential(*shared_fc_layers)
 
         # --- Policy Head ---
-        policy_head_layers = []
+        policy_head_layers: list[nn.Module] = []  # Explicitly type the list
         policy_in_features = in_features
         # Iterate through hidden dims if any
         for hidden_dim in model_config.POLICY_HEAD_DIMS:
@@ -226,11 +226,12 @@ class AlphaTriangleNet(nn.Module):
             policy_head_layers.append(activation_cls())
             policy_in_features = hidden_dim
         # Final layer to output action dimension logits
-        policy_head_layers.append(nn.Linear(policy_in_features, self.action_dim))
+        # Cast action_dim to int to satisfy mypy
+        policy_head_layers.append(nn.Linear(policy_in_features, int(self.action_dim)))
         self.policy_head = nn.Sequential(*policy_head_layers)
 
         # --- Value Head ---
-        value_head_layers = []
+        value_head_layers: list[nn.Module] = []  # Explicitly type the list
         value_in_features = in_features
         # Iterate through hidden dims, excluding the final output dim (1)
         for hidden_dim in model_config.VALUE_HEAD_DIMS[:-1]:

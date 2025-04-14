@@ -1,6 +1,5 @@
 # File: src/environment/grid/grid_data.py
 import logging
-from pathlib import Path  # Import Path
 
 import numpy as np
 
@@ -276,17 +275,19 @@ class GridData:
         for r in range(self.rows):
             for c in range(self.cols):
                 old_tri = self.triangles[r][c]
-                new_tri = new_grid.triangles[r][c]
-                old_to_new_tri_map[hash(old_tri)] = new_tri
+                # Rename second 'new_tri' to avoid redefinition error
+                new_tri_obj = new_grid.triangles[r][c]
+                old_to_new_tri_map[hash(old_tri)] = new_tri_obj
 
         # Rebuild potential_lines and _triangle_to_lines_map using new triangles
         for old_frozen_line in self.potential_lines:
             new_line_triangles: set[Triangle] = set()
             valid_new_line = True
             for old_tri in old_frozen_line:
-                new_tri: Triangle | None = old_to_new_tri_map.get(hash(old_tri))
-                if new_tri:
-                    new_line_triangles.add(new_tri)
+                # Use the renamed variable here
+                new_tri_lookup: Triangle | None = old_to_new_tri_map.get(hash(old_tri))
+                if new_tri_lookup:
+                    new_line_triangles.add(new_tri_lookup)
                 else:
                     # This shouldn't happen if the map is built correctly
                     logger.error(
@@ -298,10 +299,12 @@ class GridData:
                 new_frozen_line = frozenset(new_line_triangles)
                 new_grid.potential_lines.add(new_frozen_line)
                 # Add to the reverse map for the new grid
-                for new_tri in new_line_triangles:
-                    if new_tri not in new_grid._triangle_to_lines_map:
-                        new_grid._triangle_to_lines_map[new_tri] = set()
-                    new_grid._triangle_to_lines_map[new_tri].add(new_frozen_line)
+                for new_tri_in_line in new_line_triangles:
+                    if new_tri_in_line not in new_grid._triangle_to_lines_map:
+                        new_grid._triangle_to_lines_map[new_tri_in_line] = set()
+                    new_grid._triangle_to_lines_map[new_tri_in_line].add(
+                        new_frozen_line
+                    )
 
         # logger.debug(f"GridData deepcopy complete. Copied {len(new_grid.potential_lines)} lines.") # Optional: reduce log noise
         return new_grid

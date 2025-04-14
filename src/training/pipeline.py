@@ -4,6 +4,7 @@ import os
 import queue
 import time
 from collections import deque  # Import deque
+from pathlib import Path  # Import Path
 from typing import Any
 
 import mlflow
@@ -68,7 +69,8 @@ class TrainingPipeline:
         try:
             persist_config = self.components.persist_config
             mlflow_abs_path = persist_config.get_mlflow_abs_path()
-            os.makedirs(mlflow_abs_path, exist_ok=True)
+            # Use Path.mkdir instead of os.makedirs
+            Path(mlflow_abs_path).mkdir(parents=True, exist_ok=True)
             mlflow_tracking_uri = persist_config.MLFLOW_TRACKING_URI
             mlflow.set_tracking_uri(mlflow_tracking_uri)
             mlflow.set_experiment(APP_NAME)

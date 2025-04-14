@@ -1,6 +1,6 @@
 # File: src/rl/core/trainer.py
 import logging
-from typing import Any
+from typing import cast
 
 import numpy as np
 import torch
@@ -34,7 +34,7 @@ class Trainer:
         self.model_config = nn_interface.model_config
         self.device = nn_interface.device
         self.optimizer = self._create_optimizer()
-        self.scheduler = self._create_scheduler(self.optimizer)
+        self.scheduler: _LRScheduler | None = self._create_scheduler(self.optimizer)
 
     def _create_optimizer(self) -> optim.Optimizer:
         """Creates the optimizer based on TrainConfig."""
@@ -70,8 +70,10 @@ class Trainer:
             step_size = getattr(self.train_config, "LR_SCHEDULER_STEP_SIZE", 100000)
             gamma = getattr(self.train_config, "LR_SCHEDULER_GAMMA", 0.1)
             logger.info(f"  StepLR params: step_size={step_size}, gamma={gamma}")
-            return optim.lr_scheduler.StepLR(
-                optimizer, step_size=step_size, gamma=gamma
+            # Cast return type
+            return cast(
+                _LRScheduler,
+                optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma),
             )
         elif scheduler_type == "cosineannealinglr":
             t_max = self.train_config.LR_SCHEDULER_T_MAX
@@ -82,8 +84,12 @@ class Trainer:
                 )
                 t_max = self.train_config.MAX_TRAINING_STEPS or 1_000_000
             logger.info(f"  CosineAnnealingLR params: T_max={t_max}, eta_min={eta_min}")
-            return optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=t_max, eta_min=eta_min
+            # Cast return type
+            return cast(
+                _LRScheduler,
+                optim.lr_scheduler.CosineAnnealingLR(
+                    optimizer, T_max=t_max, eta_min=eta_min
+                ),
             )
         else:
             raise ValueError(f"Unsupported scheduler type: {scheduler_type_config}")
@@ -99,8 +105,9 @@ class Trainer:
         grids = []
         other_features = []
         value_targets = []
+        # Cast ACTION_DIM to int for shape
         policy_target_tensor = torch.zeros(
-            (batch_size, self.env_config.ACTION_DIM),
+            (batch_size, int(self.env_config.ACTION_DIM)),
             dtype=torch.float32,
             device=self.device,
         )
@@ -110,7 +117,8 @@ class Trainer:
             other_features.append(state_features["other_features"])
             value_targets.append(value_target)
             for action, prob in policy_target_map.items():
-                if 0 <= action < self.env_config.ACTION_DIM:
+                # Cast ACTION_DIM to int for comparison
+                if 0 <= action < int(self.env_config.ACTION_DIM):
                     policy_target_tensor[i, action] = prob
                 else:
                     logger.warning(
@@ -183,7 +191,8 @@ class Trainer:
             entropy_term = -torch.sum(
                 policy_probs * torch.log(policy_probs + 1e-9), dim=1
             )
-            entropy = entropy_term.mean().item()  # This is already float
+            # Cast entropy to float
+            entropy = float(entropy_term.mean().item())
             entropy_loss = -self.train_config.ENTROPY_BONUS_WEIGHT * entropy_term.mean()
 
         total_loss = (

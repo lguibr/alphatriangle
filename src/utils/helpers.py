@@ -42,7 +42,7 @@ def set_random_seeds(seed: int = 42):
     random.seed(seed)
     # Use NumPy's recommended way to seed the global RNG state if needed,
     # or preferably use a Generator instance. For simplicity here, we seed global.
-    np.random.seed(seed)
+    np.random.seed(seed)  # noqa: NPY002
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
@@ -79,7 +79,7 @@ def normalize_color_for_matplotlib(
         # Ensure values are within 0-255 before dividing
         valid_color = tuple(max(0, min(255, c)) for c in color_tuple_0_255)
         # Cast the result to the expected precise tuple type
-        return cast(tuple[float, float, float], tuple(c / 255.0 for c in valid_color))
+        return cast("tuple[float, float, float]", tuple(c / 255.0 for c in valid_color))
     logger.warning(
         f"Invalid color format for normalization: {color_tuple_0_255}, returning black."
     )

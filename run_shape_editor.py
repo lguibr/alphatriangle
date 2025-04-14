@@ -1,7 +1,6 @@
 # File: run_shape_editor.py
 import contextlib  # Import contextlib
 import logging
-import os
 import random
 import sys
 from pathlib import Path  # Import Path

@@ -23,11 +23,8 @@ def is_point_in_polygon(
         p2x, p2y = polygon[i % n]
         # Combine nested if statements
         if y > min(p1y, p2y) and y <= max(p1y, p2y) and x <= max(p1x, p2x):
-            if p1y != p2y:
-                xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-            else:
-                # Handle horizontal lines explicitly if needed, or rely on x <= max(p1x, p2x)
-                xinters = x  # Point is on the horizontal line segment
+            # Use ternary operator for xinters calculation
+            xinters = ((y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x) if p1y != p2y else x
 
             # Check if point is on the segment boundary or crosses the ray
             if abs(p1x - p2x) < 1e-9:  # Vertical line segment

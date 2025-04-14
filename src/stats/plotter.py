@@ -3,9 +3,14 @@ import logging
 import time
 from collections import deque
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 import matplotlib
-import numpy as np
+
+# Move numpy import into TYPE_CHECKING block
+if TYPE_CHECKING:
+    import numpy as np
+
 import pygame
 
 matplotlib.use("Agg")
@@ -32,7 +37,7 @@ class Plotter:
         self.colors = self._init_colors()
 
         self.fig: plt.Figure | None = None
-        self.axes: np.ndarray | None = None
+        self.axes: np.ndarray | None = None  # type: ignore # numpy is type-checked only
         self.last_target_size: tuple[int, int] = (0, 0)
         self.last_data_hash: int | None = None
 
@@ -288,10 +293,10 @@ class Plotter:
                 self.fig, self.axes, self.last_target_size = None, None, (0, 0)
             return None
 
-        cache_status = "HIT"
+        # cache_status = "HIT" # Removed unused variable
         try:
             if needs_reinit:
-                cache_status = "MISS (Re-init)"
+                # cache_status = "MISS (Re-init)" # Removed unused variable
                 self._init_figure(target_width, target_height)
                 if self.fig and self._update_plot_data(plot_data):
                     self.plot_surface_cache = self._render_figure_to_surface(
@@ -302,9 +307,7 @@ class Plotter:
                 else:
                     self.plot_surface_cache = None
             elif needs_update:
-                cache_status = (
-                    f"MISS (Update - Data: {data_changed}, Time: {time_elapsed})"
-                )
+                # cache_status = f"MISS (Update - Data: {data_changed}, Time: {time_elapsed})" # Removed unused variable
                 if self._update_plot_data(plot_data):
                     self.plot_surface_cache = self._render_figure_to_surface(
                         target_width, target_height
@@ -315,9 +318,9 @@ class Plotter:
                     logger.warning(
                         "[Plotter] Plot update failed, returning stale cache."
                     )
-                    cache_status = "ERROR (Update Failed)"
+                    # cache_status = "ERROR (Update Failed)" # Removed unused variable
             elif self.plot_surface_cache is None:
-                cache_status = "MISS (Cache None)"
+                # cache_status = "MISS (Cache None)" # Removed unused variable
                 if self.fig is None:
                     self._init_figure(target_width, target_height)
                 if self.fig and self._update_plot_data(plot_data):

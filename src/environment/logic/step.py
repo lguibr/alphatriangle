@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import TYPE_CHECKING, Set
+from typing import TYPE_CHECKING
 
 from src.structs import Triangle
 

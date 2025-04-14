@@ -1,6 +1,5 @@
 # File: src/stats/plot_utils.py
 import logging
-from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np

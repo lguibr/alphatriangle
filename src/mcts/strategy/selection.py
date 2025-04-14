@@ -9,6 +9,8 @@ from src.config import MCTSConfig
 from ..core.node import Node
 
 logger = logging.getLogger(__name__)
+# Use default NumPy random number generator for reproducibility if seed is set elsewhere
+rng = np.random.default_rng()
 
 
 class SelectionError(Exception):
@@ -57,7 +59,8 @@ def add_dirichlet_noise(node: Node, config: MCTSConfig):
         return
 
     actions = list(node.children.keys())
-    noise = np.random.dirichlet([config.dirichlet_alpha] * len(actions))
+    # Use the module-level rng generator
+    noise = rng.dirichlet([config.dirichlet_alpha] * len(actions))
     eps = config.dirichlet_epsilon
 
     noisy_priors_sum = 0.0

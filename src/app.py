@@ -17,7 +17,7 @@ class Application:
     """Main application integrating visualization and interaction."""
 
     def __init__(self, mode: str = "play"):
-        # Provide default values for VisConfig and EnvConfig
+        # Provide default values for VisConfig and EnvConfig by calling without args
         self.vis_config = config.VisConfig()
         self.env_config = config.EnvConfig()
         self.mode = mode

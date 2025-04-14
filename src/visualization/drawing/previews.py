@@ -106,12 +106,13 @@ def render_previews(
 
                 # Draw the shape onto the local preview surface
                 # Cast float coordinates to int for draw_shape
+                # Use _is_selected to match the function signature
                 draw_shape(
                     surface,
                     shape,
                     (int(draw_topleft_x), int(draw_topleft_y)),
                     cell_size,
-                    is_selected=is_selected,  # Pass selection status (might affect shape drawing later)
+                    _is_selected=is_selected,
                     origin_offset=(
                         -min_r,
                         -min_c,
