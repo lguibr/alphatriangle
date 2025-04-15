@@ -1,3 +1,4 @@
+# File: alphatriangle/config/model_config.py
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -6,45 +7,56 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class ModelConfig(BaseModel):
     """
     Configuration for the Neural Network model (Pydantic model).
-    --- SERIOUS CONFIGURATION ---
+    --- Further Enhanced Capacity Configuration ---
     """
 
     GRID_INPUT_CHANNELS: int = Field(default=1, gt=0)
     # --- CNN Architecture Parameters ---
-    # Increased filters for more feature extraction capacity
-    CONV_FILTERS: list[int] = Field(default=[64, 128])
-    CONV_KERNEL_SIZES: list[int | tuple[int, int]] = Field(default=[3, 3])
-    CONV_STRIDES: list[int | tuple[int, int]] = Field(default=[1, 1])
-    CONV_PADDING: list[int | tuple[int, int] | str] = Field(default=[1, 1])
+    # Increased depth and width again
+    CONV_FILTERS: list[int] = Field(default=[128, 256, 512])  # CHANGED
+    CONV_KERNEL_SIZES: list[int | tuple[int, int]] = Field(default=[3, 3, 3])
+    CONV_STRIDES: list[int | tuple[int, int]] = Field(default=[1, 1, 1])
+    CONV_PADDING: list[int | tuple[int, int] | str] = Field(default=[1, 1, 1])
 
-    # Added residual blocks for deeper representation learning
-    NUM_RESIDUAL_BLOCKS: int = Field(default=4, ge=0)
-    RESIDUAL_BLOCK_FILTERS: int = Field(default=128, gt=0)  # Match last conv filter
+    # Increased residual blocks and match filter size
+    NUM_RESIDUAL_BLOCKS: int = Field(default=8, ge=0)  # CHANGED
+    RESIDUAL_BLOCK_FILTERS: int = Field(
+        default=512, gt=0
+    )  # CHANGED (Match last conv filter)
 
-    # --- Transformer Parameters (Kept Enabled) ---
+    # --- Transformer Parameters (Further Enhanced) ---
     USE_TRANSFORMER: bool = Field(default=True)
-    # Increased dimensions for Transformer capacity
-    TRANSFORMER_DIM: int = Field(default=128, gt=0)  # Match ResNet output
-    TRANSFORMER_HEADS: int = Field(default=4, gt=0)  # Needs to divide TRANSFORMER_DIM
-    TRANSFORMER_LAYERS: int = Field(default=2, ge=0)  # Moderate number of layers
-    TRANSFORMER_FC_DIM: int = Field(default=256, gt=0)  # Increased feedforward dim
+    # Increased dimensions for Transformer capacity, match ResNet output
+    TRANSFORMER_DIM: int = Field(default=512, gt=0)  # CHANGED
+    TRANSFORMER_HEADS: int = Field(
+        default=16, gt=0
+    )  # CHANGED (Needs to divide TRANSFORMER_DIM: 512/16=32)
+    TRANSFORMER_LAYERS: int = Field(default=6, ge=0)  # CHANGED
+    TRANSFORMER_FC_DIM: int = Field(
+        default=1024, gt=0
+    )  # CHANGED (Increased feedforward dim)
 
-    # --- Fully Connected Layers ---
+    # --- Fully Connected Layers (Further Enhanced) ---
     # Increased dimensions for shared and head layers
-    FC_DIMS_SHARED: list[int] = Field(default=[256])
-    POLICY_HEAD_DIMS: list[int] = Field(default=[256])  # Output dim added automatically
-    VALUE_HEAD_DIMS: list[int] = Field(default=[256, 1])  # Output dim must be 1
+    FC_DIMS_SHARED: list[int] = Field(default=[1024])  # CHANGED
+    POLICY_HEAD_DIMS: list[int] = Field(
+        default=[1024]
+    )  # CHANGED (Output dim added automatically)
+    VALUE_HEAD_DIMS: list[int] = Field(
+        default=[1024, 1]
+    )  # CHANGED (Output dim must be 1)
 
     # --- Other Hyperparameters ---
     ACTIVATION_FUNCTION: Literal["ReLU", "GELU", "SiLU", "Tanh", "Sigmoid"] = Field(
-        default="ReLU"
+        default="ReLU"  # GELU or SiLU might also work well with Transformers
     )
     USE_BATCH_NORM: bool = Field(default=True)
 
     # --- Input Feature Dimension ---
     # This depends on alphatriangle/features/extractor.py and should match its output.
     # Default calculation: 3 slots * 7 shape feats + 3 avail feats + 6 explicit feats = 30
-    OTHER_NN_INPUT_FEATURES_DIM: int = Field(default=30, gt=0)
+    # This calculation has NOT changed with the model architecture changes.
+    OTHER_NN_INPUT_FEATURES_DIM: int = Field(default=30, gt=0)  # UNCHANGED
 
     @model_validator(mode="after")
     def check_conv_layers_consistency(self) -> "ModelConfig":
@@ -112,7 +124,7 @@ class ModelConfig(BaseModel):
                     )
                 if self.TRANSFORMER_DIM % self.TRANSFORMER_HEADS != 0:
                     raise ValueError(
-                        "TRANSFORMER_DIM must be divisible by TRANSFORMER_HEADS."
+                        f"TRANSFORMER_DIM ({self.TRANSFORMER_DIM}) must be divisible by TRANSFORMER_HEADS ({self.TRANSFORMER_HEADS})."
                     )
                 if (
                     not hasattr(self, "TRANSFORMER_FC_DIM")

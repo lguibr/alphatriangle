@@ -1,31 +1,26 @@
+# File: alphatriangle/config/mcts_config.py
 from pydantic import BaseModel, Field, field_validator
 
 
 class MCTSConfig(BaseModel):
     """
     Configuration for Monte Carlo Tree Search (Pydantic model).
-    --- SERIOUS CONFIGURATION ---
+    --- Tuned for Enhanced Search ---
     """
 
-    # Significantly more simulations for better policy evaluation
-    num_simulations: int = Field(default=512, ge=1)
-    # PUCT coefficient balances exploration/exploitation. 1.0-2.5 is common.
-    puct_coefficient: float = Field(default=1.2, gt=0)
+    # Increased simulations for better policy evaluation
+    num_simulations: int = Field(default=1024, ge=1)  # CHANGED
+    # Slightly higher PUCT coefficient for more exploration bias
+    puct_coefficient: float = Field(default=1.5, gt=0)  # CHANGED
     # Temperature controls exploration in action selection
-    temperature_initial: float = Field(default=1.0, ge=0)  # High exploration initially
-    temperature_final: float = Field(default=0.1, ge=0)  # Lower exploration later
-    # Anneal temperature over more steps/episodes
-    temperature_anneal_steps: int = Field(
-        default=10_000, ge=0
-    )  # Anneal over first 10k game steps
+    temperature_initial: float = Field(default=1.0, ge=0)
+    temperature_final: float = Field(default=0.1, ge=0)
+    # Anneal temperature over first 30k game steps (proportional to 100k total)
+    temperature_anneal_steps: int = Field(default=30_000, ge=0)  # CHANGED
     # Dirichlet noise for root exploration
-    dirichlet_alpha: float = Field(
-        default=0.3, gt=0
-    )  # Standard value, depends on action space size
-    dirichlet_epsilon: float = Field(
-        default=0.25, ge=0, le=1.0
-    )  # Weight of noise vs prior
-    # Slightly increased search depth
+    dirichlet_alpha: float = Field(default=0.3, gt=0)
+    dirichlet_epsilon: float = Field(default=0.25, ge=0, le=1.0)
+    # Keep max search depth reasonable
     max_search_depth: int = Field(default=64, ge=1)
 
     @field_validator("temperature_final")

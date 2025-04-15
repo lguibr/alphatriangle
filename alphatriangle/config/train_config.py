@@ -1,3 +1,4 @@
+# File: alphatriangle/config/train_config.py
 import time
 from typing import Literal
 
@@ -7,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class TrainConfig(BaseModel):
     """
     Configuration for the training process (Pydantic model).
-    --- SERIOUS CONFIGURATION ---
+    --- Tuned for 100k Steps ---
     """
 
     RUN_NAME: str = Field(
@@ -29,59 +30,55 @@ class TrainConfig(BaseModel):
     RANDOM_SEED: int = Field(default=42)
 
     # --- Training Loop ---
-    # Increased steps for longer training (e.g., overnight)
-    MAX_TRAINING_STEPS: int | None = Field(default=200_000, ge=1)
+    # Adjusted steps for a shorter run
+    MAX_TRAINING_STEPS: int | None = Field(default=100_000, ge=1)  # CHANGED
 
     # --- Workers & Batching ---
-    # More workers for faster data generation (adjust based on CPU cores)
+    # Keep workers high for data generation
     NUM_SELF_PLAY_WORKERS: int = Field(default=12, ge=1)
     WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(
         default="cpu"
     )  # Workers usually on CPU
-    # Larger batch size for more stable gradients
+    # Keep batch size reasonable
     BATCH_SIZE: int = Field(default=128, ge=1)
-    # Significantly larger buffer
+    # Keep buffer large relative to training steps
     BUFFER_CAPACITY: int = Field(default=100_000, ge=1)
-    # Start training only after a decent amount of data is collected
+    # Start training earlier relative to buffer size
     MIN_BUFFER_SIZE_TO_TRAIN: int = Field(default=10_000, ge=1)
-    # Update worker networks less frequently to reduce overhead
+    # Update worker networks reasonably often
     WORKER_UPDATE_FREQ_STEPS: int = Field(default=100, ge=1)
 
     # --- Optimizer ---
     OPTIMIZER_TYPE: Literal["Adam", "AdamW", "SGD"] = Field(default="AdamW")
-    LEARNING_RATE: float = Field(default=1e-4, gt=0)  # Common starting point
-    WEIGHT_DECAY: float = Field(default=1e-4, ge=0)  # Slightly higher weight decay
-    GRADIENT_CLIP_VALUE: float | None = Field(default=1.0)  # Keep gradient clipping
+    LEARNING_RATE: float = Field(default=1e-4, gt=0)
+    WEIGHT_DECAY: float = Field(default=1e-4, ge=0)
+    GRADIENT_CLIP_VALUE: float | None = Field(default=1.0)
 
     # --- LR Scheduler ---
     LR_SCHEDULER_TYPE: Literal["StepLR", "CosineAnnealingLR"] | None = Field(
         default="CosineAnnealingLR"
     )
-    LR_SCHEDULER_T_MAX: int | None = Field(
-        default=None  # Set automatically based on MAX_TRAINING_STEPS
-    )
+    # T_MAX will be set automatically based on new MAX_TRAINING_STEPS
+    LR_SCHEDULER_T_MAX: int | None = Field(default=None)
     LR_SCHEDULER_ETA_MIN: float = Field(default=1e-6, ge=0)  # End LR
 
     # --- Loss Weights ---
     POLICY_LOSS_WEIGHT: float = Field(default=1.0, ge=0)
     VALUE_LOSS_WEIGHT: float = Field(default=1.0, ge=0)
-    ENTROPY_BONUS_WEIGHT: float = Field(
-        default=0.01, ge=0
-    )  # Small entropy bonus can help exploration
+    ENTROPY_BONUS_WEIGHT: float = Field(default=0.01, ge=0)
 
     # --- Checkpointing ---
-    # Save checkpoints less frequently
-    CHECKPOINT_SAVE_FREQ_STEPS: int = Field(default=1000, ge=1)
+    # Save checkpoints reasonably often during shorter run
+    CHECKPOINT_SAVE_FREQ_STEPS: int = Field(default=500, ge=1)  # CHANGED
 
     # --- Prioritized Experience Replay (PER) ---
-    USE_PER: bool = Field(default=True)  # Keep PER enabled
-    PER_ALPHA: float = Field(default=0.6, ge=0)  # Standard value
-    PER_BETA_INITIAL: float = Field(default=0.4, ge=0, le=1.0)  # Standard value
-    PER_BETA_FINAL: float = Field(default=1.0, ge=0, le=1.0)  # Anneal to 1.0
-    PER_BETA_ANNEAL_STEPS: int | None = Field(
-        default=None  # Set automatically based on MAX_TRAINING_STEPS
-    )
-    PER_EPSILON: float = Field(default=1e-5, gt=0)  # Small value to avoid zero priority
+    USE_PER: bool = Field(default=True)
+    PER_ALPHA: float = Field(default=0.6, ge=0)
+    PER_BETA_INITIAL: float = Field(default=0.4, ge=0, le=1.0)
+    PER_BETA_FINAL: float = Field(default=1.0, ge=0, le=1.0)
+    # Anneal steps will be set automatically based on new MAX_TRAINING_STEPS
+    PER_BETA_ANNEAL_STEPS: int | None = Field(default=None)
+    PER_EPSILON: float = Field(default=1e-5, gt=0)
 
     @model_validator(mode="after")
     def check_buffer_sizes(self) -> "TrainConfig":
@@ -115,7 +112,7 @@ class TrainConfig(BaseModel):
             hasattr(self, "LR_SCHEDULER_TYPE")
             and self.LR_SCHEDULER_TYPE == "CosineAnnealingLR"
             and hasattr(self, "LR_SCHEDULER_T_MAX")
-            and self.LR_SCHEDULER_T_MAX is None
+            and self.LR_SCHEDULER_T_MAX is None  # Only set if not manually specified
         ):
             if (
                 hasattr(self, "MAX_TRAINING_STEPS")
@@ -129,12 +126,12 @@ class TrainConfig(BaseModel):
                     )
                 else:
                     # Handle invalid MAX_TRAINING_STEPS case if necessary
-                    self.LR_SCHEDULER_T_MAX = 1_000_000  # Fallback
+                    self.LR_SCHEDULER_T_MAX = 100_000  # Fallback for 100k run
                     print(
                         f"Warning: MAX_TRAINING_STEPS is invalid ({self.MAX_TRAINING_STEPS}), setting LR_SCHEDULER_T_MAX to default {self.LR_SCHEDULER_T_MAX}"
                     )
             else:
-                self.LR_SCHEDULER_T_MAX = 1_000_000  # Fallback
+                self.LR_SCHEDULER_T_MAX = 100_000  # Fallback for 100k run
                 print(
                     f"Warning: MAX_TRAINING_STEPS is None, setting LR_SCHEDULER_T_MAX to default {self.LR_SCHEDULER_T_MAX}"
                 )
@@ -154,7 +151,7 @@ class TrainConfig(BaseModel):
             hasattr(self, "USE_PER")
             and self.USE_PER
             and hasattr(self, "PER_BETA_ANNEAL_STEPS")
-            and self.PER_BETA_ANNEAL_STEPS is None
+            and self.PER_BETA_ANNEAL_STEPS is None  # Only set if not manually specified
         ):
             if (
                 hasattr(self, "MAX_TRAINING_STEPS")
@@ -168,12 +165,12 @@ class TrainConfig(BaseModel):
                     )
                 else:
                     # Handle invalid MAX_TRAINING_STEPS case if necessary
-                    self.PER_BETA_ANNEAL_STEPS = 1_000_000  # Fallback
+                    self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback for 100k run
                     print(
                         f"Warning: MAX_TRAINING_STEPS is invalid ({self.MAX_TRAINING_STEPS}), setting PER_BETA_ANNEAL_STEPS to default {self.PER_BETA_ANNEAL_STEPS}"
                     )
             else:
-                self.PER_BETA_ANNEAL_STEPS = 1_000_000  # Fallback
+                self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback for 100k run
                 print(
                     f"Warning: MAX_TRAINING_STEPS is None, setting PER_BETA_ANNEAL_STEPS to default {self.PER_BETA_ANNEAL_STEPS}"
                 )
