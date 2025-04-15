@@ -9,7 +9,7 @@ class MCTSConfig(BaseModel):
     """
 
     # Increased simulations for better policy evaluation
-    num_simulations: int = Field(default=1024, ge=1)  # CHANGED
+    num_simulations: int = Field(default=512, ge=1)  # CHANGED
     # Slightly higher PUCT coefficient for more exploration bias
     puct_coefficient: float = Field(default=1.5, gt=0)  # CHANGED
     # Temperature controls exploration in action selection
