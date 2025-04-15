@@ -1,3 +1,4 @@
+# File: alphatriangle/stats/plotter.py
 import logging
 import time
 from collections import deque
@@ -57,6 +58,8 @@ class Plotter:
                 vis_colors.LIGHT_GRAY
             ),
             "MCTS/Avg_Tree_Depth": normalize_color_for_matplotlib(vis_colors.LIGHTG),
+            # Add color for the new reward metric
+            "RL/Step_Reward": normalize_color_for_matplotlib(vis_colors.WHITE),
             "placeholder": normalize_color_for_matplotlib(vis_colors.GRAY),
         }
 
@@ -76,6 +79,7 @@ class Plotter:
         fig_height_in = max(1, target_height / dpi)
 
         try:
+            # Keep 2x4 layout for now, add reward plot to one of the slots
             nrows, ncols = 2, 4
             self.fig, self.axes = plt.subplots(
                 nrows,
@@ -120,15 +124,17 @@ class Plotter:
         plot_update_start = time.monotonic()
         try:
             axes_flat = self.axes.flatten()
+            # Update plot definitions to include the new reward metric
             plot_defs = [
                 ("SelfPlay/Episode_Score", "Ep Score", False),
                 ("Loss/Total", "Total Loss", True),
-                ("MCTS/Avg_Root_Visits", "Root Visits", False),
+                ("RL/Step_Reward", "Step Reward", False),  # Added Reward Plot
                 ("LearningRate", "Learn Rate", True),
                 ("SelfPlay/Episode_Length", "Ep Length", False),
                 ("Loss/Value", "Value Loss", True),
                 ("Loss/Policy", "Policy Loss", True),
-                ("MCTS/Avg_Tree_Depth", "Tree Depth", False),
+                ("MCTS/Avg_Root_Visits", "Root Visits", False),  # Moved MCTS plots
+                # ("MCTS/Avg_Tree_Depth", "Tree Depth", False), # Can replace one if needed
             ]
 
             data_values: dict[str, list[float]] = {}
@@ -190,6 +196,18 @@ class Plotter:
                     ax.set_xticklabels([])
                     ax.set_xlabel("")
                 ax.tick_params(axis="x", rotation=0)
+
+            # Clear any unused axes
+            for i in range(len(plot_defs), len(axes_flat)):
+                ax = axes_flat[i]
+                ax.clear()
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_facecolor((0.15, 0.15, 0.15))
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                ax.spines["bottom"].set_color("gray")
+                ax.spines["left"].set_color("gray")
 
             plot_update_duration = time.monotonic() - plot_update_start
             logger.debug(f"[Plotter] Plot data updated in {plot_update_duration:.4f}s")

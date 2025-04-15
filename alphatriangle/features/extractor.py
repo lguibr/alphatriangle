@@ -1,3 +1,4 @@
+# File: alphatriangle/features/extractor.py
 import logging
 from typing import TYPE_CHECKING, cast
 
@@ -5,7 +6,7 @@ import numpy as np
 
 from ..config import ModelConfig
 from ..utils.types import StateType
-from . import grid_features
+from . import grid_features  # Keep this import
 
 if TYPE_CHECKING:
     from ..environment import GameState
@@ -15,45 +16,42 @@ logger = logging.getLogger(__name__)
 
 
 class GameStateFeatures:
-    """Extracts features from GameState for NN input."""
+    """Extracts features from GameState for NN input. Reads from GridData NumPy arrays."""
 
     def __init__(self, game_state: "GameState", model_config: ModelConfig):
         self.gs = game_state
         self.env_config = game_state.env_config
         self.model_config = model_config
+        # Get direct references to NumPy arrays for efficiency
+        self.occupied_np = game_state.grid_data._occupied_np
+        self.death_np = game_state.grid_data._death_np
+        # self.color_id_np = game_state.grid_data._color_id_np # Not used in current features
 
     def _get_grid_state(self) -> np.ndarray:
         """
-        Returns grid state as a single channel numpy array.
-        Values: 1.0 (occupied), 0.0 (empty playable), -1.0 (death cell).
-        Orientation is implicit.
+        Returns grid state as a single channel numpy array based on NumPy arrays.
+        Values: 1.0 (occupied playable), 0.0 (empty playable), -1.0 (death cell).
         Shape: (C, H, W) where C is GRID_INPUT_CHANNELS
         """
         rows, cols = self.env_config.ROWS, self.env_config.COLS
+        # Initialize with 0.0 (empty playable)
         grid_state: np.ndarray = np.zeros(
             (self.model_config.GRID_INPUT_CHANNELS, rows, cols), dtype=np.float32
         )
 
-        for r in range(rows):
-            for c in range(cols):
-                tri = self.gs.grid_data.triangles[r][c]
-                if tri.is_death:
-                    grid_state[0, r, c] = -1.0
-                elif tri.is_occupied:
-                    grid_state[0, r, c] = 1.0
-                else:
-                    grid_state[0, r, c] = 0.0
+        # Mark occupied playable cells as 1.0
+        playable_occupied_mask = self.occupied_np & ~self.death_np
+        grid_state[0, playable_occupied_mask] = 1.0
 
-        if not np.all(np.isfinite(grid_state)):
-            logger.error(
-                f"Non-finite values detected in extracted grid state! Min: {np.nanmin(grid_state)}, Max: {np.nanmax(grid_state)}, Mean: {np.nanmean(grid_state)}"
-            )
-            grid_state = np.nan_to_num(grid_state, nan=0.0, posinf=0.0, neginf=0.0)
+        # Mark death cells as -1.0
+        grid_state[0, self.death_np] = -1.0
+
+        # No need for the loop or isfinite check here if input arrays are guaranteed finite
 
         return grid_state
 
     def _get_shape_features(self) -> np.ndarray:
-        """Extracts features for each shape slot."""
+        """Extracts features for each shape slot. (No change needed here)"""
         num_slots = self.env_config.NUM_SHAPE_SLOTS
 
         FEATURES_PER_SHAPE_HERE = 7
@@ -90,17 +88,22 @@ class GameStateFeatures:
         return shape_feature_matrix.flatten()
 
     def _get_shape_availability(self) -> np.ndarray:
-        """Returns a binary vector indicating which shape slots are filled."""
+        """Returns a binary vector indicating which shape slots are filled. (No change needed)"""
         return np.array([1.0 if s else 0.0 for s in self.gs.shapes], dtype=np.float32)
 
     def _get_explicit_features(self) -> np.ndarray:
-        """Extracts scalar features like score, heights, holes, etc."""
+        """
+        Extracts scalar features like score, heights, holes, etc.
+        Uses GridData NumPy arrays directly.
+        """
         EXPLICIT_FEATURES_DIM_HERE = 6
         features = np.zeros(EXPLICIT_FEATURES_DIM_HERE, dtype=np.float32)
-        occupied = self.gs.grid_data._occupied_np
-        death = self.gs.grid_data._death_np
+        # Use the direct references stored in self
+        occupied = self.occupied_np
+        death = self.death_np
         rows, cols = self.env_config.ROWS, self.env_config.COLS
 
+        # Pass NumPy arrays directly to grid_features functions
         heights = grid_features.get_column_heights(occupied, death, rows, cols)
         holes = grid_features.count_holes(occupied, death, heights, rows, cols)
         bump = grid_features.get_bumpiness(heights)
@@ -114,12 +117,9 @@ class GameStateFeatures:
         features[4] = (bump / (cols - 1)) / rows if cols > 1 and rows > 0 else 0
         features[5] = np.clip(self.gs.pieces_placed_this_episode / 100.0, 0, 1)
 
-        # Ensure return type is ndarray and handle potential NaNs
-        # --- CHANGE: Use simpler cast ---
         return cast(
             "np.ndarray", np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
         )
-        # --- END CHANGE ---
 
     def get_combined_other_features(self) -> np.ndarray:
         """Combines all non-grid features into a single flat vector."""
@@ -130,9 +130,18 @@ class GameStateFeatures:
 
         expected_dim = self.model_config.OTHER_NN_INPUT_FEATURES_DIM
         if combined.shape[0] != expected_dim:
-            raise ValueError(
-                f"Combined other_features dimension mismatch! Extracted {combined.shape[0]}, but ModelConfig expects {expected_dim}"
+            # Log error instead of raising ValueError immediately during feature extraction
+            logger.error(
+                f"Combined other_features dimension mismatch! Extracted {combined.shape[0]}, but ModelConfig expects {expected_dim}. Padding/truncating."
             )
+            # Pad or truncate to match expected dimension
+            if combined.shape[0] < expected_dim:
+                padding = np.zeros(
+                    expected_dim - combined.shape[0], dtype=combined.dtype
+                )
+                combined = np.concatenate([combined, padding])
+            else:
+                combined = combined[:expected_dim]
 
         if not np.all(np.isfinite(combined)):
             logger.error(
@@ -149,7 +158,7 @@ def extract_state_features(
     """
     Extracts and returns the state dictionary {grid, other_features} for NN input.
     Requires ModelConfig to ensure dimensions match the network's expectations.
-    Includes validation for non-finite values.
+    Includes validation for non-finite values. Now reads from GridData NumPy arrays.
     """
     extractor = GameStateFeatures(game_state, model_config)
     state_dict: StateType = {

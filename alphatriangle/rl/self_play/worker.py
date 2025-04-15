@@ -1,3 +1,4 @@
+# File: alphatriangle/rl/self_play/worker.py
 import logging
 import random
 import time
@@ -36,7 +37,7 @@ class SelfPlayWorker:
     Stores extracted features (StateType) in the experience buffer.
     Returns a SelfPlayResult Pydantic model including aggregated stats.
     Asynchronously reports its current game state and per-step stats
-    to the StatsCollectorActor.
+    (including reward) to the StatsCollectorActor.
     """
 
     def __init__(
@@ -120,9 +121,13 @@ class SelfPlayWorker:
                 logger.error(f"Failed to report game state to collector: {e}")
 
     def _log_step_stats_async(
-        self, game_state: GameState, mcts_visits: int, mcts_depth: int
+        self,
+        game_state: GameState,
+        mcts_visits: int,
+        mcts_depth: int,
+        step_reward: float,  # Add reward parameter
     ):
-        """Asynchronously logs per-step stats to the collector."""
+        """Asynchronously logs per-step stats (including reward) to the collector."""
         if self.stats_collector_actor:
             try:
                 step_stats = {
@@ -138,6 +143,8 @@ class SelfPlayWorker:
                         mcts_depth,
                         game_state.current_step,
                     ),
+                    # Add the step reward metric
+                    "RL/Step_Reward": (step_reward, game_state.current_step),
                 }
                 # Correctly call remote method
                 self.stats_collector_actor.log_batch.remote(step_stats)  # type: ignore
@@ -203,7 +210,10 @@ class SelfPlayWorker:
             )
 
             # Log per-step MCTS stats (before selecting action)
-            self._log_step_stats_async(game, root_node.visit_count, mcts_max_depth)
+            # Pass reward=0.0 here as it hasn't been calculated yet for this step
+            self._log_step_stats_async(
+                game, root_node.visit_count, mcts_max_depth, step_reward=0.0
+            )
 
             action_selection_start_time = time.monotonic()
             temp = (
@@ -251,8 +261,12 @@ class SelfPlayWorker:
             step_tree_depths.append(mcts_max_depth)
 
             game_step_start_time = time.monotonic()
+            step_reward = 0.0  # Initialize reward for this step
             try:
-                _, done = game.step(action)  # Updates the local 'game' instance
+                # Capture the reward returned by step()
+                step_reward, done = game.step(
+                    action
+                )  # Updates the local 'game' instance
             except Exception as step_err:
                 logger.error(
                     f"Error executing game step for action {action}: {step_err}",
@@ -262,15 +276,15 @@ class SelfPlayWorker:
 
             game_step_duration = time.monotonic() - game_step_start_time
             logger.info(
-                f"Step {game.current_step}: Action {action} taken. Done: {done}. Game step time: {game_step_duration:.4f}s"
+                f"Step {game.current_step}: Action {action} taken. Reward: {step_reward:.3f}, Done: {done}. Game step time: {game_step_duration:.4f}s"
             )
 
             # Report the new state after the step
             self._report_current_state(game)
-            # Also log current score/step (after the step is taken)
+            # Log stats AFTER the step, including the calculated reward
             self._log_step_stats_async(
-                game, root_node.visit_count, mcts_max_depth
-            )  # Log again with updated game step/score
+                game, root_node.visit_count, mcts_max_depth, step_reward=step_reward
+            )
 
             tree_reuse_start_time = time.monotonic()
             if not done:

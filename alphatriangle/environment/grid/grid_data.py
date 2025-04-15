@@ -1,11 +1,13 @@
+# File: alphatriangle/environment/grid/grid_data.py
+import copy
 import logging
 
 import numpy as np
 
-# Use relative imports
 from ...config import EnvConfig
-from ...structs import Triangle
-from . import logic as GridLogic
+
+# Import NO_COLOR_ID from the structs package directly
+from ...structs import NO_COLOR_ID
 
 logger = logging.getLogger(__name__)
 
@@ -14,15 +16,13 @@ def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
     """
     Generates all potential horizontal and diagonal lines based on grid geometry.
     Returns a list of lines, where each line is a list of (row, col) tuples.
+    This function no longer needs actual Triangle objects.
     """
     lines = []
     rows, cols = config.ROWS, config.COLS
     min_len = config.MIN_LINE_LENGTH
 
-    # Create a temporary grid to easily access triangles by (r, c)
-    temp_grid: list[list[Triangle | None]] = [
-        [None for _ in range(cols)] for _ in range(rows)
-    ]
+    # --- Determine playable cells based on config ---
     playable_mask = np.zeros((rows, cols), dtype=bool)
     for r in range(rows):
         playable_width = config.COLS_PER_ROW[r]
@@ -31,205 +31,219 @@ def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
         playable_start_col = pad_left
         playable_end_col = pad_left + playable_width
         for c in range(cols):
-            is_up = (r + c) % 2 != 0
-            is_death = not (playable_start_col <= c < playable_end_col)
-            if not is_death:
-                temp_grid[r][c] = Triangle(r, c, is_up, is_death)
+            if playable_start_col <= c < playable_end_col:
                 playable_mask[r, c] = True
+    # --- End Playable Mask ---
 
-    # Link neighbors for the temporary grid to trace lines
-    # Need GridData class definition here - use a temporary structure
-    class TempGridHolder:
-        def __init__(self, r: int, c: int, t: list[list[Triangle | None]]):
-            self.rows = r
-            self.cols = c
-            self.triangles = t
+    # Helper to check validity and playability
+    def is_valid_playable(r, c):
+        return 0 <= r < rows and 0 <= c < cols and playable_mask[r, c]
 
-        # Add the missing 'valid' method with correct type hint
-        def valid(self, r_coord: int, c_coord: int) -> bool:
-            """Checks if coordinates are within grid bounds."""
-            return 0 <= r_coord < self.rows and 0 <= c_coord < self.cols
-
-    temp_grid_data = TempGridHolder(rows, cols, temp_grid)
-    # Cast to GridData temporarily to satisfy mypy, although it's not strictly correct.
-    # A better solution might involve a protocol or refactoring.
-    GridLogic.link_neighbors(temp_grid_data)  # type: ignore [arg-type]
-
+    # --- Trace Lines using Coordinates ---
     visited_in_line: set[tuple[int, int, str]] = set()  # (r, c, direction)
 
     for r_start in range(rows):
         for c_start in range(cols):
-            start_tri: Triangle | None = temp_grid[r_start][c_start]
-            if not start_tri:
-                continue  # Skip death cells
+            if not is_valid_playable(r_start, c_start):
+                continue
 
-            # Trace Horizontal
+            # --- Trace Horizontal ---
             if (r_start, c_start, "h") not in visited_in_line:
                 current_line_h = []
-                # Trace left to find the true start
-                curr: Triangle | None = start_tri
-                while curr and curr.neighbor_left:
-                    curr = curr.neighbor_left
-                # Trace right from the true start
-                while curr and (curr.row, curr.col, "h") not in visited_in_line:
-                    current_line_h.append((curr.row, curr.col))
-                    visited_in_line.add((curr.row, curr.col, "h"))
-                    curr = curr.neighbor_right
+                # Trace left
+                cr, cc = r_start, c_start
+                while is_valid_playable(cr, cc - 1):
+                    cc -= 1
+                # Trace right from the start
+                # start_col = cc # Removed unused variable
+                while is_valid_playable(cr, cc):
+                    if (cr, cc, "h") not in visited_in_line:
+                        current_line_h.append((cr, cc))
+                        visited_in_line.add((cr, cc, "h"))
+                    else:
+                        # If we hit a visited cell, the rest of the line was already processed
+                        break
+                    cc += 1
                 if len(current_line_h) >= min_len:
                     lines.append(current_line_h)
 
-            # Trace Diagonal TL-BR (Down-Right)
+            # --- Trace Diagonal TL-BR (Down-Right) ---
             if (r_start, c_start, "d1") not in visited_in_line:
                 current_line_d1 = []
-                # Trace backwards first (Up-Left)
-                curr = start_tri
-                while curr:
-                    is_up = (curr.row + curr.col) % 2 != 0
-                    prev_tri: Triangle | None = (
-                        curr.neighbor_left if is_up else curr.neighbor_vert
-                    )
-                    if prev_tri:
-                        curr = prev_tri
+                # Trace backwards (Up-Left)
+                cr, cc = r_start, c_start
+                while True:
+                    is_up = (cr + cc) % 2 != 0
+                    prev_r, prev_c = (cr, cc - 1) if is_up else (cr - 1, cc)
+                    if is_valid_playable(prev_r, prev_c):
+                        cr, cc = prev_r, prev_c
                     else:
-                        break  # Reached start of backward trace
-
-                # Trace forwards from the actual start
-                while curr and (curr.row, curr.col, "d1") not in visited_in_line:
-                    current_line_d1.append((curr.row, curr.col))
-                    visited_in_line.add((curr.row, curr.col, "d1"))
-                    is_up = (curr.row + curr.col) % 2 != 0
-                    curr = curr.neighbor_vert if is_up else curr.neighbor_right
+                        break
+                # Trace forwards
+                # start_r, start_c = cr, cc # Removed unused variables
+                while is_valid_playable(cr, cc):
+                    if (cr, cc, "d1") not in visited_in_line:
+                        current_line_d1.append((cr, cc))
+                        visited_in_line.add((cr, cc, "d1"))
+                    else:
+                        break
+                    is_up = (cr + cc) % 2 != 0
+                    next_r, next_c = (cr + 1, cc) if is_up else (cr, cc + 1)
+                    cr, cc = next_r, next_c
                 if len(current_line_d1) >= min_len:
                     lines.append(current_line_d1)
 
-            # Trace Diagonal BL-TR (Up-Right)
+            # --- Trace Diagonal BL-TR (Up-Right) ---
             if (r_start, c_start, "d2") not in visited_in_line:
                 current_line_d2 = []
-                # Trace backwards first (Down-Left)
-                curr = start_tri
-                while curr:
-                    is_up = (curr.row + curr.col) % 2 != 0
-                    prev_tri = curr.neighbor_vert if is_up else curr.neighbor_left
-                    if prev_tri:
-                        curr = prev_tri
+                # Trace backwards (Down-Left)
+                cr, cc = r_start, c_start
+                while True:
+                    is_up = (cr + cc) % 2 != 0
+                    prev_r, prev_c = (cr + 1, cc) if is_up else (cr, cc - 1)
+                    if is_valid_playable(prev_r, prev_c):
+                        cr, cc = prev_r, prev_c
                     else:
                         break
-
-                # Trace forwards from the actual start
-                while curr and (curr.row, curr.col, "d2") not in visited_in_line:
-                    current_line_d2.append((curr.row, curr.col))
-                    visited_in_line.add((curr.row, curr.col, "d2"))
-                    is_up = (curr.row + curr.col) % 2 != 0
-                    curr = curr.neighbor_right if is_up else curr.neighbor_vert
+                # Trace forwards
+                # start_r, start_c = cr, cc # Removed unused variables
+                while is_valid_playable(cr, cc):
+                    if (cr, cc, "d2") not in visited_in_line:
+                        current_line_d2.append((cr, cc))
+                        visited_in_line.add((cr, cc, "d2"))
+                    else:
+                        break
+                    is_up = (cr + cc) % 2 != 0
+                    next_r, next_c = (cr, cc + 1) if is_up else (cr - 1, cc)
+                    cr, cc = next_r, next_c
                 if len(current_line_d2) >= min_len:
                     lines.append(current_line_d2)
+    # --- End Line Tracing ---
 
+    # Remove duplicates (lines traced from different start points)
     unique_lines_tuples = {tuple(sorted(line)) for line in lines}
     unique_lines = [list(line_tuple) for line_tuple in unique_lines_tuples]
 
+    # Final filter by length (should be redundant but safe)
     final_lines = [line for line in unique_lines if len(line) >= min_len]
 
     return final_lines
 
 
 class GridData:
-    """Holds the grid state (triangles, occupancy, death zones)."""
+    """
+    Holds the grid state using NumPy arrays for occupancy, death zones, and color IDs.
+    Manages precomputed line information based on coordinates.
+    """
 
     def __init__(self, config: EnvConfig):
         self.rows = config.ROWS
         self.cols = config.COLS
         self.config = config
-        self.triangles: list[list[Triangle]] = self._create(config)
-        GridLogic.link_neighbors(self)
 
-        self._occupied_np = np.array(
-            [[t.is_occupied for t in r] for r in self.triangles], dtype=bool
+        # --- NumPy Array State ---
+        self._occupied_np: np.ndarray = np.zeros((self.rows, self.cols), dtype=bool)
+        self._death_np: np.ndarray = np.zeros((self.rows, self.cols), dtype=bool)
+        # Stores color ID, NO_COLOR_ID (-1) means empty/no color
+        self._color_id_np: np.ndarray = np.full(
+            (self.rows, self.cols), NO_COLOR_ID, dtype=np.int8
         )
-        self._death_np = np.array(
-            [[t.is_death for t in r] for r in self.triangles], dtype=bool
-        )
+        # --- End NumPy Array State ---
 
-        self.potential_lines: set[frozenset[Triangle]] = set()
-        self._triangle_to_lines_map: dict[Triangle, set[frozenset[Triangle]]] = {}
+        self._initialize_death_zone(config)
+        self._occupied_np[self._death_np] = True  # Death cells are considered occupied
+
+        # --- Line Information (Coordinate Based) ---
+        # Stores frozensets of (r, c) tuples
+        self.potential_lines: set[frozenset[tuple[int, int]]] = set()
+        # Maps (r, c) tuple to a set of line frozensets it belongs to
+        self._coord_to_lines_map: dict[
+            tuple[int, int], set[frozenset[tuple[int, int]]]
+        ] = {}
+        # --- End Line Information ---
+
         self._initialize_lines_and_index()
         logger.debug(
-            f"GridData initialized ({self.rows}x{self.cols}). Found {len(self.potential_lines)} potential lines."
+            f"GridData initialized ({self.rows}x{self.cols}) using NumPy arrays. Found {len(self.potential_lines)} potential lines."
         )
 
-    def _create(self, config: EnvConfig) -> list[list[Triangle]]:
-        """
-        Initializes the grid, marking death cells based on COLS_PER_ROW.
-        COLS_PER_ROW defines the number of *playable* cells, centered horizontally.
-        Inverts the is_up calculation for <> edge pattern.
-        """
+    def _initialize_death_zone(self, config: EnvConfig):
+        """Initializes the death zone numpy array."""
         cols_per_row = config.COLS_PER_ROW
         if len(cols_per_row) != self.rows:
             raise ValueError(
                 f"COLS_PER_ROW length mismatch: {len(cols_per_row)} vs {self.rows}"
             )
 
-        grid = []
         for r in range(self.rows):
-            row_tris = []
             playable_width = cols_per_row[r]
             padding = self.cols - playable_width
             pad_left = padding // 2
             playable_start_col = pad_left
             playable_end_col = pad_left + playable_width
-
             for c in range(self.cols):
-                is_playable = playable_start_col <= c < playable_end_col
-                is_death = not is_playable
-
-                is_up = (r + c) % 2 != 0
-
-                row_tris.append(Triangle(r, c, is_up, is_death=is_death))
-            grid.append(row_tris)
-        return grid
+                if not (playable_start_col <= c < playable_end_col):
+                    self._death_np[r, c] = True
 
     def _initialize_lines_and_index(self):
         """
-        Precomputes potential lines and creates a map from triangle coords to lines.
-        (Moved from logic.py)
+        Precomputes potential lines (as coordinate sets) and creates a map
+        from coordinates to the lines they belong to.
         """
         self.potential_lines = set()
-        self._triangle_to_lines_map = {}
+        self._coord_to_lines_map = {}
 
-        # Generate lines based on geometry using the function now local to this module
         potential_lines_coords = _precompute_lines(self.config)
 
         for line_coords in potential_lines_coords:
-            line_triangles: set[Triangle] = set()
+            # Filter out lines containing death cells
             valid_line = True
+            line_coord_set: set[tuple[int, int]] = set()
             for r, c in line_coords:
-                if self.valid(r, c):
-                    # Use the actual grid_data triangles now
-                    tri: Triangle = self.triangles[r][c]  # No longer Triangle | None
-                    if not tri.is_death:
-                        line_triangles.add(tri)
-                    else:
-                        valid_line = False
-                        break
+                # Use self.valid() and self._death_np directly
+                if self.valid(r, c) and not self._death_np[r, c]:
+                    line_coord_set.add((r, c))
                 else:
                     valid_line = False
-                    break
+                    break  # Skip this line if any part is invalid/death
 
-            if valid_line and len(line_triangles) >= self.config.MIN_LINE_LENGTH:
-                frozen_line = frozenset(line_triangles)
+            if valid_line and len(line_coord_set) >= self.config.MIN_LINE_LENGTH:
+                frozen_line = frozenset(line_coord_set)
                 self.potential_lines.add(frozen_line)
                 # Add to the reverse map
-                for tri in line_triangles:
-                    if tri not in self._triangle_to_lines_map:
-                        self._triangle_to_lines_map[tri] = set()
-                    self._triangle_to_lines_map[tri].add(frozen_line)
+                for coord in line_coord_set:
+                    if coord not in self._coord_to_lines_map:
+                        self._coord_to_lines_map[coord] = set()
+                    self._coord_to_lines_map[coord].add(frozen_line)
 
         logger.debug(
-            f"Initialized {len(self.potential_lines)} potential lines and mapping for {len(self._triangle_to_lines_map)} triangles."
+            f"Initialized {len(self.potential_lines)} potential lines and mapping for {len(self._coord_to_lines_map)} coordinates."
         )
 
     def valid(self, r: int, c: int) -> bool:
         """Checks if coordinates are within grid bounds."""
         return 0 <= r < self.rows and 0 <= c < self.cols
+
+    def is_death(self, r: int, c: int) -> bool:
+        """Checks if a cell is a death cell."""
+        if not self.valid(r, c):
+            return True  # Out of bounds is considered death
+        # Cast NumPy bool_ to Python bool for type consistency
+        return bool(self._death_np[r, c])
+
+    def is_occupied(self, r: int, c: int) -> bool:
+        """Checks if a cell is occupied (includes death cells)."""
+        if not self.valid(r, c):
+            return True  # Out of bounds is considered occupied
+        # Cast NumPy bool_ to Python bool for type consistency
+        return bool(self._occupied_np[r, c])
+
+    def get_color_id(self, r: int, c: int) -> int:
+        """Gets the color ID of a cell."""
+        if not self.valid(r, c):
+            return NO_COLOR_ID
+        # Cast NumPy int8 to Python int for type consistency
+        return int(self._color_id_np[r, c])
 
     def get_occupied_state(self) -> np.ndarray:
         """Returns a copy of the occupancy numpy array."""
@@ -239,64 +253,38 @@ class GridData:
         """Returns a copy of the death zone numpy array."""
         return self._death_np.copy()
 
+    def get_color_id_state(self) -> np.ndarray:
+        """Returns a copy of the color ID numpy array."""
+        return self._color_id_np.copy()
+
     def deepcopy(self) -> "GridData":
         """
-        Creates a deep copy of the grid data.
-        Copies precomputed line data instead of re-initializing.
+        Creates a deep copy of the grid data using NumPy array copying
+        and standard dictionary/set copying for line data.
         """
-        new_grid = GridData.__new__(GridData)
+        new_grid = GridData.__new__(
+            GridData
+        )  # Create new instance without calling __init__
         new_grid.rows = self.rows
         new_grid.cols = self.cols
-        new_grid.config = self.config
+        new_grid.config = self.config  # Config is likely immutable, shallow copy ok
 
-        # 1. Copy triangles
-        new_grid.triangles = [[tri.copy() for tri in row] for row in self.triangles]
-
-        # 2. Link neighbors for the new triangles
-        GridLogic.link_neighbors(new_grid)
-
-        # 3. Copy numpy arrays
+        # 1. Copy NumPy arrays
         new_grid._occupied_np = self._occupied_np.copy()
         new_grid._death_np = self._death_np.copy()
+        new_grid._color_id_np = self._color_id_np.copy()
 
-        # 4. Copy precomputed line data, mapping old triangles to new ones
-        new_grid.potential_lines = set()
-        new_grid._triangle_to_lines_map = {}
-        # Create a mapping from old triangle hash to new triangle object
-        old_to_new_tri_map: dict[int, Triangle] = {}
-        for r in range(self.rows):
-            for c in range(self.cols):
-                old_tri = self.triangles[r][c]
-                # Rename second 'new_tri' to avoid redefinition error
-                new_tri_obj = new_grid.triangles[r][c]
-                old_to_new_tri_map[hash(old_tri)] = new_tri_obj
+        # 2. Copy Line Data (Set of frozensets and Dict[Tuple, Set[frozenset]])
+        # potential_lines contains immutable frozensets, shallow copy is fine
+        new_grid.potential_lines = self.potential_lines.copy()
+        # _coord_to_lines_map values are sets, need deepcopy
+        new_grid._coord_to_lines_map = copy.deepcopy(self._coord_to_lines_map)
 
-        # Rebuild potential_lines and _triangle_to_lines_map using new triangles
-        for old_frozen_line in self.potential_lines:
-            new_line_triangles: set[Triangle] = set()
-            valid_new_line = True
-            for old_tri in old_frozen_line:
-                new_tri_lookup: Triangle | None = old_to_new_tri_map.get(hash(old_tri))
-                if new_tri_lookup:
-                    new_line_triangles.add(new_tri_lookup)
-                else:
-                    logger.error(
-                        f"Deepcopy error: Could not find new triangle corresponding to old {old_tri}"
-                    )
-                    valid_new_line = False
-                    break
-            if valid_new_line:
-                new_frozen_line = frozenset(new_line_triangles)
-                new_grid.potential_lines.add(new_frozen_line)
-                # Add to the reverse map for the new grid
-                for new_tri_in_line in new_line_triangles:
-                    if new_tri_in_line not in new_grid._triangle_to_lines_map:
-                        new_grid._triangle_to_lines_map[new_tri_in_line] = set()
-                    new_grid._triangle_to_lines_map[new_tri_in_line].add(
-                        new_frozen_line
-                    )
+        # No Triangle objects or neighbors to handle anymore
 
         return new_grid
 
     def __str__(self) -> str:
-        return f"GridData({self.rows}x{self.cols})"
+        # Basic representation, could be enhanced to show grid visually
+        occupied_count = np.sum(self._occupied_np & ~self._death_np)
+        return f"GridData({self.rows}x{self.cols}, Occupied: {occupied_count})"

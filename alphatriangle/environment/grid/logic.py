@@ -1,115 +1,106 @@
+# File: alphatriangle/environment/grid/logic.py
 import logging
 from typing import TYPE_CHECKING
 
+# Import NO_COLOR_ID from the structs package directly
+from ...structs import NO_COLOR_ID
+
 if TYPE_CHECKING:
-    from ...structs import Shape, Triangle
+    from ...structs import Shape
     from .grid_data import GridData
 
 logger = logging.getLogger(__name__)
 
 
-def link_neighbors(grid_data: "GridData"):
-    """Links adjacent triangles (left, right, vertical) on the grid."""
-    for r in range(grid_data.rows):
-        for c in range(grid_data.cols):
-            tri = grid_data.triangles[r][c]
-            if tri is None:
-                continue
-
-            # Horizontal Neighbors (Left/Right)
-            left_c, right_c = c - 1, c + 1
-            if grid_data.valid(r, left_c):
-                tri.neighbor_left = grid_data.triangles[r][left_c]
-            if grid_data.valid(r, right_c):
-                tri.neighbor_right = grid_data.triangles[r][right_c]
-
-            # Vertical Neighbors (Up/Down - shares a full edge)
-            # Only link if they share a horizontal edge.
-            # This happens when an UP triangle is above a DOWN triangle.
-            if tri.is_up:
-                # Up-pointing triangle: Its vertical neighbor is below it (r+1, c)
-                down_r = r + 1
-                if grid_data.valid(down_r, c):
-                    neighbor_below = grid_data.triangles[down_r][c]
-                    # Check if the triangle below is DOWN-pointing
-                    if neighbor_below and not neighbor_below.is_up:
-                        tri.neighbor_vert = neighbor_below
-                        # Also link the neighbor back
-                        if neighbor_below.neighbor_vert is None:
-                            neighbor_below.neighbor_vert = tri
-                        elif neighbor_below.neighbor_vert != tri:
-                            logger.warning(
-                                f"Mismatch vertical link assignment at ({r},{c}) and ({down_r},{c})"
-                            )
-
-            else:  # Down-pointing triangle
-                # Down-pointing triangle: Its vertical neighbor is above it (r-1, c)
-                up_r = r - 1
-                if grid_data.valid(up_r, c):
-                    neighbor_above = grid_data.triangles[up_r][c]
-                    # Check if the triangle above is UP-pointing
-                    if neighbor_above and neighbor_above.is_up:
-                        tri.neighbor_vert = neighbor_above
-                        # Also link the neighbor back
-                        if neighbor_above.neighbor_vert is None:
-                            neighbor_above.neighbor_vert = tri
-                        elif neighbor_above.neighbor_vert != tri:
-                            logger.warning(
-                                f"Mismatch vertical link assignment at ({r},{c}) and ({up_r},{c})"
-                            )
+# Removed link_neighbors function as it's no longer needed
 
 
 def can_place(grid_data: "GridData", shape: "Shape", r: int, c: int) -> bool:
-    """Checks if a shape can be placed at the specified (r, c) grid position."""
-    for dr, dc, shape_is_up in shape.triangles:
-        grid_r, grid_c = r + dr, c + dc
+    """
+    Checks if a shape can be placed at the specified (r, c) top-left position
+    on the grid, considering occupancy, death zones, and triangle orientation.
+    Reads state from GridData's NumPy arrays.
+    """
+    if not shape or not shape.triangles:
+        return False
 
-        if not grid_data.valid(grid_r, grid_c):
+    for dr, dc, is_up_shape in shape.triangles:
+        tri_r, tri_c = r + dr, c + dc
+
+        # Check bounds and death zone first
+        if not grid_data.valid(tri_r, tri_c) or grid_data._death_np[tri_r, tri_c]:
             return False
 
-        target_tri = grid_data.triangles[grid_r][grid_c]
-
-        if target_tri.is_death or target_tri.is_occupied:
+        # Check occupancy
+        if grid_data._occupied_np[tri_r, tri_c]:
             return False
 
-        # Check for orientation match
-        if target_tri.is_up != shape_is_up:
-            return False  # Orientation mismatch
+        # Check orientation match
+        is_up_grid = (tri_r + tri_c) % 2 != 0
+        if is_up_grid != is_up_shape:
+            # Log the mismatch for debugging the test failure
+            logger.debug(
+                f"Orientation mismatch at ({tri_r},{tri_c}): Grid is {'Up' if is_up_grid else 'Down'}, Shape requires {'Up' if is_up_shape else 'Down'}"
+            )
+            return False
 
     return True
 
 
 def check_and_clear_lines(
-    grid_data: "GridData", newly_occupied_triangles: set["Triangle"]
-) -> tuple[int, set["Triangle"], set[frozenset["Triangle"]]]:
+    grid_data: "GridData", newly_occupied_coords: set[tuple[int, int]]
+) -> tuple[int, set[tuple[int, int]], set[frozenset[tuple[int, int]]]]:
     """
-    Checks for completed lines involving the newly occupied triangles and clears them.
+    Checks for completed lines involving the newly occupied coordinates and clears them.
+    Operates on GridData's NumPy arrays.
+
+    Args:
+        grid_data: The GridData object (will be modified).
+        newly_occupied_coords: A set of (r, c) tuples that were just occupied.
 
     Returns:
-        - Number of lines cleared.
-        - Set of unique triangles that were cleared.
-        - Set of the actual cleared lines (as frozensets of triangles).
+        Tuple containing:
+            - int: Number of lines cleared.
+            - set[tuple[int, int]]: Set of unique (r, c) coordinates cleared.
+            - set[frozenset[tuple[int, int]]]: Set containing the frozenset representations
+                                                of the actual lines that were cleared.
     """
-    lines_to_check: set[frozenset[Triangle]] = set()
-    for tri in newly_occupied_triangles:
-        if tri in grid_data._triangle_to_lines_map:
-            lines_to_check.update(grid_data._triangle_to_lines_map[tri])
+    lines_to_check: set[frozenset[tuple[int, int]]] = set()
+    for coord in newly_occupied_coords:
+        if coord in grid_data._coord_to_lines_map:
+            lines_to_check.update(grid_data._coord_to_lines_map[coord])
 
-    cleared_lines_set: set[frozenset[Triangle]] = set()
-    triangles_cleared: set[Triangle] = set()
+    cleared_lines_set: set[frozenset[tuple[int, int]]] = set()
+    unique_coords_cleared: set[tuple[int, int]] = set()
 
-    for line in lines_to_check:
-        if all(tri.is_occupied for tri in line):
-            cleared_lines_set.add(line)
-            triangles_cleared.update(line)
+    if not lines_to_check:
+        return 0, unique_coords_cleared, cleared_lines_set
 
-    if triangles_cleared:
+    logger.debug(f"Checking {len(lines_to_check)} potential lines for completion.")
+
+    for line_coords_fs in lines_to_check:
+        is_complete = True
+        for r_line, c_line in line_coords_fs:
+            # Check occupancy directly from the NumPy array
+            if not grid_data._occupied_np[r_line, c_line]:
+                is_complete = False
+                break
+
+        if is_complete:
+            logger.debug(f"Line completed: {line_coords_fs}")
+            cleared_lines_set.add(line_coords_fs)
+            # Add coordinates from this cleared line to the set of unique cleared coordinates
+            unique_coords_cleared.update(line_coords_fs)
+
+    if unique_coords_cleared:
         logger.info(
-            f"Clearing {len(cleared_lines_set)} lines involving {len(triangles_cleared)} triangles."
+            f"Clearing {len(cleared_lines_set)} lines involving {len(unique_coords_cleared)} unique coordinates."
         )
-        for tri in triangles_cleared:
-            tri.is_occupied = False
-            tri.color = None
-            grid_data._occupied_np[tri.row, tri.col] = False
+        # Update NumPy arrays for cleared coordinates
+        # Convert set to tuple of arrays for advanced indexing
+        if unique_coords_cleared:  # Ensure set is not empty
+            rows_idx, cols_idx = zip(*unique_coords_cleared, strict=False)
+            grid_data._occupied_np[rows_idx, cols_idx] = False
+            grid_data._color_id_np[rows_idx, cols_idx] = NO_COLOR_ID
 
-    return len(cleared_lines_set), triangles_cleared, cleared_lines_set
+    return len(cleared_lines_set), unique_coords_cleared, cleared_lines_set

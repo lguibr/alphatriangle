@@ -1,3 +1,5 @@
+# File: alphatriangle/config/env_config.py
+# No changes needed for this refactoring step. Keep the existing content.
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 
@@ -10,6 +12,13 @@ class EnvConfig(BaseModel):
     COLS: int = Field(default=15, gt=0)
     NUM_SHAPE_SLOTS: int = Field(default=3, gt=0)
     MIN_LINE_LENGTH: int = Field(default=3, gt=0)
+
+    # --- Reward System Constants (v3) ---
+    REWARD_PER_PLACED_TRIANGLE: float = Field(default=0.01)
+    REWARD_PER_CLEARED_TRIANGLE: float = Field(default=0.5)
+    REWARD_PER_STEP_ALIVE: float = Field(default=0.001)
+    PENALTY_GAME_OVER: float = Field(default=-2.0)
+    # --- End Reward System Constants ---
 
     @field_validator("COLS_PER_ROW")
     @classmethod
