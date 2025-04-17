@@ -1,13 +1,14 @@
 # File: alphatriangle/config/model_config.py
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class ModelConfig(BaseModel):
     """
     Configuration for the Neural Network model (Pydantic model).
     --- Further Enhanced Capacity Configuration ---
+    --- Includes Distributional RL (C51) Parameters ---
     """
 
     GRID_INPUT_CHANNELS: int = Field(default=1, gt=0)
@@ -42,9 +43,16 @@ class ModelConfig(BaseModel):
     POLICY_HEAD_DIMS: list[int] = Field(
         default=[1024]
     )  # CHANGED (Output dim added automatically)
+
+    # --- Distributional Value Head Parameters --- ADDED
+    NUM_VALUE_ATOMS: int = Field(default=51, gt=1)  # Number of atoms for C51
+    VALUE_MIN: float = Field(default=-10.0)  # Minimum value support
+    VALUE_MAX: float = Field(default=10.0)  # Maximum value support
+
+    # --- Value Head Dims (Now outputs NUM_VALUE_ATOMS) --- CHANGED
     VALUE_HEAD_DIMS: list[int] = Field(
-        default=[1024, 1]
-    )  # CHANGED (Output dim must be 1)
+        default=[1024]
+    )  # Final output dim (NUM_VALUE_ATOMS) added automatically
 
     # --- Other Hyperparameters ---
     ACTIVATION_FUNCTION: Literal["ReLU", "GELU", "SiLU", "Tanh", "Sigmoid"] = Field(
@@ -77,17 +85,6 @@ class ModelConfig(BaseModel):
                     "Lengths of CONV_FILTERS, CONV_KERNEL_SIZES, CONV_STRIDES, and CONV_PADDING must match."
                 )
         return self
-
-    @field_validator("VALUE_HEAD_DIMS")
-    @classmethod
-    def check_value_head_last_dim(cls, v: list[int]) -> list[int]:
-        if not v:
-            raise ValueError("VALUE_HEAD_DIMS cannot be empty.")
-        if v[-1] != 1:
-            raise ValueError(
-                f"The last dimension of VALUE_HEAD_DIMS must be 1 (got {v[-1]})."
-            )
-        return v
 
     @model_validator(mode="after")
     def check_residual_filter_match(self) -> "ModelConfig":
@@ -155,6 +152,19 @@ class ModelConfig(BaseModel):
             if cnn_output_channels != self.TRANSFORMER_DIM:
                 # This is handled by an input projection layer in the model now
                 pass  # Model handles projection
+        return self
+
+    # --- ADDED: Validation for distributional parameters ---
+    @model_validator(mode="after")
+    def check_value_distribution_params(self) -> "ModelConfig":
+        # --- CHANGED: Combined nested if ---
+        if (
+            hasattr(self, "VALUE_MIN")
+            and hasattr(self, "VALUE_MAX")
+            and self.VALUE_MIN >= self.VALUE_MAX
+        ):
+            raise ValueError("VALUE_MIN must be strictly less than VALUE_MAX.")
+        # --- END CHANGED ---
         return self
 
 

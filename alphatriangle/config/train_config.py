@@ -48,6 +48,10 @@ class TrainConfig(BaseModel):
     # Update worker networks reasonably often
     WORKER_UPDATE_FREQ_STEPS: int = Field(default=100, ge=1)
 
+    # --- N-Step Returns --- ADDED
+    N_STEP_RETURNS: int = Field(default=5, ge=1)
+    GAMMA: float = Field(default=0.99, gt=0, le=1.0)
+
     # --- Optimizer ---
     OPTIMIZER_TYPE: Literal["Adam", "AdamW", "SGD"] = Field(default="AdamW")
     LEARNING_RATE: float = Field(default=1e-4, gt=0)

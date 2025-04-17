@@ -1,3 +1,4 @@
+# File: alphatriangle/nn/model.py
 import math
 from typing import cast
 
@@ -5,6 +6,10 @@ import torch
 import torch.nn as nn
 
 from ..config import EnvConfig, ModelConfig
+
+# --- REMOVED: Incorrect self-import ---
+# from .model import AlphaTriangleNet
+# --- END REMOVED ---
 
 
 def conv_block(
@@ -122,6 +127,7 @@ class AlphaTriangleNet(nn.Module):
     """
     Neural Network architecture for AlphaTriangle.
     Includes optional Transformer Encoder block after CNN body.
+    Supports Distributional Value Head (C51).
     """
 
     def __init__(self, model_config: ModelConfig, env_config: EnvConfig):
@@ -266,29 +272,31 @@ class AlphaTriangleNet(nn.Module):
         policy_head_layers.append(nn.Linear(policy_in_features, self.action_dim))
         self.policy_head = nn.Sequential(*policy_head_layers)
 
-        # --- Value Head ---
-        value_head_layers: list[nn.Module] = []  # Explicitly type the list
+        # --- Value Head (Distributional) --- CHANGED
+        value_head_layers: list[nn.Module] = []
         value_in_features = in_features
-        # Iterate through hidden dims, excluding the final output dim (1)
-        for hidden_dim in model_config.VALUE_HEAD_DIMS[:-1]:
+        # Iterate through hidden dims if any
+        for hidden_dim in model_config.VALUE_HEAD_DIMS:
             value_head_layers.append(nn.Linear(value_in_features, hidden_dim))
             if model_config.USE_BATCH_NORM:
                 value_head_layers.append(nn.BatchNorm1d(hidden_dim))
             value_head_layers.append(activation_cls())
             value_in_features = hidden_dim
-        # Final layer to output the single value
+        # Final layer to output logits for each value atom
         value_head_layers.append(
-            nn.Linear(value_in_features, model_config.VALUE_HEAD_DIMS[-1])
+            nn.Linear(value_in_features, model_config.NUM_VALUE_ATOMS)
         )
-        value_head_layers.append(nn.Tanh())  # Apply Tanh activation
+        # REMOVED: Tanh activation - we need logits for cross-entropy loss
+        # value_head_layers.append(nn.Tanh())
         self.value_head = nn.Sequential(*value_head_layers)
+        # --- END CHANGED ---
 
     def forward(
         self, grid_state: torch.Tensor, other_features: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass through the network.
-        Returns: (policy_logits, value)
+        Returns: (policy_logits, value_distribution_logits)
         """
         conv_out = self.conv_body(grid_state)
         res_out = self.res_body(conv_out)
@@ -321,6 +329,7 @@ class AlphaTriangleNet(nn.Module):
         # Shared FC Layers and Heads
         shared_out = self.shared_fc(combined_features)
         policy_logits = self.policy_head(shared_out)
-        value = self.value_head(shared_out)
-
-        return policy_logits, value
+        # --- CHANGED: Return value logits ---
+        value_logits = self.value_head(shared_out)
+        return policy_logits, value_logits
+        # --- END CHANGED ---

@@ -1,3 +1,4 @@
+# File: tests/nn/test_model.py
 import pytest
 import torch
 
@@ -69,23 +70,33 @@ def test_model_forward_pass(
     dummy_other = torch.randn(other_shape, device=device)
 
     with torch.no_grad():
-        policy_logits, value = model(dummy_grid, dummy_other)
+        # --- CHANGED: Expect value_logits ---
+        policy_logits, value_logits = model(dummy_grid, dummy_other)
+        # --- END CHANGED ---
 
     # Check output shapes
     assert policy_logits.shape == (
         batch_size,
         action_dim_int,
     ), f"Policy logits shape mismatch: {policy_logits.shape}"
-    assert value.shape == (batch_size, 1), f"Value shape mismatch: {value.shape}"
+    # --- CHANGED: Check value logits shape ---
+    assert value_logits.shape == (
+        batch_size,
+        model_config.NUM_VALUE_ATOMS,
+    ), f"Value logits shape mismatch: {value_logits.shape}"
+    # --- END CHANGED ---
 
     # Check output types
     assert policy_logits.dtype == torch.float32
-    assert value.dtype == torch.float32
+    # --- CHANGED: Check value logits type ---
+    assert value_logits.dtype == torch.float32
+    # --- END CHANGED ---
 
-    # Check value range (should be within [-1, 1] due to Tanh)
-    assert torch.all(value >= -1.0) and torch.all(value <= 1.0), (
-        f"Value out of range [-1, 1]: {value}"
-    )
+    # --- REMOVED: Value range check (output is logits) ---
+    # assert torch.all(value >= -1.0) and torch.all(value <= 1.0), (
+    #     f"Value out of range [-1, 1]: {value}"
+    # )
+    # --- END REMOVED ---
 
 
 @pytest.mark.parametrize(
@@ -96,6 +107,7 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
     # Cast ACTION_DIM to int
     action_dim_int = int(env_config.ACTION_DIM)
     # Create a specific model config for this test, providing all required fields
+    # --- CHANGED: Use default distributional params from ModelConfig ---
     model_config_test = ModelConfig(
         GRID_INPUT_CHANNELS=1,
         CONV_FILTERS=[4, 8],  # Simple CNN
@@ -111,11 +123,15 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
         TRANSFORMER_FC_DIM=32,
         FC_DIMS_SHARED=[16],
         POLICY_HEAD_DIMS=[action_dim_int],  # Use casted int
-        VALUE_HEAD_DIMS=[1],
+        # VALUE_HEAD_DIMS=[1], # Use default from ModelConfig
         OTHER_NN_INPUT_FEATURES_DIM=10,
         ACTIVATION_FUNCTION="ReLU",
         USE_BATCH_NORM=True,
+        # NUM_VALUE_ATOMS=51, # Use default
+        # VALUE_MIN=-10.0, # Use default
+        # VALUE_MAX=10.0, # Use default
     )
+    # --- END CHANGED ---
     model = AlphaTriangleNet(model_config_test, env_config)
     batch_size = 2
     device = torch.device("cpu")
@@ -133,7 +149,11 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
     dummy_other = torch.randn(other_shape, device=device)
 
     with torch.no_grad():
-        policy_logits, value = model(dummy_grid, dummy_other)
+        # --- CHANGED: Expect value_logits ---
+        policy_logits, value_logits = model(dummy_grid, dummy_other)
+        # --- END CHANGED ---
 
     assert policy_logits.shape == (batch_size, action_dim_int)
-    assert value.shape == (batch_size, 1)
+    # --- CHANGED: Check value logits shape ---
+    assert value_logits.shape == (batch_size, model_config_test.NUM_VALUE_ATOMS)
+    # --- END CHANGED ---

@@ -9,9 +9,9 @@ class MCTSConfig(BaseModel):
     """
 
     # Increased simulations for better policy evaluation
-    num_simulations: int = Field(default=512, ge=1)  # CHANGED
+    num_simulations: int = Field(default=256, ge=1)  # CHANGED
     # Slightly higher PUCT coefficient for more exploration bias
-    puct_coefficient: float = Field(default=1.5, gt=0)  # CHANGED
+    puct_coefficient: float = Field(default=1.8, gt=0)  # CHANGED
     # Temperature controls exploration in action selection
     temperature_initial: float = Field(default=1.0, ge=0)
     temperature_final: float = Field(default=0.1, ge=0)
@@ -21,7 +21,7 @@ class MCTSConfig(BaseModel):
     dirichlet_alpha: float = Field(default=0.3, gt=0)
     dirichlet_epsilon: float = Field(default=0.25, ge=0, le=1.0)
     # Keep max search depth reasonable
-    max_search_depth: int = Field(default=64, ge=1)
+    max_search_depth: int = Field(default=32, ge=1)
 
     @field_validator("temperature_final")
     @classmethod

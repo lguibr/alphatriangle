@@ -1,3 +1,4 @@
+# File: tests/rl/test_trainer.py
 import numpy as np
 import pytest
 import torch
@@ -135,9 +136,11 @@ def test_prepare_batch(trainer_uniform: Trainer, mock_experience: Experience):
     """Test the internal _prepare_batch method."""
     batch_size = trainer_uniform.train_config.BATCH_SIZE
     batch = [mock_experience] * batch_size
-    grid_t, other_t, policy_target_t, value_target_t = trainer_uniform._prepare_batch(
+    # --- CHANGED: Variable name for clarity ---
+    grid_t, other_t, policy_target_t, n_step_return_t = trainer_uniform._prepare_batch(
         batch
     )
+    # --- END CHANGED ---
 
     assert grid_t.shape == (
         batch_size,
@@ -150,12 +153,16 @@ def test_prepare_batch(trainer_uniform: Trainer, mock_experience: Experience):
         trainer_uniform.model_config.OTHER_NN_INPUT_FEATURES_DIM,
     )
     assert policy_target_t.shape == (batch_size, trainer_uniform.env_config.ACTION_DIM)
-    assert value_target_t.shape == (batch_size, 1)
+    # --- CHANGED: Assert shape is (batch_size,) ---
+    assert n_step_return_t.shape == (batch_size,)
+    # --- END CHANGED ---
 
     assert grid_t.device == trainer_uniform.device
     assert other_t.device == trainer_uniform.device
     assert policy_target_t.device == trainer_uniform.device
-    assert value_target_t.device == trainer_uniform.device
+    # --- CHANGED: Check n_step_return_t device ---
+    assert n_step_return_t.device == trainer_uniform.device
+    # --- END CHANGED ---
 
 
 def test_train_step_uniform(trainer_uniform: Trainer, buffer_uniform: ExperienceBuffer):

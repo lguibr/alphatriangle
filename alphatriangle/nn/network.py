@@ -1,3 +1,4 @@
+# File: alphatriangle/nn/network.py
 import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
@@ -25,7 +26,10 @@ class NetworkEvaluationError(Exception):
 
 
 class NeuralNetwork:
-    """Wrapper for the PyTorch model providing evaluation and state management."""
+    """
+    Wrapper for the PyTorch model providing evaluation and state management.
+    Handles distributional value head (C51) by calculating expected value for MCTS.
+    """
 
     def __init__(
         self,
@@ -41,6 +45,16 @@ class NeuralNetwork:
         self.model = AlphaTriangleNet(model_config, env_config).to(device)
         self.action_dim = env_config.ACTION_DIM
         self.model.eval()
+
+        # --- ADDED: Distributional Value Attributes ---
+        self.num_atoms = model_config.NUM_VALUE_ATOMS
+        self.v_min = model_config.VALUE_MIN
+        self.v_max = model_config.VALUE_MAX
+        self.delta_z = (self.v_max - self.v_min) / (self.num_atoms - 1)
+        self.support = torch.linspace(
+            self.v_min, self.v_max, self.num_atoms, device=self.device
+        )
+        # --- END ADDED ---
 
     def _state_to_tensors(self, state: GameState) -> tuple[torch.Tensor, torch.Tensor]:
         """Extracts features from GameState and converts them to tensors."""
@@ -95,21 +109,38 @@ class NeuralNetwork:
             )
         return grid_tensor, other_features_tensor
 
+    # --- ADDED: Helper to calculate expected value ---
+    def _logits_to_expected_value(self, value_logits: torch.Tensor) -> torch.Tensor:
+        """Calculates the expected value from the value distribution logits."""
+        value_probs = F.softmax(value_logits, dim=1)
+        # Expand support to match batch size for broadcasting
+        support_expanded = self.support.expand_as(value_probs)
+        expected_value = torch.sum(value_probs * support_expanded, dim=1, keepdim=True)
+        return expected_value
+
+    # --- END ADDED ---
+
     @torch.inference_mode()
     def evaluate(self, state: GameState) -> PolicyValueOutput:
-        """Evaluates a single state. Raises NetworkEvaluationError on issues."""
+        """
+        Evaluates a single state.
+        Returns policy mapping and EXPECTED value from the distribution.
+        Raises NetworkEvaluationError on issues.
+        """
         self.model.eval()
         try:
             grid_tensor, other_features_tensor = self._state_to_tensors(state)
-            policy_logits, value = self.model(grid_tensor, other_features_tensor)
+            # --- Get value logits ---
+            policy_logits, value_logits = self.model(grid_tensor, other_features_tensor)
 
             if not torch.all(torch.isfinite(policy_logits)):
                 raise NetworkEvaluationError(
                     f"Non-finite policy_logits detected for state {state}. Logits: {policy_logits}"
                 )
-            if not torch.all(torch.isfinite(value)):
+            # --- Check value logits ---
+            if not torch.all(torch.isfinite(value_logits)):
                 raise NetworkEvaluationError(
-                    f"Non-finite value detected for state {state}: {value.item()}"
+                    f"Non-finite value_logits detected for state {state}: {value_logits}"
                 )
 
             policy_probs_tensor = F.softmax(policy_logits, dim=1)
@@ -132,7 +163,11 @@ class NeuralNetwork:
                     )
                 policy_probs /= prob_sum
 
-            value_scalar = value.squeeze(0).item()
+            # --- Calculate expected value ---
+            expected_value_tensor = self._logits_to_expected_value(value_logits)
+            expected_value_scalar = expected_value_tensor.squeeze(
+                0
+            ).item()  # Squeeze batch and atom dim, get scalar
 
             # Use Mapping from typing for the type hint
             action_policy: Mapping[ActionType, float] = {
@@ -144,7 +179,8 @@ class NeuralNetwork:
                 f"Evaluate Final Policy Dict (State {state.current_step}): {num_non_zero}/{self.action_dim} non-zero probs. Example: {list(action_policy.items())[:5]}"
             )
 
-            return action_policy, value_scalar
+            # --- Return expected value ---
+            return action_policy, expected_value_scalar
 
         except Exception as e:
             logger.error(
@@ -157,22 +193,28 @@ class NeuralNetwork:
 
     @torch.inference_mode()
     def evaluate_batch(self, states: list[GameState]) -> list[PolicyValueOutput]:
-        """Evaluates a batch of states. Raises NetworkEvaluationError on issues."""
+        """
+        Evaluates a batch of states.
+        Returns a list of (policy mapping, EXPECTED value).
+        Raises NetworkEvaluationError on issues.
+        """
         if not states:
             return []
         self.model.eval()
         logger.debug(f"Evaluating batch of {len(states)} states...")
         try:
             grid_tensor, other_features_tensor = self._batch_states_to_tensors(states)
-            policy_logits, value = self.model(grid_tensor, other_features_tensor)
+            # --- Get value logits ---
+            policy_logits, value_logits = self.model(grid_tensor, other_features_tensor)
 
             if not torch.all(torch.isfinite(policy_logits)):
                 raise NetworkEvaluationError(
                     f"Non-finite policy_logits detected in batch evaluation. Logits shape: {policy_logits.shape}"
                 )
-            if not torch.all(torch.isfinite(value)):
+            # --- Check value logits ---
+            if not torch.all(torch.isfinite(value_logits)):
                 raise NetworkEvaluationError(
-                    f"Non-finite values detected in batch value output. Value shape: {value.shape}"
+                    f"Non-finite value_logits detected in batch value output. Value shape: {value_logits.shape}"
                 )
 
             policy_probs_tensor = F.softmax(policy_logits, dim=1)
@@ -183,7 +225,11 @@ class NeuralNetwork:
                 )
 
             policy_probs = policy_probs_tensor.cpu().numpy()
-            values = value.squeeze(1).cpu().numpy()
+            # --- Calculate expected values ---
+            expected_values_tensor = self._logits_to_expected_value(value_logits)
+            expected_values = (
+                expected_values_tensor.squeeze(1).cpu().numpy()
+            )  # Squeeze the atom dim
 
             results: list[PolicyValueOutput] = []
             for batch_idx in range(len(states)):
@@ -203,7 +249,8 @@ class NeuralNetwork:
                 policy_i: Mapping[ActionType, float] = {
                     i: float(p) for i, p in enumerate(probs_i)
                 }
-                value_i = float(values[batch_idx])
+                # --- Use expected value ---
+                value_i = float(expected_values[batch_idx])  # This is now a scalar
                 results.append((policy_i, value_i))
 
         except Exception as e:

@@ -2,6 +2,7 @@
 import logging
 import random
 import time
+from collections import deque
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -34,10 +35,9 @@ class SelfPlayWorker:
     """
     A Ray actor responsible for running self-play episodes using MCTS and a NN.
     Implements MCTS tree reuse between steps.
-    Stores extracted features (StateType) in the experience buffer.
+    Stores extracted features (StateType) and the N-STEP RETURN in the experience buffer.
     Returns a SelfPlayResult Pydantic model including aggregated stats.
-    Asynchronously reports its current game state and per-step stats
-    (including reward) to the StatsCollectorActor.
+    Reports current state and step stats asynchronously.
     """
 
     def __init__(
@@ -62,6 +62,11 @@ class SelfPlayWorker:
         self.stats_collector_actor = stats_collector_actor
         self.seed = seed if seed is not None else random.randint(0, 1_000_000)
         self.worker_device_str = worker_device_str
+
+        # --- N-Step Config --- ADDED
+        self.n_step = self.train_config.N_STEP_RETURNS
+        self.gamma = self.train_config.GAMMA
+        # --- END ADDED ---
 
         # Configure logging for the worker process
         worker_log_level = logging.INFO
@@ -155,7 +160,7 @@ class SelfPlayWorker:
         """
         Runs a single episode of self-play using MCTS and the internal neural network.
         Implements MCTS tree reuse.
-        Stores extracted features (StateType) in the experience buffer.
+        Stores extracted features (StateType) and the N-STEP RETURN in the experience buffer.
         Returns a SelfPlayResult Pydantic model including aggregated stats.
         Reports current state and step stats asynchronously.
         """
@@ -163,8 +168,16 @@ class SelfPlayWorker:
         episode_seed = self.seed + random.randint(0, 1000)
         game = GameState(self.env_config, initial_seed=episode_seed)
 
-        # Use TYPE_CHECKING import for Experience type hint
-        raw_experiences: list[tuple[StateType, PolicyTargetMapping, float]] = []
+        # --- N-Step Buffers ---
+        # Stores (state_features, policy_target) tuples for past steps
+        n_step_state_policy_buffer: deque[tuple[StateType, PolicyTargetMapping]] = (
+            deque(maxlen=self.n_step)
+        )
+        # Stores rewards received at steps t+1, t+2, ...
+        n_step_reward_buffer: deque[float] = deque(maxlen=self.n_step)
+        # Stores the final experiences (s_t, pi_t, G_t^n)
+        episode_experiences: list[Experience] = []
+
         step_root_visits: list[int] = []
         step_tree_depths: list[int] = []
         step_simulations: list[int] = []
@@ -255,7 +268,9 @@ class SelfPlayWorker:
                 f"Step {game.current_step}: Feature extraction time: {feature_duration:.4f}s"
             )
 
-            raw_experiences.append((state_features, policy_target, 0.0))
+            # --- N-Step: Store state and policy ---
+            n_step_state_policy_buffer.append((state_features, policy_target))
+
             step_simulations.append(self.mcts_config.num_simulations)
             step_root_visits.append(root_node.visit_count)
             step_tree_depths.append(mcts_max_depth)
@@ -278,6 +293,47 @@ class SelfPlayWorker:
             logger.info(
                 f"Step {game.current_step}: Action {action} taken. Reward: {step_reward:.3f}, Done: {done}. Game step time: {game_step_duration:.4f}s"
             )
+
+            # --- N-Step: Store reward ---
+            n_step_reward_buffer.append(step_reward)
+
+            # --- N-Step: Calculate and store experience if buffer full ---
+            if len(n_step_reward_buffer) == self.n_step:
+                # Calculate the n-step return G for the state n steps ago
+                discounted_reward_sum = 0.0
+                for i in range(self.n_step):
+                    discounted_reward_sum += (self.gamma**i) * n_step_reward_buffer[i]
+
+                bootstrap_value = 0.0
+                if not done:
+                    try:
+                        # Evaluate the *current* state (S_{t+n}) for bootstrap value
+                        _, bootstrap_value = self.nn_evaluator.evaluate(game)
+                    except Exception as eval_err:
+                        logger.error(
+                            f"Error evaluating bootstrap state S_{game.current_step}: {eval_err}",
+                            exc_info=True,
+                        )
+                        # Handle error, maybe use 0 or skip? Using 0 for now.
+                        bootstrap_value = 0.0
+
+                n_step_return = (
+                    discounted_reward_sum + (self.gamma**self.n_step) * bootstrap_value
+                )
+
+                # Retrieve the state and policy from n steps ago
+                state_features_t_minus_n, policy_target_t_minus_n = (
+                    n_step_state_policy_buffer[0]
+                )  # Deque automatically removes oldest
+
+                # Append the final experience tuple
+                episode_experiences.append(
+                    (
+                        state_features_t_minus_n,
+                        policy_target_t_minus_n,
+                        n_step_return,
+                    )
+                )
 
             # Report the new state after the step
             self._report_current_state(game)
@@ -316,25 +372,45 @@ class SelfPlayWorker:
                 break
 
         # --- Episode End ---
-        final_outcome = game.get_outcome() if game.is_over() else 0.0
+        final_score = game.game_score  # Use the final score from the game state
         logger.info(
-            f"Episode finished. Outcome: {final_outcome}, Steps: {game.current_step}"
+            f"Episode finished. Final Score: {final_score:.2f}, Steps: {game.current_step}"
         )
 
-        processed_experiences: list[Experience] = [
-            (state_type, policy, final_outcome)
-            for state_type, policy, _ in raw_experiences
-        ]
+        # --- N-Step: Process remaining steps in the buffer ---
+        # --- REMOVED: Unused variable T ---
+        # T = game.current_step  # Terminal step index
+        # --- END REMOVED ---
+        remaining_steps = len(n_step_reward_buffer)
+
+        for k in range(remaining_steps):
+            # Calculate return G for state S_{T-remaining_steps+k}
+            discounted_reward_sum = 0.0
+            for i in range(remaining_steps - k):
+                discounted_reward_sum += (self.gamma**i) * n_step_reward_buffer[k + i]
+
+            # Bootstrap value is 0 because the episode terminated
+            n_step_return = discounted_reward_sum
+
+            # Retrieve the corresponding state and policy
+            state_features_t, policy_target_t = n_step_state_policy_buffer[k]
+
+            # Append the final experience tuple
+            episode_experiences.append(
+                (state_features_t, policy_target_t, n_step_return)
+            )
 
         total_sims_episode = sum(step_simulations)
         avg_visits_episode = np.mean(step_root_visits) if step_root_visits else 0.0
         avg_depth_episode = np.mean(step_tree_depths) if step_tree_depths else 0.0
 
+        # --- CHANGE: Use correct keyword avg_tree_depth ---
         return SelfPlayResult(
-            episode_experiences=processed_experiences,
-            final_score=final_outcome,
+            episode_experiences=episode_experiences,
+            final_score=final_score,
             episode_steps=game.current_step,
             total_simulations=total_sims_episode,
             avg_root_visits=float(avg_visits_episode),
-            avg_tree_depth=float(avg_depth_episode),
+            avg_tree_depth=float(avg_depth_episode),  # Corrected keyword
         )
+        # --- END CHANGE ---
