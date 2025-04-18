@@ -69,7 +69,7 @@ class SelfPlayWorker:
         # --- END ADDED ---
 
         # Configure logging for the worker process
-        worker_log_level = logging.INFO
+        worker_log_level = logging.INFO  # Keep INFO for workers
         log_format = (
             f"%(asctime)s [%(levelname)s] [W{self.actor_id}] %(name)s: %(message)s"
         )
@@ -77,8 +77,8 @@ class SelfPlayWorker:
         global logger
         logger = logging.getLogger(__name__)
 
-        mcts_log_level = logging.INFO
-        nn_log_level = logging.INFO
+        mcts_log_level = logging.WARNING  # Reduce MCTS verbosity
+        nn_log_level = logging.WARNING  # Reduce NN verbosity
         logging.getLogger("alphatriangle.mcts").setLevel(mcts_log_level)
         logging.getLogger("alphatriangle.nn").setLevel(nn_log_level)
 
@@ -88,7 +88,7 @@ class SelfPlayWorker:
         self.nn_evaluator = NeuralNetwork(
             model_config=self.model_config,
             env_config=self.env_config,
-            train_config=self.train_config,
+            train_config=self.train_config,  # Pass train_config here
             device=self.device,
         )
         if initial_weights:
@@ -177,6 +177,21 @@ class SelfPlayWorker:
         episode_seed = self.seed + random.randint(0, 1000)
         game = GameState(self.env_config, initial_seed=episode_seed)
 
+        # --- ADDED: Check if game is over immediately after reset ---
+        if game.is_over():
+            logger.error(
+                f"Game is over immediately after reset with seed {episode_seed}. Returning empty result."
+            )
+            return SelfPlayResult(
+                episode_experiences=[],
+                final_score=0.0,
+                episode_steps=0,
+                total_simulations=0,
+                avg_root_visits=0.0,
+                avg_tree_depth=0.0,
+            )
+        # --- END ADDED ---
+
         # --- N-Step Buffers ---
         n_step_state_policy_buffer: deque[tuple[StateType, PolicyTargetMapping]] = (
             deque(maxlen=self.n_step)
@@ -200,6 +215,14 @@ class SelfPlayWorker:
                     "MCTS root node became None unexpectedly. Aborting episode."
                 )
                 break
+
+            # --- ADDED: Check if root state is already terminal before MCTS ---
+            if root_node.state.is_over():
+                logger.warning(
+                    f"MCTS root node state (Step {root_node.state.current_step}) is already terminal before running simulations. Ending episode."
+                )
+                break
+            # --- END ADDED ---
 
             logger.info(
                 f"Step {game.current_step}: Running MCTS simulations ({self.mcts_config.num_simulations}) on state from step {root_node.state.current_step}..."
@@ -385,7 +408,9 @@ class SelfPlayWorker:
             for i in range(remaining_steps - k):
                 discounted_reward_sum += (self.gamma**i) * n_step_reward_buffer[k + i]
 
+            # --- CHANGED: No bootstrap value for final steps ---
             n_step_return = discounted_reward_sum
+            # --- END CHANGED ---
             state_features_t, policy_target_t = n_step_state_policy_buffer[k]
             episode_experiences.append(
                 (state_features_t, policy_target_t, n_step_return)
@@ -396,6 +421,13 @@ class SelfPlayWorker:
         total_sims_episode = sum(step_simulations)
         avg_visits_episode = np.mean(step_root_visits) if step_root_visits else 0.0
         avg_depth_episode = np.mean(step_tree_depths) if step_tree_depths else 0.0
+
+        # --- ADDED: Log if experiences are empty ---
+        if not episode_experiences:
+            logger.warning(
+                f"Episode finished with 0 experiences collected. Final score: {final_score}, Steps: {game.current_step}"
+            )
+        # --- END ADDED ---
 
         return SelfPlayResult(
             episode_experiences=episode_experiences,

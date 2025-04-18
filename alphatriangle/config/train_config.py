@@ -1,8 +1,12 @@
 # File: alphatriangle/config/train_config.py
+import logging
 import time
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Get logger instance
+logger = logging.getLogger(__name__)
 
 
 class TrainConfig(BaseModel):
@@ -13,11 +17,12 @@ class TrainConfig(BaseModel):
 
     RUN_NAME: str = Field(
         # More descriptive default run name
-        default_factory=lambda: f"train_{time.strftime('%Y%m%d_%H%M%S')}"  # Changed prefix
+        default_factory=lambda: f"train_{time.strftime('%Y%m%d_%H%M%S')}"
     )
     LOAD_CHECKPOINT_PATH: str | None = Field(default=None)
     LOAD_BUFFER_PATH: str | None = Field(default=None)
     AUTO_RESUME_LATEST: bool = Field(default=True)  # Resume if possible
+    # --- DEVICE: Defaults to 'auto' for automatic detection (CUDA > MPS > CPU) ---
     DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="auto")
     RANDOM_SEED: int = Field(default=42)
 
@@ -26,7 +31,8 @@ class TrainConfig(BaseModel):
 
     # --- Workers & Batching ---
     NUM_SELF_PLAY_WORKERS: int = Field(default=8, ge=1)  # Adjust based on CPU cores
-    WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="cpu")
+    # --- WORKER_DEVICE: Defaults to 'auto' for automatic detection ---
+    WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="auto")
     BATCH_SIZE: int = Field(default=128, ge=1)  # Moderate batch size
     BUFFER_CAPACITY: int = Field(default=200_000, ge=1)  # Larger buffer
     MIN_BUFFER_SIZE_TO_TRAIN: int = Field(
@@ -50,7 +56,7 @@ class TrainConfig(BaseModel):
     LR_SCHEDULER_TYPE: Literal["StepLR", "CosineAnnealingLR"] | None = Field(
         default="CosineAnnealingLR"
     )
-    # T_MAX will be set automatically based on MAX_TRAINING_STEPS
+    # T_MAX will be set automatically based on new MAX_TRAINING_STEPS
     LR_SCHEDULER_T_MAX: int | None = Field(default=None)
     LR_SCHEDULER_ETA_MIN: float = Field(default=1e-6, ge=0)
 
@@ -70,6 +76,17 @@ class TrainConfig(BaseModel):
     # Anneal steps will be set automatically based on MAX_TRAINING_STEPS
     PER_BETA_ANNEAL_STEPS: int | None = Field(default=None)
     PER_EPSILON: float = Field(default=1e-5, gt=0)
+
+    # --- Model Compilation ---
+    COMPILE_MODEL: bool = Field(
+        default=True,
+        description=(
+            "Enable torch.compile() for potential speedup. Requires PyTorch 2.0+. "
+            "May have initial overhead or compatibility issues on some setups/GPUs "
+            "(especially non-CUDA backends like MPS). Set to False if encountering problems. "
+            "The application will attempt compilation and fall back gracefully if it fails."
+        ),
+    )
 
     @model_validator(mode="after")
     def check_buffer_sizes(self) -> "TrainConfig":
@@ -112,18 +129,18 @@ class TrainConfig(BaseModel):
                 # Assign to self.LR_SCHEDULER_T_MAX only if MAX_TRAINING_STEPS is valid
                 if self.MAX_TRAINING_STEPS >= 1:
                     self.LR_SCHEDULER_T_MAX = self.MAX_TRAINING_STEPS
-                    print(
+                    logger.info(
                         f"Set LR_SCHEDULER_T_MAX to MAX_TRAINING_STEPS ({self.MAX_TRAINING_STEPS})"
                     )
                 else:
                     # Handle invalid MAX_TRAINING_STEPS case if necessary
                     self.LR_SCHEDULER_T_MAX = 100_000  # Fallback
-                    print(
+                    logger.warning(
                         f"Warning: MAX_TRAINING_STEPS is invalid ({self.MAX_TRAINING_STEPS}), setting LR_SCHEDULER_T_MAX to default {self.LR_SCHEDULER_T_MAX}"
                     )
             else:
                 self.LR_SCHEDULER_T_MAX = 100_000  # Fallback
-                print(
+                logger.warning(
                     f"Warning: MAX_TRAINING_STEPS is None, setting LR_SCHEDULER_T_MAX to default {self.LR_SCHEDULER_T_MAX}"
                 )
 
@@ -151,18 +168,18 @@ class TrainConfig(BaseModel):
                 # Assign to self.PER_BETA_ANNEAL_STEPS only if MAX_TRAINING_STEPS is valid
                 if self.MAX_TRAINING_STEPS >= 1:
                     self.PER_BETA_ANNEAL_STEPS = self.MAX_TRAINING_STEPS
-                    print(
+                    logger.info(
                         f"Set PER_BETA_ANNEAL_STEPS to MAX_TRAINING_STEPS ({self.MAX_TRAINING_STEPS})"
                     )
                 else:
                     # Handle invalid MAX_TRAINING_STEPS case if necessary
                     self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback
-                    print(
+                    logger.warning(
                         f"Warning: MAX_TRAINING_STEPS is invalid ({self.MAX_TRAINING_STEPS}), setting PER_BETA_ANNEAL_STEPS to default {self.PER_BETA_ANNEAL_STEPS}"
                     )
             else:
                 self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback
-                print(
+                logger.warning(
                     f"Warning: MAX_TRAINING_STEPS is None, setting PER_BETA_ANNEAL_STEPS to default {self.PER_BETA_ANNEAL_STEPS}"
                 )
 

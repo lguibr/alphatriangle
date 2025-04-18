@@ -39,11 +39,17 @@ def model_config(mock_model_config: ModelConfig) -> ModelConfig:
 
 @pytest.fixture
 def train_config(mock_train_config: TrainConfig) -> TrainConfig:
-    return mock_train_config
+    # --- CHANGED: Use the default COMPILE_MODEL=True for this test fixture ---
+    # Ensure the test runs against the default behavior
+    cfg = mock_train_config.model_copy(deep=True)
+    cfg.COMPILE_MODEL = True  # Explicitly set to True for clarity in test setup
+    return cfg
+    # --- END CHANGED ---
 
 
 @pytest.fixture
 def device() -> torch.device:
+    # Use CPU for consistency in tests, even though compile might happen
     return torch.device("cpu")
 
 
@@ -55,7 +61,9 @@ def nn_interface(
     device: torch.device,
 ) -> NeuralNetwork:
     """Provides a NeuralNetwork instance for testing."""
+    # --- CHANGED: Pass the modified train_config ---
     return NeuralNetwork(model_config, env_config, train_config, device)
+    # --- END CHANGED ---
 
 
 @pytest.fixture
@@ -97,8 +105,17 @@ def test_nn_initialization(nn_interface: NeuralNetwork, device: torch.device):
     """Test if the NeuralNetwork wrapper initializes correctly."""
     assert nn_interface is not None
     assert nn_interface.device == device
-    assert isinstance(nn_interface.model, AlphaTriangleNet)
-    assert nn_interface.model.training is False  # Should be in eval mode initially
+    # --- CHANGED: Check underlying model type if compiled ---
+    if hasattr(nn_interface.model, "_orig_mod"):
+        # If compiled, check the original module's type
+        assert isinstance(nn_interface.model._orig_mod, AlphaTriangleNet)
+        # Check that the compiled model is in eval mode
+        assert not nn_interface.model.training
+    else:
+        # If not compiled, check the model directly
+        assert isinstance(nn_interface.model, AlphaTriangleNet)
+        assert not nn_interface.model.training  # Should be in eval mode initially
+    # --- END CHANGED ---
 
 
 # --- Test Feature Extraction Integration (using mock) ---

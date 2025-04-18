@@ -29,6 +29,7 @@ class NeuralNetwork:
     """
     Wrapper for the PyTorch model providing evaluation and state management.
     Handles distributional value head (C51) by calculating expected value for MCTS.
+    Optionally compiles the model using torch.compile().
     """
 
     def __init__(
@@ -46,7 +47,6 @@ class NeuralNetwork:
         self.action_dim = env_config.ACTION_DIM
         self.model.eval()
 
-        # --- ADDED: Distributional Value Attributes ---
         self.num_atoms = model_config.NUM_VALUE_ATOMS
         self.v_min = model_config.VALUE_MIN
         self.v_max = model_config.VALUE_MAX
@@ -54,6 +54,41 @@ class NeuralNetwork:
         self.support = torch.linspace(
             self.v_min, self.v_max, self.num_atoms, device=self.device
         )
+
+        # --- ADDED: Check for MPS before attempting compile ---
+        if self.train_config.COMPILE_MODEL:
+            if self.device.type == "mps":
+                logger.warning(
+                    "Model compilation requested but device is 'mps'. "
+                    "Skipping torch.compile() due to known compatibility issues with this backend. "
+                    "Proceeding with eager execution."
+                )
+            elif hasattr(torch, "compile"):
+                try:
+                    logger.info(
+                        f"Attempting to compile model with torch.compile() on device '{self.device}'..."
+                    )
+                    # Note: Consider adding mode="reduce-overhead" or "max-autotune" for potentially better performance
+                    # but "default" is safer to start with.
+                    self.model = torch.compile(self.model)  # type: ignore
+                    logger.info(
+                        f"Model compiled successfully on device '{self.device}'."
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"torch.compile() failed on device '{self.device}': {e}. "
+                        f"Proceeding without compilation (using eager mode). "
+                        f"Compilation might not be supported for this model/backend combination.",
+                        exc_info=False,  # Keep traceback concise unless debugging
+                    )
+            else:
+                logger.warning(
+                    "torch.compile() requested but not available (requires PyTorch 2.0+). Proceeding without compilation."
+                )
+        else:
+            logger.info(
+                "Model compilation skipped (COMPILE_MODEL=False in TrainConfig)."
+            )
         # --- END ADDED ---
 
     def _state_to_tensors(self, state: GameState) -> tuple[torch.Tensor, torch.Tensor]:
@@ -109,7 +144,6 @@ class NeuralNetwork:
             )
         return grid_tensor, other_features_tensor
 
-    # --- ADDED: Helper to calculate expected value ---
     def _logits_to_expected_value(self, value_logits: torch.Tensor) -> torch.Tensor:
         """Calculates the expected value from the value distribution logits."""
         value_probs = F.softmax(value_logits, dim=1)
@@ -117,8 +151,6 @@ class NeuralNetwork:
         support_expanded = self.support.expand_as(value_probs)
         expected_value = torch.sum(value_probs * support_expanded, dim=1, keepdim=True)
         return expected_value
-
-    # --- END ADDED ---
 
     @torch.inference_mode()
     def evaluate(self, state: GameState) -> PolicyValueOutput:
@@ -130,14 +162,12 @@ class NeuralNetwork:
         self.model.eval()
         try:
             grid_tensor, other_features_tensor = self._state_to_tensors(state)
-            # --- Get value logits ---
             policy_logits, value_logits = self.model(grid_tensor, other_features_tensor)
 
             if not torch.all(torch.isfinite(policy_logits)):
                 raise NetworkEvaluationError(
                     f"Non-finite policy_logits detected for state {state}. Logits: {policy_logits}"
                 )
-            # --- Check value logits ---
             if not torch.all(torch.isfinite(value_logits)):
                 raise NetworkEvaluationError(
                     f"Non-finite value_logits detected for state {state}: {value_logits}"
@@ -163,13 +193,11 @@ class NeuralNetwork:
                     )
                 policy_probs /= prob_sum
 
-            # --- Calculate expected value ---
             expected_value_tensor = self._logits_to_expected_value(value_logits)
             expected_value_scalar = expected_value_tensor.squeeze(
                 0
             ).item()  # Squeeze batch and atom dim, get scalar
 
-            # Use Mapping from typing for the type hint
             action_policy: Mapping[ActionType, float] = {
                 i: float(p) for i, p in enumerate(policy_probs)
             }
@@ -179,7 +207,6 @@ class NeuralNetwork:
                 f"Evaluate Final Policy Dict (State {state.current_step}): {num_non_zero}/{self.action_dim} non-zero probs. Example: {list(action_policy.items())[:5]}"
             )
 
-            # --- Return expected value ---
             return action_policy, expected_value_scalar
 
         except Exception as e:
@@ -204,14 +231,12 @@ class NeuralNetwork:
         logger.debug(f"Evaluating batch of {len(states)} states...")
         try:
             grid_tensor, other_features_tensor = self._batch_states_to_tensors(states)
-            # --- Get value logits ---
             policy_logits, value_logits = self.model(grid_tensor, other_features_tensor)
 
             if not torch.all(torch.isfinite(policy_logits)):
                 raise NetworkEvaluationError(
                     f"Non-finite policy_logits detected in batch evaluation. Logits shape: {policy_logits.shape}"
                 )
-            # --- Check value logits ---
             if not torch.all(torch.isfinite(value_logits)):
                 raise NetworkEvaluationError(
                     f"Non-finite value_logits detected in batch value output. Value shape: {value_logits.shape}"
@@ -225,7 +250,6 @@ class NeuralNetwork:
                 )
 
             policy_probs = policy_probs_tensor.cpu().numpy()
-            # --- Calculate expected values ---
             expected_values_tensor = self._logits_to_expected_value(value_logits)
             expected_values = (
                 expected_values_tensor.squeeze(1).cpu().numpy()
@@ -245,11 +269,9 @@ class NeuralNetwork:
                         )
                     probs_i /= prob_sum_i
 
-                # Use Mapping from typing for the type hint
                 policy_i: Mapping[ActionType, float] = {
                     i: float(p) for i, p in enumerate(probs_i)
                 }
-                # --- Use expected value ---
                 value_i = float(expected_values[batch_idx])  # This is now a scalar
                 results.append((policy_i, value_i))
 
@@ -262,14 +284,18 @@ class NeuralNetwork:
 
     def get_weights(self) -> dict[str, torch.Tensor]:
         """Returns the model's state dictionary, moved to CPU."""
-        return {k: v.cpu() for k, v in self.model.state_dict().items()}
+        # If model is compiled, access the original model for state_dict
+        model_to_save = getattr(self.model, "_orig_mod", self.model)
+        return {k: v.cpu() for k, v in model_to_save.state_dict().items()}
 
     def set_weights(self, weights: dict[str, torch.Tensor]):
         """Loads the model's state dictionary from the provided weights."""
         try:
             weights_on_device = {k: v.to(self.device) for k, v in weights.items()}
-            self.model.load_state_dict(weights_on_device)
-            self.model.eval()
+            # If model is compiled, load into the original model
+            model_to_load = getattr(self.model, "_orig_mod", self.model)
+            model_to_load.load_state_dict(weights_on_device)
+            self.model.eval()  # Ensure the main (potentially compiled) model is in eval mode
             logger.debug("NN weights set successfully.")
         except Exception as e:
             logger.error(f"Error setting weights on NN instance: {e}", exc_info=True)

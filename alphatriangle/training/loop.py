@@ -12,11 +12,7 @@ from pydantic import ValidationError
 from ..environment import GameState
 from ..rl import SelfPlayResult, SelfPlayWorker
 from ..stats.plotter import WEIGHT_UPDATE_METRIC_KEY  # Import the key
-
-# --- CHANGED: Import format_eta ---
 from ..utils import format_eta
-
-# --- END CHANGED ---
 from ..utils.types import Experience, PERBatchSample, StatsCollectorData
 from ..visualization.core import colors
 from ..visualization.ui import ProgressBar
@@ -212,9 +208,7 @@ class TrainingLoop:
         target_steps = self.train_config.MAX_TRAINING_STEPS
         target_steps_str = f"{target_steps:,}" if target_steps else "Infinite"
         progress_str = f"Step {self.global_step:,}/{target_steps_str}"
-        # --- CHANGED: Call format_eta directly ---
         eta_str = format_eta(self.train_step_progress.get_eta_seconds())
-        # --- END CHANGED ---
 
         buffer_fill_perc = (
             (len(self.buffer) / self.buffer.capacity) * 100
@@ -398,7 +392,16 @@ class TrainingLoop:
             f"Processing result from worker {worker_id} (Ep Steps: {result.episode_steps}, Score: {result.final_score:.2f})"
         )
 
-        valid_experiences, _ = self._validate_experiences(result.episode_experiences)
+        valid_experiences, invalid_count = self._validate_experiences(
+            result.episode_experiences
+        )
+        # --- ADDED: Log if experiences were filtered ---
+        if invalid_count > 0:
+            logger.warning(
+                f"Worker {worker_id}: {invalid_count} invalid experiences were filtered out before adding to buffer."
+            )
+        # --- END ADDED ---
+
         if valid_experiences:
             try:
                 self.buffer.add_batch(valid_experiences)
@@ -410,16 +413,18 @@ class TrainingLoop:
                     f"Error adding batch to buffer from worker {worker_id}: {e}",
                     exc_info=True,
                 )
-                return
+                return  # Don't update counters if add failed
 
             if self.buffer_fill_progress:
                 self.buffer_fill_progress.set_current_steps(len(self.buffer))
             self.episodes_played += 1
             self.total_simulations_run += result.total_simulations
         else:
-            logger.warning(
-                f"Self-play episode from worker {worker_id} produced no valid experiences."
+            # --- CHANGED: Log more prominently if NO valid experiences ---
+            logger.error(
+                f"Worker {worker_id}: Self-play episode produced NO valid experiences (Steps: {result.episode_steps}, Score: {result.final_score:.2f}). This prevents buffer filling and training."
             )
+            # --- END CHANGED ---
 
     def _run_training_step(self) -> bool:
         """Runs one training step."""
@@ -507,6 +512,18 @@ class TrainingLoop:
                     self.worker_tasks[task_ref] = worker_idx
 
             while not self.stop_requested.is_set():
+                # Check if max steps reached
+                if (
+                    self.train_config.MAX_TRAINING_STEPS is not None
+                    and self.global_step >= self.train_config.MAX_TRAINING_STEPS
+                ):
+                    logger.info(
+                        f"Reached MAX_TRAINING_STEPS ({self.train_config.MAX_TRAINING_STEPS}). Stopping loop."
+                    )
+                    self.training_complete = True
+                    self.request_stop()
+                    break
+
                 # Training Step
                 if self.buffer.is_ready():
                     trained_this_cycle = self._run_training_step()
@@ -515,6 +532,9 @@ class TrainingLoop:
                         == 0
                     ):
                         self._update_worker_networks()
+                else:
+                    # If buffer not ready, sleep briefly to avoid busy-waiting
+                    time.sleep(0.01)
 
                 if self.stop_requested.is_set():
                     break
@@ -567,6 +587,12 @@ class TrainingLoop:
                                 logger.debug(
                                     f"Finished processing result for worker {worker_idx}"
                                 )
+                            # --- ADDED: Log if result was None after validation ---
+                            elif not processing_error:
+                                logger.warning(
+                                    f"Worker {worker_idx} returned a result that became None after validation (but no validation error raised)."
+                                )
+                            # --- END ADDED ---
 
                         except ray.exceptions.RayActorError as e:
                             processing_error = f"Worker {worker_idx} actor failed: {e}"
@@ -582,10 +608,10 @@ class TrainingLoop:
                                 self.workers[worker_idx] = None
                                 self.active_worker_indices.discard(worker_idx)
 
-                        # Relaunch task
+                        # Relaunch task only if the worker is still active
                         if (
-                            processing_error is None
-                            and worker_idx in self.active_worker_indices
+                            worker_idx in self.active_worker_indices
+                            and self.workers[worker_idx] is not None
                         ):
                             worker = self.workers[worker_idx]
                             if worker:
@@ -595,19 +621,16 @@ class TrainingLoop:
                                 new_task_ref = worker.run_episode.remote()
                                 self.worker_tasks[new_task_ref] = worker_idx
                             else:
+                                # This case should ideally not happen if active_worker_indices is correct
                                 logger.error(
-                                    f"Worker {worker_idx} is None during relaunch."
+                                    f"Worker {worker_idx} is None during relaunch despite being in active set."
                                 )
                                 self.active_worker_indices.discard(worker_idx)
                         elif processing_error:
                             logger.warning(
                                 f"Not relaunching task for worker {worker_idx} due to error: {processing_error}"
                             )
-                            self.workers[worker_idx] = None
-                            self.active_worker_indices.discard(worker_idx)
-                            logger.info(
-                                f"Removed worker {worker_idx} from active pool due to processing error."
-                            )
+                            # Worker already removed or marked as None above
 
                 if self.stop_requested.is_set():
                     break
@@ -631,13 +654,9 @@ class TrainingLoop:
         finally:
             if self.training_exception:
                 self.training_complete = False  # Failed
-            elif self.stop_requested.is_set():
+            elif self.stop_requested.is_set() and not self.training_complete:
                 self.training_complete = False  # Interrupted
-            else:
-                # Should not be reached if loop runs indefinitely, but handle defensively
-                self.training_complete = (
-                    False  # Assume interrupted if loop exits unexpectedly
-                )
+            # If loop finished naturally by reaching max steps, training_complete is already True
             logger.info(
                 f"TrainingLoop finished. Complete: {self.training_complete}, Exception: {self.training_exception is not None}"
             )
@@ -645,13 +664,22 @@ class TrainingLoop:
     def cleanup_actors(self):
         """Kills Ray actors associated with this loop."""
         logger.info("Cleaning up TrainingLoop actors...")
+        # Cancel pending tasks first
+        for task_ref in list(self.worker_tasks.keys()):
+            try:
+                ray.cancel(task_ref, force=True)
+            except Exception as cancel_e:
+                logger.warning(f"Error cancelling task {task_ref}: {cancel_e}")
+        self.worker_tasks = {}
+
+        # Kill actors
         for i, worker in enumerate(self.workers):
             if worker:
                 try:
                     ray.kill(worker, no_restart=True)
+                    logger.debug(f"Killed worker {i}.")
                 except Exception as kill_e:
                     logger.warning(f"Error killing worker {i}: {kill_e}")
         self.workers = []
         self.active_worker_indices = set()
-        self.worker_tasks = {}
         logger.info("TrainingLoop actors cleaned up.")

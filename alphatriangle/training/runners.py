@@ -50,13 +50,15 @@ def _setup_training_components(
         # --- Setup ---
         utils.set_random_seeds(train_config.RANDOM_SEED)
         device = utils.get_device(train_config.DEVICE)
+        # --- ADDED: Log determined device and compile setting ---
+        logger.info(f"Determined Training Device: {device}")
+        logger.info(f"Model Compilation Enabled: {train_config.COMPILE_MODEL}")
+        # --- END ADDED ---
 
         # --- Initialize Core Components ---
         # Note: Ray initialization is handled within TrainingPipeline
-        # --- CHANGED: Increase max_history significantly ---
         stats_collector_actor = StatsCollectorActor.remote(max_history=500_000)  # type: ignore
         logger.info("Initialized StatsCollectorActor with large max_history (500k).")
-        # --- END CHANGED ---
         neural_net = NeuralNetwork(model_config, env_config, train_config, device)
         buffer = ExperienceBuffer(train_config)
         trainer = Trainer(neural_net, train_config, env_config)
