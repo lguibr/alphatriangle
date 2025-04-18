@@ -1,15 +1,16 @@
+# File: alphatriangle/rl/README.md
 # Reinforcement Learning Module (`alphatriangle.rl`)
 
 ## Purpose and Architecture
 
-This module contains core components related to the reinforcement learning algorithm itself, specifically the `Trainer` for network updates, the `ExperienceBuffer` for storing data, and the `SelfPlayWorker` actor for generating data. **The overall orchestration of the training process has been moved to the `alphatriangle.training` module.**
+This module contains core components related to the reinforcement learning algorithm itself, specifically the `Trainer` for network updates, the `ExperienceBuffer` for storing data, and the `SelfPlayWorker` actor for generating data. **The overall orchestration of the training process has been moved to the [`alphatriangle.training`](../training/README.md) module.**
 
--   **Core Components (`alphatriangle.rl.core`):**
-    -   `Trainer`: Responsible for performing the neural network update steps. It takes batches of experience from the buffer, calculates losses (applying importance sampling weights if using PER), updates the network weights, and calculates TD errors for PER priority updates.
-    -   `ExperienceBuffer`: A replay buffer storing `Experience` tuples (`(StateType, policy_target, value_target)`). Supports both uniform sampling and Prioritized Experience Replay (PER).
--   **Self-Play Components (`alphatriangle.rl.self_play`):**
-    -   `worker`: Defines the `SelfPlayWorker` Ray actor. Each actor runs game episodes independently using MCTS and its local copy of the neural network. It collects experiences and returns results via a `SelfPlayResult` object.
--   **Types (`alphatriangle.rl.types`):**
+-   **Core Components ([`core/README.md`](core/README.md)):**
+    -   `Trainer`: Responsible for performing the neural network update steps. It takes batches of experience from the buffer, calculates losses (policy cross-entropy, **distributional value cross-entropy**, optional entropy bonus), applies importance sampling weights if using PER, updates the network weights, and calculates TD errors for PER priority updates.
+    -   `ExperienceBuffer`: A replay buffer storing `Experience` tuples (`(StateType, policy_target, n_step_return)`). Supports both uniform sampling and Prioritized Experience Replay (PER).
+-   **Self-Play Components ([`self_play/README.md`](self_play/README.md)):**
+    -   `worker`: Defines the `SelfPlayWorker` Ray actor. Each actor runs game episodes independently using MCTS and its local copy of the neural network. It collects experiences (including calculated n-step returns) and returns results via a `SelfPlayResult` object. It also logs stats and game state asynchronously.
+-   **Types ([`types.py`](types.py)):**
     -   Defines Pydantic models like `SelfPlayResult` for structured data transfer between Ray actors and the training loop.
 
 ## Exposed Interfaces
@@ -32,22 +33,23 @@ This module contains core components related to the reinforcement learning algor
     -   `SelfPlayWorker`: Ray actor class.
         -   `run_episode() -> SelfPlayResult`
         -   `set_weights(weights: Dict)`
+        -   `set_current_trainer_step(global_step: int)`
 -   **Types:**
     -   `SelfPlayResult`: Pydantic model for self-play results.
 
 ## Dependencies
 
--   **`alphatriangle.config`**: `TrainConfig`, `EnvConfig`, `ModelConfig`, `MCTSConfig`.
--   **`alphatriangle.nn`**: `NeuralNetwork`.
--   **`alphatriangle.features`**: `extract_state_features`.
--   **`alphatriangle.mcts`**: Core MCTS components.
--   **`alphatriangle.environment`**: `GameState`.
--   **`alphatriangle.stats`**: `StatsCollectorActor` (used indirectly via `alphatriangle.training`).
--   **`alphatriangle.utils`**: Types and helpers.
--   **`alphatriangle.structs`**: Implicitly used via `GameState`.
+-   **[`alphatriangle.config`](../config/README.md)**: `TrainConfig`, `EnvConfig`, `ModelConfig`, `MCTSConfig`.
+-   **[`alphatriangle.nn`](../nn/README.md)**: `NeuralNetwork`.
+-   **[`alphatriangle.features`](../features/README.md)**: `extract_state_features`.
+-   **[`alphatriangle.mcts`](../mcts/README.md)**: Core MCTS components.
+-   **[`alphatriangle.environment`](../environment/README.md)**: `GameState`.
+-   **[`alphatriangle.stats`](../stats/README.md)**: `StatsCollectorActor` (used indirectly via `alphatriangle.training`).
+-   **[`alphatriangle.utils`](../utils/README.md)**: Types (`Experience`, `StateType`, `PERBatchSample`, `StepInfo`) and helpers (`SumTree`).
+-   **[`alphatriangle.structs`](../structs/README.md)**: Implicitly used via `GameState`.
 -   **`torch`**: Used by `Trainer` and `NeuralNetwork`.
 -   **`ray`**: Used by `SelfPlayWorker`.
--   **Standard Libraries:** `typing`, `logging`, `collections.deque`, `numpy`.
+-   **Standard Libraries:** `typing`, `logging`, `collections.deque`, `numpy`, `random`, `time`.
 
 ---
 

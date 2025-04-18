@@ -1,13 +1,14 @@
+# File: alphatriangle/rl/core/README.md
 # RL Core Submodule (`alphatriangle.rl.core`)
 
 ## Purpose and Architecture
 
-This submodule contains core classes directly involved in the reinforcement learning update process and data storage. **The orchestration logic previously found here (`TrainingOrchestrator`) has been moved to the `alphatriangle.training` module.**
+This submodule contains core classes directly involved in the reinforcement learning update process and data storage. **The orchestration logic previously found here (`TrainingOrchestrator`) has been moved to the [`alphatriangle.training`](../../training/README.md) module.**
 
--   **`Trainer`:** This class encapsulates the logic for updating the neural network's weights.
+-   **[`Trainer`](trainer.py):** This class encapsulates the logic for updating the neural network's weights.
     -   It holds the main `NeuralNetwork` interface, optimizer, and scheduler.
-    -   Its `train_step` method takes a batch of experiences (potentially with PER indices and weights), performs forward/backward passes, calculates losses (applying importance sampling weights if using PER), updates weights, and returns calculated TD errors for PER priority updates.
--   **`ExperienceBuffer`:** This class implements a replay buffer storing `Experience` tuples (`(StateType, policy_target, value_target)`). It supports Prioritized Experience Replay (PER) via a SumTree, including prioritized sampling and priority updates, based on configuration.
+    -   Its `train_step` method takes a batch of experiences (potentially with PER indices and weights), performs forward/backward passes, calculates losses (policy cross-entropy, **distributional value cross-entropy**, optional entropy bonus), applies importance sampling weights if using PER, updates weights, and returns calculated TD errors for PER priority updates.
+-   **[`ExperienceBuffer`](buffer.py):** This class implements a replay buffer storing `Experience` tuples (`(StateType, policy_target, n_step_return)`). It supports Prioritized Experience Replay (PER) via a SumTree, including prioritized sampling and priority updates, based on configuration.
 
 ## Exposed Interfaces
 
@@ -28,10 +29,9 @@ This submodule contains core classes directly involved in the reinforcement lear
 
 ## Dependencies
 
--   **`alphatriangle.config`**: `TrainConfig`, `EnvConfig`, `ModelConfig`.
--   **`alphatriangle.nn`**: `NeuralNetwork`.
--   **`alphatriangle.features`**: `extract_state_features`.
--   **`alphatriangle.utils`**: Types (`Experience`, `PERBatchSample`, etc.) and helpers (`SumTree`).
+-   **[`alphatriangle.config`](../../config/README.md)**: `TrainConfig`, `EnvConfig`, `ModelConfig`.
+-   **[`alphatriangle.nn`](../../nn/README.md)**: `NeuralNetwork`.
+-   **[`alphatriangle.utils`](../../utils/README.md)**: Types (`Experience`, `PERBatchSample`, `StateType`, etc.) and helpers (`SumTree`).
 -   **`torch`**: Used heavily by `Trainer`.
 -   **Standard Libraries:** `typing`, `logging`, `collections.deque`, `numpy`, `random`.
 

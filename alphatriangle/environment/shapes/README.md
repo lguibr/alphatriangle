@@ -1,13 +1,14 @@
+# File: alphatriangle/environment/shapes/README.md
 # Environment Shapes Submodule (`alphatriangle.environment.shapes`)
 
 ## Purpose and Architecture
 
 This submodule defines the logic for managing placeable shapes within the game environment.
 
--   **Shape Representation:** The `Shape` class (defined in `alphatriangle.structs`) stores the geometry of a shape as a list of relative triangle coordinates (`(dr, dc, is_up)`) and its color.
--   **Shape Templates:** The `templates.py` file contains the `PREDEFINED_SHAPE_TEMPLATES` list, which defines the geometry of all possible shapes used in the game. **This list should not be modified.**
--   **Shape Logic:** The `logic.py` module (exposed as `ShapeLogic`) contains functions related to shapes:
-    -   `generate_random_shape`: Creates a new `Shape` instance by randomly selecting a template from `PREDEFINED_SHAPE_TEMPLATES` and assigning a random color (using `SHAPE_COLORS` from `alphatriangle.structs`).
+-   **Shape Representation:** The `Shape` class (defined in [`alphatriangle.structs`](../../structs/README.md)) stores the geometry of a shape as a list of relative triangle coordinates (`(dr, dc, is_up)`) and its color.
+-   **Shape Templates:** The [`templates.py`](templates.py) file contains the `PREDEFINED_SHAPE_TEMPLATES` list, which defines the geometry of all possible shapes used in the game. **This list should not be modified.**
+-   **Shape Logic:** The [`logic.py`](logic.py) module (exposed as `ShapeLogic`) contains functions related to shapes:
+    -   `generate_random_shape`: Creates a new `Shape` instance by randomly selecting a template from `PREDEFINED_SHAPE_TEMPLATES` and assigning a random color (using `SHAPE_COLORS` from [`alphatriangle.structs`](../../structs/README.md)).
     -   `refill_shape_slots`: **Refills ALL empty shape slots** in the `GameState` with new random shapes. This function is now typically called only when all shape slots have become empty after pieces are placed.
 
 ## Exposed Interfaces
@@ -21,11 +22,11 @@ This submodule defines the logic for managing placeable shapes within the game e
 
 ## Dependencies
 
--   **`alphatriangle.environment.core`**:
+-   **[`alphatriangle.environment.core`](../core/README.md)**:
     -   `GameState`: Used by `ShapeLogic.refill_shape_slots` to access and modify the list of available shapes.
--   **`alphatriangle.config`**:
+-   **[`alphatriangle.config`](../../config/README.md)**:
     -   `EnvConfig`: Accessed via `GameState` (e.g., for `NUM_SHAPE_SLOTS`).
--   **`alphatriangle.structs`**:
+-   **[`alphatriangle.structs`](../../structs/README.md)**:
     -   Uses `Shape`, `Triangle`, `SHAPE_COLORS`.
 -   **Standard Libraries:** `typing`, `random`, `logging`.
 

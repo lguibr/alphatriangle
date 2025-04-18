@@ -44,9 +44,7 @@ class TrainConfig(BaseModel):
     MIN_BUFFER_SIZE_TO_TRAIN: int = Field(
         default=20_000, ge=1  # Start training after 10% fill
     )
-    WORKER_UPDATE_FREQ_STEPS: int = Field(
-        default=100, ge=1  # Update workers every 100 steps
-    )
+    WORKER_UPDATE_FREQ_STEPS: int = Field(default=500, ge=1)
 
     # --- N-Step Returns ---
     N_STEP_RETURNS: int = Field(default=5, ge=1)  # 5-step returns

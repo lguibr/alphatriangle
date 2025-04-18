@@ -50,7 +50,7 @@ def setup_training_components(
         # --- Detect Cores (proceed even if Ray was already initialized) ---
         try:
             resources = ray.cluster_resources()
-            detected_cpu_cores = int(resources.get("CPU", 0))
+            detected_cpu_cores = int(resources.get("CPU", 0)) - 2
             logger.info(f"Ray detected {detected_cpu_cores} CPU cores.")
         except Exception as e:
             logger.error(f"Could not get Ray cluster resources: {e}")

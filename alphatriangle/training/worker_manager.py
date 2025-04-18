@@ -180,7 +180,7 @@ class WorkerManager:
             return
         try:
             # Wait for all tasks to complete
-            ray.get(all_tasks, timeout=15.0)
+            ray.get(all_tasks, timeout=120.0)
             logger.debug(
                 f"Worker networks updated for {len(active_workers)} workers to step {global_step}."
             )

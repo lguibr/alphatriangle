@@ -51,8 +51,8 @@ def handle_debug_click(event: pygame.event.Event, handler: "InputHandler") -> No
             new_color_id = DEBUG_COLOR_ID if new_occupied_state else NO_COLOR_ID
             game_state.grid_data._color_id_np[r, c] = new_color_id
 
-            logger.info(
-                f"DEBUG: Toggled triangle ({r},{c}) -> {'Occupied' if new_occupied_state else 'Empty'}"
+            logger.debug(
+                f": Toggled triangle ({r},{c}) -> {'Occupied' if new_occupied_state else 'Empty'}"
             )
 
             # Check for line clears if the cell became occupied
@@ -64,8 +64,8 @@ def handle_debug_click(event: pygame.event.Event, handler: "InputHandler") -> No
                     )
                 )
                 if lines_cleared > 0:
-                    logger.info(
-                        f"DEBUG: Cleared {lines_cleared} lines ({len(unique_tris_coords)} coords) after toggle."
+                    logger.debug(
+                        f"Cleared {lines_cleared} lines ({len(unique_tris_coords)} coords) after toggle."
                     )
         else:
             logger.info(f"Clicked on death cell ({r},{c}). No action.")

@@ -1,15 +1,16 @@
+# File: alphatriangle/mcts/README.md
 # Monte Carlo Tree Search Module (`alphatriangle.mcts`)
 
 ## Purpose and Architecture
 
 This module implements the Monte Carlo Tree Search algorithm, a core component of the AlphaZero-style reinforcement learning agent. MCTS is used during self-play to explore the game tree and determine the next best move and generate training targets for the neural network.
 
--   **Core Components (`alphatriangle.mcts.core`):**
+-   **Core Components ([`core/README.md`](core/README.md)):**
     -   `Node`: Represents a state in the search tree, storing visit counts, value estimates, prior probabilities, and child nodes. Holds a `GameState` object.
     -   `search`: Contains the main `run_mcts_simulations` function orchestrating the selection, expansion, and backpropagation phases. **This version uses batched neural network evaluation (`evaluate_batch`) for potentially improved performance.** It collects multiple leaf nodes before calling the network.
     -   `config`: Defines the `MCTSConfig` class holding hyperparameters like the number of simulations, PUCT coefficient, temperature settings, and Dirichlet noise parameters.
     -   `types`: Defines necessary type hints and protocols, notably `ActionPolicyValueEvaluator` which specifies the interface required for the neural network evaluator used by MCTS.
--   **Strategy Components (`alphatriangle.mcts.strategy`):**
+-   **Strategy Components ([`strategy/README.md`](strategy/README.md)):**
     -   `selection`: Implements the tree traversal logic (PUCT calculation, Dirichlet noise addition, leaf selection).
     -   `expansion`: Handles expanding leaf nodes **using pre-computed policy priors** obtained from batched network evaluation.
     -   `backpropagation`: Implements the process of updating node statistics back up the tree after a simulation.
@@ -19,26 +20,29 @@ This module implements the Monte Carlo Tree Search algorithm, a core component o
 
 -   **Core:**
     -   `Node`: The tree node class.
-    -   `MCTSConfig`: Configuration class (defined in `alphatriangle.mcts.core.config`).
+    -   `MCTSConfig`: Configuration class (defined in [`alphatriangle.config`](../config/README.md)).
     -   `run_mcts_simulations(root_node: Node, config: MCTSConfig, network_evaluator: ActionPolicyValueEvaluator)`: The main function to run MCTS (uses batched evaluation).
     -   `ActionPolicyValueEvaluator`: Protocol defining the NN evaluation interface.
     -   `ActionPolicyMapping`: Type alias for the policy dictionary.
+    -   `MCTSExecutionError`: Custom exception for MCTS failures.
 -   **Strategy:**
-    -   `select_action_based_on_visits(root_node: Node, temperature: float) -> Optional[ActionType]`: Selects the final move.
+    -   `select_action_based_on_visits(root_node: Node, temperature: float) -> ActionType`: Selects the final move.
     -   `get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicyMapping`: Generates the training policy target.
 
 ## Dependencies
 
--   **`alphatriangle.environment`**:
+-   **[`alphatriangle.environment`](../environment/README.md)**:
     -   `GameState`: Represents the state within each `Node`. MCTS interacts heavily with `GameState` methods like `copy()`, `step()`, `is_over()`, `get_outcome()`, `valid_actions()`.
     -   `EnvConfig`: Accessed via `GameState`.
--   **`alphatriangle.nn`**:
+-   **[`alphatriangle.nn`](../nn/README.md)**:
     -   `NeuralNetwork`: An instance conforming to the `ActionPolicyValueEvaluator` protocol is required by `run_mcts_simulations` and `expansion` to evaluate states (specifically `evaluate_batch`).
--   **`alphatriangle.utils.types`**:
+-   **[`alphatriangle.config`](../config/README.md)**:
+    -   `MCTSConfig`: Provides hyperparameters.
+-   **[`alphatriangle.utils`](../utils/README.md)**:
     -   `ActionType`, `PolicyValueOutput`: Used for actions and NN return types.
 -   **`numpy`**:
     -   Used for Dirichlet noise generation and potentially in policy calculations.
--   **Standard Libraries:** `typing`, `math`, `logging`, `numpy`, `time`.
+-   **Standard Libraries:** `typing`, `math`, `logging`, `numpy`, `time`, `concurrent.futures`.
 
 ---
 

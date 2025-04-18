@@ -148,10 +148,10 @@ def render_subplot(
                 break
 
         # Determine scatter size/alpha based on best_window
-        max_scatter_size = 5
-        min_scatter_size = 0.5
-        max_scatter_alpha = 0.4
-        min_scatter_alpha = 0.04
+        max_scatter_size = 10
+        min_scatter_size = 1
+        max_scatter_alpha = 0.3
+        min_scatter_alpha = 0.03
         max_window_for_interp = float(max(rolling_window_sizes))
 
         if best_window == 0:

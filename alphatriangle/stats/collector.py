@@ -35,7 +35,7 @@ class StatsCollectorActor:
         self._last_state_update_time: dict[int, float] = {}
 
         # Ensure logger is configured for the actor process
-        log_level = logging.DEBUG  # Or INFO if DEBUG is too verbose
+        log_level = logging.INFO
         log_format = f"%(asctime)s [%(levelname)s] [StatsCollectorActor pid={ray.get_runtime_context().get_actor_id()}] %(name)s: %(message)s"
         logging.basicConfig(level=log_level, format=log_format, force=True)
         global logger  # Re-assign logger after config

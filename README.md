@@ -2,7 +2,7 @@
 
 <!-- Badges -->
 [![CI/CD Status](https://github.com/lguibr/alphatriangle/actions/workflows/ci_cd.yml/badge.svg)](https://github.com/lguibr/alphatriangle/actions/workflows/ci_cd.yml)
-[![codecov](https://codecov.io/gh/lguibr/alphatriangle/graph/badge.svg?token=YOUR_CODECOV_TOKEN)](https://codecov.io/gh/lguibr/alphatriangle) 
+[![codecov](https://codecov.io/gh/lguibr/alphatriangle/graph/badge.svg?token=YOUR_CODECOV_TOKEN_HERE)](https://codecov.io/gh/lguibr/alphatriangle)
 [![PyPI version](https://badge.fury.io/py/alphatriangle.svg)](https://badge.fury.io/py/alphatriangle)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -25,7 +25,7 @@ The project includes:
 
 *   **Python 3.10+**
 *   **Pygame:** For game visualization and interactive modes.
-*   **PyTorch:** For the deep learning model (CNNs, **optional Transformers**) and training, with CUDA/MPS support.
+*   **PyTorch:** For the deep learning model (CNNs, **optional Transformers**, Distributional Value Head) and training, with CUDA/MPS support.
 *   **NumPy:** For numerical operations, especially state representation.
 *   **Ray:** For parallelizing self-play data generation and statistics collection across multiple CPU cores/processes.
 *   **Numba:** (Optional, used in `features.grid_features`) For performance optimization of specific grid calculations.
@@ -49,29 +49,41 @@ The project includes:
 │           ├── buffers/
 │           ├── logs/
 │           └── configs.json
-├── alphatriangle/                    # Source code for the project package
-│   ├── alphatriangle/      # (Implicit package name after install)
-│   │   ├── __init__.py
-│   │   ├── app.py
-│   │   ├── cli.py          # CLI logic
-│   │   ├── config/
-│   │   ├── data/
-│   │   ├── environment/
-│   │   ├── features/
-│   │   ├── interaction/
-│   │   ├── mcts/
-│   │   ├── nn/
-│   │   ├── rl/
-│   │   ├── stats/
-│   │   ├── structs/
-│   │   ├── training/
-│   │   ├── utils/
-│   │   └── visualization/
+├── alphatriangle/          # Source code for the project package
+│   ├── __init__.py
+│   ├── app.py
+│   ├── cli.py              # CLI logic
+│   ├── config/             # Pydantic configuration models
+│   │   └── README.md
+│   ├── data/               # Data saving/loading logic
+│   │   └── README.md
+│   ├── environment/        # Game rules, state, actions
+│   │   └── README.md
+│   ├── features/           # Feature extraction logic
+│   │   └── README.md
+│   ├── interaction/        # User input handling
+│   │   └── README.md
+│   ├── mcts/               # Monte Carlo Tree Search
+│   │   └── README.md
+│   ├── nn/                 # Neural network definition and wrapper
+│   │   └── README.md
+│   ├── rl/                 # RL components (Trainer, Buffer, Worker)
+│   │   └── README.md
+│   ├── stats/              # Statistics collection and plotting
+│   │   └── README.md
+│   ├── structs/            # Core data structures (Triangle, Shape)
+│   │   └── README.md
+│   ├── training/           # Training orchestration (Loop, Setup, Runners)
+│   │   └── README.md
+│   ├── utils/              # Shared utilities and types
+│   │   └── README.md
+│   └── visualization/      # Pygame rendering components
+│       └── README.md
 ├── tests/                  # Unit tests
 │   ├── ...
 ├── .gitignore
 ├── .python-version
-├── LICENSE                 # License file (e.g., MIT)
+├── LICENSE                 # License file (MIT)
 ├── MANIFEST.in             # Specifies files for source distribution
 ├── pyproject.toml          # Build system & package configuration
 ├── README.md               # This file
@@ -84,27 +96,27 @@ The project includes:
 
 ## Key Modules (`alphatriangle`)
 
-*   **`cli`:** Defines the command-line interface using Typer.
-*   **`config`:** Centralized Pydantic configuration classes.
-*   **`structs`:** Defines core, low-level data structures (`Triangle`, `Shape`) and constants.
-*   **`environment`:** Defines the game rules, `GameState`, action encoding/decoding, and grid/shape *logic*.
-*   **`features`:** Contains logic to convert `GameState` objects into numerical features (`StateType`).
-*   **`nn`:** Contains the PyTorch `nn.Module` definition (`AlphaTriangleNet`) and a wrapper class (`NeuralNetwork`).
-*   **`mcts`:** Implements the Monte Carlo Tree Search algorithm (`Node`, `run_mcts_simulations`).
-*   **`rl`:** Contains RL components: `Trainer` (network updates), `ExperienceBuffer` (data storage, **supports PER**), and `SelfPlayWorker` (Ray actor for parallel self-play).
-*   **`training`:** Orchestrates the training process using `TrainingPipeline` and `TrainingLoop`, managing workers, data flow, logging, and checkpoints. Includes `runners.py` for callable training functions.
-*   **`stats`:** Contains the `StatsCollectorActor` (Ray actor) for asynchronous statistics collection and the `Plotter` class for rendering plots.
-*   **`visualization`:** Uses Pygame to render the game state, previews, HUD, plots, etc. `DashboardRenderer` handles the training visualization layout.
-*   **`interaction`:** Handles keyboard/mouse input for interactive modes via `InputHandler`.
-*   **`data`:** Manages saving and loading of training artifacts (`DataManager`) using Pydantic schemas and `cloudpickle`.
-*   **`utils`:** Provides common helper functions, shared type definitions, and geometry helpers.
-*   **`app`:** Integrates components for interactive modes (`run_interactive.py`).
+*   **`cli`:** Defines the command-line interface using Typer. ([`alphatriangle/cli.py`](alphatriangle/cli.py))
+*   **`config`:** Centralized Pydantic configuration classes. ([`alphatriangle/config/README.md`](alphatriangle/config/README.md))
+*   **`structs`:** Defines core, low-level data structures (`Triangle`, `Shape`) and constants. ([`alphatriangle/structs/README.md`](alphatriangle/structs/README.md))
+*   **`environment`:** Defines the game rules, `GameState`, action encoding/decoding, and grid/shape *logic*. ([`alphatriangle/environment/README.md`](alphatriangle/environment/README.md))
+*   **`features`:** Contains logic to convert `GameState` objects into numerical features (`StateType`). ([`alphatriangle/features/README.md`](alphatriangle/features/README.md))
+*   **`nn`:** Contains the PyTorch `nn.Module` definition (`AlphaTriangleNet`) and a wrapper class (`NeuralNetwork`). ([`alphatriangle/nn/README.md`](alphatriangle/nn/README.md))
+*   **`mcts`:** Implements the Monte Carlo Tree Search algorithm (`Node`, `run_mcts_simulations`). ([`alphatriangle/mcts/README.md`](alphatriangle/mcts/README.md))
+*   **`rl`:** Contains RL components: `Trainer` (network updates), `ExperienceBuffer` (data storage, **supports PER**), and `SelfPlayWorker` (Ray actor for parallel self-play). ([`alphatriangle/rl/README.md`](alphatriangle/rl/README.md))
+*   **`training`:** Orchestrates the training process using `TrainingLoop`, managing workers, data flow, logging, and checkpoints. Includes `runners.py` for callable training functions. ([`alphatriangle/training/README.md`](alphatriangle/training/README.md))
+*   **`stats`:** Contains the `StatsCollectorActor` (Ray actor) for asynchronous statistics collection and the `Plotter` class for rendering plots. ([`alphatriangle/stats/README.md`](alphatriangle/stats/README.md))
+*   **`visualization`:** Uses Pygame to render the game state, previews, HUD, plots, etc. `DashboardRenderer` handles the training visualization layout. ([`alphatriangle/visualization/README.md`](alphatriangle/visualization/README.md))
+*   **`interaction`:** Handles keyboard/mouse input for interactive modes via `InputHandler`. ([`alphatriangle/interaction/README.md`](alphatriangle/interaction/README.md))
+*   **`data`:** Manages saving and loading of training artifacts (`DataManager`) using Pydantic schemas and `cloudpickle`. ([`alphatriangle/data/README.md`](alphatriangle/data/README.md))
+*   **`utils`:** Provides common helper functions, shared type definitions, and geometry helpers. ([`alphatriangle/utils/README.md`](alphatriangle/utils/README.md))
+*   **`app`:** Integrates components for interactive modes (`run_interactive.py`). ([`alphatriangle/app.py`](alphatriangle/app.py))
 
 ## Setup
 
 1.  **Clone the repository (for development):**
     ```bash
-    git clone https://github.com/lguibr/alphatriangle.git # CHANGE THIS
+    git clone https://github.com/lguibr/alphatriangle.git
     cd alphatriangle
     ```
 2.  **Create a virtual environment (recommended):**

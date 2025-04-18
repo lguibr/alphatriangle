@@ -17,7 +17,7 @@ class EnvConfig(BaseModel):
     REWARD_PER_PLACED_TRIANGLE: float = Field(default=0.01)
     REWARD_PER_CLEARED_TRIANGLE: float = Field(default=0.5)
     REWARD_PER_STEP_ALIVE: float = Field(default=0.005)
-    PENALTY_GAME_OVER: float = Field(default=-1.0)
+    PENALTY_GAME_OVER: float = Field(default=-10.0)
     # --- End Reward System Constants ---
 
     @field_validator("COLS_PER_ROW")

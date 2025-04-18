@@ -165,7 +165,7 @@ class LoopHelpers:
         global_step = loop_state["global_step"]
         train_progress = loop_state["train_progress"]
 
-        if global_step % 100 != 0 or not train_progress:
+        if global_step is 0 or global_step % 100 != 0 or not train_progress:
             return
 
         elapsed_time = time.time() - loop_state["start_time"]
