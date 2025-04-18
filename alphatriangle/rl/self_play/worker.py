@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import ray
 import torch  # Import torch
-from pydantic import ValidationError
 
 from ...config import MCTSConfig, ModelConfig, TrainConfig
 from ...environment import EnvConfig, GameState

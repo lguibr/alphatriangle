@@ -1,4 +1,9 @@
 # File: alphatriangle/training/loop.py
+# Changes:
+# - Added tracking for time and counts (steps, episodes, sims) over intervals.
+# - Calculate rates (steps/sec, episodes/sec, sims/sec).
+# - Log these rates to StatsCollectorActor.
+
 import logging
 import queue
 import threading
@@ -25,6 +30,9 @@ logger = logging.getLogger(__name__)
 VISUAL_UPDATE_INTERVAL = 0.2  # How often to push state to the visual queue
 STATS_FETCH_INTERVAL = 0.5
 VIS_STATE_FETCH_TIMEOUT = 0.1  # Timeout for getting states from collector
+# --- ADDED: Interval for calculating and logging rates ---
+RATE_CALCULATION_INTERVAL = 5.0  # Calculate rates every 5 seconds
+# --- END ADDED ---
 
 
 class TrainingLoop:
@@ -72,6 +80,13 @@ class TrainingLoop:
         self.worker_tasks: dict[ray.ObjectRef, int] = {}
         self.active_worker_indices: set[int] = set()
 
+        # --- ADDED: Rate calculation tracking ---
+        self.last_rate_calc_time = time.time()
+        self.last_rate_calc_step = 0
+        self.last_rate_calc_episodes = 0
+        self.last_rate_calc_sims = 0
+        # --- END ADDED ---
+
         logger.info("TrainingLoop initialized.")
 
     def set_initial_state(
@@ -82,6 +97,12 @@ class TrainingLoop:
         self.episodes_played = episodes_played
         self.total_simulations_run = total_simulations
         self._initialize_progress_bars()
+        # --- ADDED: Initialize rate tracking state ---
+        self.last_rate_calc_time = time.time()
+        self.last_rate_calc_step = global_step
+        self.last_rate_calc_episodes = episodes_played
+        self.last_rate_calc_sims = total_simulations
+        # --- END ADDED ---
         logger.info(
             f"TrainingLoop initial state set: Step={global_step}, Episodes={episodes_played}, Sims={total_simulations}"
         )
@@ -194,6 +215,45 @@ class TrainingLoop:
                 self.latest_stats_data = ray.get(data_ref, timeout=1.0)
             except Exception as e:
                 logger.warning(f"Failed to fetch latest stats: {e}")
+
+    # --- ADDED: Rate calculation and logging ---
+    def _calculate_and_log_rates(self):
+        """Calculates and logs steps/sec, episodes/sec, sims/sec."""
+        current_time = time.time()
+        time_delta = current_time - self.last_rate_calc_time
+        if time_delta < RATE_CALCULATION_INTERVAL:
+            return
+
+        steps_delta = self.global_step - self.last_rate_calc_step
+        episodes_delta = self.episodes_played - self.last_rate_calc_episodes
+        sims_delta = self.total_simulations_run - self.last_rate_calc_sims
+
+        steps_per_sec = steps_delta / time_delta if time_delta > 0 else 0.0
+        episodes_per_sec = episodes_delta / time_delta if time_delta > 0 else 0.0
+        sims_per_sec = sims_delta / time_delta if time_delta > 0 else 0.0
+
+        if self.stats_collector_actor:
+            rate_stats = {
+                "Rate/Steps_Per_Sec": (steps_per_sec, self.global_step),
+                "Rate/Episodes_Per_Sec": (episodes_per_sec, self.global_step),
+                "Rate/Simulations_Per_Sec": (sims_per_sec, self.global_step),
+            }
+            try:
+                self.stats_collector_actor.log_batch.remote(rate_stats)  # type: ignore
+                logger.debug(
+                    f"Logged rates at step {self.global_step}: "
+                    f"Steps/s={steps_per_sec:.2f}, Eps/s={episodes_per_sec:.2f}, Sims/s={sims_per_sec:.1f}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to log rate stats to collector: {e}")
+
+        # Update last values for next calculation
+        self.last_rate_calc_time = current_time
+        self.last_rate_calc_step = self.global_step
+        self.last_rate_calc_episodes = self.episodes_played
+        self.last_rate_calc_sims = self.total_simulations_run
+
+    # --- END ADDED ---
 
     def _log_progress_eta(self):
         """Logs progress and ETA."""
@@ -638,6 +698,7 @@ class TrainingLoop:
                 # Periodic Tasks
                 self._update_visual_queue()
                 self._log_progress_eta()
+                self._calculate_and_log_rates()  # <-- ADDED
 
                 # Checkpointing (handled by TrainingPipeline)
 

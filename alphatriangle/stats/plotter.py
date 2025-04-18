@@ -1,4 +1,8 @@
 # File: alphatriangle/stats/plotter.py
+# Changes:
+# - Updated plot_defs to include new rate metrics and remove some old ones.
+# - Updated color definitions for new metrics.
+
 import contextlib  # Added import
 import logging
 import time
@@ -63,15 +67,25 @@ class Plotter:
         return {
             "RL/Current_Score": normalize_color_for_matplotlib(vis_colors.YELLOW),
             "RL/Step_Reward": normalize_color_for_matplotlib(vis_colors.WHITE),
-            "MCTS/Step_Visits": normalize_color_for_matplotlib(vis_colors.LIGHT_GRAY),
-            "MCTS/Step_Depth": normalize_color_for_matplotlib(vis_colors.LIGHTG),
+            # --- REMOVED: MCTS/Step_Visits ---
+            # "MCTS/Step_Visits": normalize_color_for_matplotlib(vis_colors.LIGHT_GRAY),
+            # --- REMOVED: MCTS/Step_Depth ---
+            # "MCTS/Step_Depth": normalize_color_for_matplotlib(vis_colors.LIGHTG),
             "Loss/Total": normalize_color_for_matplotlib(vis_colors.RED),
             "Loss/Value": normalize_color_for_matplotlib(vis_colors.BLUE),
             "Loss/Policy": normalize_color_for_matplotlib(vis_colors.GREEN),
             "LearningRate": normalize_color_for_matplotlib(vis_colors.CYAN),
-            "Buffer/Size": normalize_color_for_matplotlib(vis_colors.PURPLE),
+            # --- REMOVED: Buffer/Size ---
+            # "Buffer/Size": normalize_color_for_matplotlib(vis_colors.PURPLE),
             WEIGHT_UPDATE_METRIC_KEY: normalize_color_for_matplotlib(vis_colors.BLACK),
             "placeholder": normalize_color_for_matplotlib(vis_colors.GRAY),
+            # --- ADDED: Rate metric colors ---
+            "Rate/Steps_Per_Sec": normalize_color_for_matplotlib(vis_colors.ORANGE),
+            "Rate/Episodes_Per_Sec": normalize_color_for_matplotlib(vis_colors.HOTPINK),
+            "Rate/Simulations_Per_Sec": normalize_color_for_matplotlib(
+                vis_colors.LIGHTG
+            ),
+            # --- END ADDED ---
         }
 
     def _init_figure(self, target_width: int, target_height: int):
@@ -150,7 +164,7 @@ class Plotter:
         plot_update_start = time.monotonic()
         try:
             axes_flat = self.axes.flatten()
-            # Define conceptual plots and their x-axis type ('global_step' or 'index')
+            # --- UPDATED: plot_defs with new rate metrics ---
             plot_defs = [
                 ("RL/Current_Score", "Score", False, "index"),
                 ("Loss/Total", "Total Loss", True, "global_step"),
@@ -158,10 +172,11 @@ class Plotter:
                 ("RL/Step_Reward", "Step Reward", False, "index"),
                 ("Loss/Value", "Value Loss", True, "global_step"),
                 ("Loss/Policy", "Policy Loss", True, "global_step"),
-                ("MCTS/Step_Visits", "MCTS Visits", False, "index"),
-                ("MCTS/Step_Depth", "MCTS Depth", False, "index"),
-                ("Buffer/Size", "Buffer Size", False, "global_step"),
+                ("Rate/Steps_Per_Sec", "Steps/sec", False, "global_step"),
+                ("Rate/Episodes_Per_Sec", "Episodes/sec", False, "global_step"),
+                ("Rate/Simulations_Per_Sec", "Sims/sec", False, "global_step"),
             ]
+            # --- END UPDATED ---
 
             # Extract weight update steps (always global)
             weight_update_steps: list[int] = []

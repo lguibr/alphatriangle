@@ -30,7 +30,7 @@ class TrainConfig(BaseModel):
     MAX_TRAINING_STEPS: int | None = Field(default=100_000, ge=1)  # Target steps
 
     # --- Workers & Batching ---
-    NUM_SELF_PLAY_WORKERS: int = Field(default=8, ge=1)  # Adjust based on CPU cores
+    NUM_SELF_PLAY_WORKERS: int = Field(default=12, ge=1)  # Adjust based on CPU cores
     # --- WORKER_DEVICE: Defaults to 'auto' for automatic detection ---
     WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="auto")
     BATCH_SIZE: int = Field(default=128, ge=1)  # Moderate batch size

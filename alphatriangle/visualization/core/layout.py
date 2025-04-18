@@ -1,3 +1,7 @@
+# File: alphatriangle/visualization/core/layout.py
+# Changes:
+# - Reduced top_area_h ratio from 0.35 to 0.2 for training layout.
+
 import logging
 
 import pygame
@@ -60,7 +64,9 @@ def calculate_training_layout(
     hud_h = vis_config.HUD_HEIGHT
     total_available_h = max(0, sh - hud_h - 2 * pad)
 
-    top_area_h = int(total_available_h * 0.35)
+    # --- CHANGED: Reduced height ratio for worker grid ---
+    top_area_h = int(total_available_h * 0.20)  # Reduced from 0.35
+    # --- END CHANGED ---
     top_area_w = sw - 2 * pad
 
     worker_grid_rect = pygame.Rect(pad, pad, top_area_w, top_area_h)
