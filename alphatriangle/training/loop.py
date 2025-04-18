@@ -1,8 +1,6 @@
 # File: alphatriangle/training/loop.py
 # Changes:
-# - Added tracking for time and counts (steps, episodes, sims) over intervals.
-# - Calculate rates (steps/sec, episodes/sec, sims/sec).
-# - Log these rates to StatsCollectorActor.
+# - Define buffer_size_step BEFORE using it in the rate_stats dictionary.
 
 import logging
 import queue
@@ -30,9 +28,7 @@ logger = logging.getLogger(__name__)
 VISUAL_UPDATE_INTERVAL = 0.2  # How often to push state to the visual queue
 STATS_FETCH_INTERVAL = 0.5
 VIS_STATE_FETCH_TIMEOUT = 0.1  # Timeout for getting states from collector
-# --- ADDED: Interval for calculating and logging rates ---
 RATE_CALCULATION_INTERVAL = 5.0  # Calculate rates every 5 seconds
-# --- END ADDED ---
 
 
 class TrainingLoop:
@@ -80,12 +76,10 @@ class TrainingLoop:
         self.worker_tasks: dict[ray.ObjectRef, int] = {}
         self.active_worker_indices: set[int] = set()
 
-        # --- ADDED: Rate calculation tracking ---
         self.last_rate_calc_time = time.time()
         self.last_rate_calc_step = 0
         self.last_rate_calc_episodes = 0
         self.last_rate_calc_sims = 0
-        # --- END ADDED ---
 
         logger.info("TrainingLoop initialized.")
 
@@ -97,12 +91,10 @@ class TrainingLoop:
         self.episodes_played = episodes_played
         self.total_simulations_run = total_simulations
         self._initialize_progress_bars()
-        # --- ADDED: Initialize rate tracking state ---
         self.last_rate_calc_time = time.time()
         self.last_rate_calc_step = global_step
         self.last_rate_calc_episodes = episodes_played
         self.last_rate_calc_sims = total_simulations
-        # --- END ADDED ---
         logger.info(
             f"TrainingLoop initial state set: Step={global_step}, Episodes={episodes_played}, Sims={total_simulations}"
         )
@@ -216,9 +208,8 @@ class TrainingLoop:
             except Exception as e:
                 logger.warning(f"Failed to fetch latest stats: {e}")
 
-    # --- ADDED: Rate calculation and logging ---
     def _calculate_and_log_rates(self):
-        """Calculates and logs steps/sec, episodes/sec, sims/sec."""
+        """Calculates and logs steps/sec, episodes/sec, sims/sec, and buffer size."""
         current_time = time.time()
         time_delta = current_time - self.last_rate_calc_time
         if time_delta < RATE_CALCULATION_INTERVAL:
@@ -231,29 +222,41 @@ class TrainingLoop:
         steps_per_sec = steps_delta / time_delta if time_delta > 0 else 0.0
         episodes_per_sec = episodes_delta / time_delta if time_delta > 0 else 0.0
         sims_per_sec = sims_delta / time_delta if time_delta > 0 else 0.0
+        current_buffer_size = float(len(self.buffer))
+        # --- *** FIX: Define buffer_size_step BEFORE use *** ---
+        buffer_size_step = int(current_buffer_size)  # Use integer buffer size as step
+        # --- *** END FIX *** ---
 
         if self.stats_collector_actor:
             rate_stats = {
-                "Rate/Steps_Per_Sec": (steps_per_sec, self.global_step),
-                "Rate/Episodes_Per_Sec": (episodes_per_sec, self.global_step),
-                "Rate/Simulations_Per_Sec": (sims_per_sec, self.global_step),
+                # Log rates related to buffer fill against buffer size
+                "Rate/Episodes_Per_Sec": (episodes_per_sec, buffer_size_step),
+                "Rate/Simulations_Per_Sec": (sims_per_sec, buffer_size_step),
+                "Buffer/Size": (current_buffer_size, buffer_size_step),
             }
+            log_msg_steps = "Steps/s=N/A"
+            if steps_delta > 0:  # Only log steps/sec if training steps occurred
+                rate_stats["Rate/Steps_Per_Sec"] = (
+                    steps_per_sec,
+                    self.global_step,
+                )  # Log against global_step
+                log_msg_steps = f"Steps/s={steps_per_sec:.2f}"
+
             try:
                 self.stats_collector_actor.log_batch.remote(rate_stats)  # type: ignore
                 logger.debug(
-                    f"Logged rates at step {self.global_step}: "
-                    f"Steps/s={steps_per_sec:.2f}, Eps/s={episodes_per_sec:.2f}, Sims/s={sims_per_sec:.1f}"
+                    f"Logged rates/buffer at step {self.global_step} / buffer {buffer_size_step}: "
+                    f"{log_msg_steps}, Eps/s={episodes_per_sec:.2f}, Sims/s={sims_per_sec:.1f}, "
+                    f"Buffer={int(current_buffer_size)}"
                 )
             except Exception as e:
-                logger.error(f"Failed to log rate stats to collector: {e}")
+                logger.error(f"Failed to log rate/buffer stats to collector: {e}")
 
         # Update last values for next calculation
         self.last_rate_calc_time = current_time
         self.last_rate_calc_step = self.global_step
         self.last_rate_calc_episodes = self.episodes_played
         self.last_rate_calc_sims = self.total_simulations_run
-
-    # --- END ADDED ---
 
     def _log_progress_eta(self):
         """Logs progress and ETA."""
@@ -264,7 +267,15 @@ class TrainingLoop:
 
         elapsed_time = time.time() - self.start_time
         steps_since_load = self.global_step - self.train_step_progress.initial_steps
-        steps_per_sec = steps_since_load / elapsed_time if elapsed_time > 1 else 0
+        steps_per_sec = 0.0
+        if (
+            "Rate/Steps_Per_Sec" in self.latest_stats_data
+            and self.latest_stats_data["Rate/Steps_Per_Sec"]
+        ):
+            steps_per_sec = self.latest_stats_data["Rate/Steps_Per_Sec"][-1][1]
+        elif elapsed_time > 1 and steps_since_load > 0:
+            steps_per_sec = steps_since_load / elapsed_time
+
         target_steps = self.train_config.MAX_TRAINING_STEPS
         target_steps_str = f"{target_steps:,}" if target_steps else "Infinite"
         progress_str = f"Step {self.global_step:,}/{target_steps_str}"
@@ -455,12 +466,10 @@ class TrainingLoop:
         valid_experiences, invalid_count = self._validate_experiences(
             result.episode_experiences
         )
-        # --- ADDED: Log if experiences were filtered ---
         if invalid_count > 0:
             logger.warning(
                 f"Worker {worker_id}: {invalid_count} invalid experiences were filtered out before adding to buffer."
             )
-        # --- END ADDED ---
 
         if valid_experiences:
             try:
@@ -480,11 +489,9 @@ class TrainingLoop:
             self.episodes_played += 1
             self.total_simulations_run += result.total_simulations
         else:
-            # --- CHANGED: Log more prominently if NO valid experiences ---
             logger.error(
                 f"Worker {worker_id}: Self-play episode produced NO valid experiences (Steps: {result.episode_steps}, Score: {result.final_score:.2f}). This prevents buffer filling and training."
             )
-            # --- END CHANGED ---
 
     def _run_training_step(self) -> bool:
         """Runs one training step."""
@@ -540,7 +547,7 @@ class TrainingLoop:
                 "Loss/Mean_TD_Error": (loss_info["mean_td_error"], step),
                 "LearningRate": (current_lr, step),
                 "Progress/Train_Step_Percent": (train_step_perc, step),
-                "Buffer/Size": (len(self.buffer), step),
+                # Buffer/Size logged periodically in _calculate_and_log_rates
                 "Progress/Total_Simulations": (self.total_simulations_run, step),
             }
             if per_beta is not None:
@@ -647,12 +654,10 @@ class TrainingLoop:
                                 logger.debug(
                                     f"Finished processing result for worker {worker_idx}"
                                 )
-                            # --- ADDED: Log if result was None after validation ---
                             elif not processing_error:
                                 logger.warning(
                                     f"Worker {worker_idx} returned a result that became None after validation (but no validation error raised)."
                                 )
-                            # --- END ADDED ---
 
                         except ray.exceptions.RayActorError as e:
                             processing_error = f"Worker {worker_idx} actor failed: {e}"
@@ -681,7 +686,6 @@ class TrainingLoop:
                                 new_task_ref = worker.run_episode.remote()
                                 self.worker_tasks[new_task_ref] = worker_idx
                             else:
-                                # This case should ideally not happen if active_worker_indices is correct
                                 logger.error(
                                     f"Worker {worker_idx} is None during relaunch despite being in active set."
                                 )
@@ -690,7 +694,6 @@ class TrainingLoop:
                             logger.warning(
                                 f"Not relaunching task for worker {worker_idx} due to error: {processing_error}"
                             )
-                            # Worker already removed or marked as None above
 
                 if self.stop_requested.is_set():
                     break
@@ -698,9 +701,7 @@ class TrainingLoop:
                 # Periodic Tasks
                 self._update_visual_queue()
                 self._log_progress_eta()
-                self._calculate_and_log_rates()  # <-- ADDED
-
-                # Checkpointing (handled by TrainingPipeline)
+                self._calculate_and_log_rates()  # Log rates and buffer size
 
                 if not ready_refs and not self.buffer.is_ready():
                     time.sleep(0.05)
@@ -717,7 +718,6 @@ class TrainingLoop:
                 self.training_complete = False  # Failed
             elif self.stop_requested.is_set() and not self.training_complete:
                 self.training_complete = False  # Interrupted
-            # If loop finished naturally by reaching max steps, training_complete is already True
             logger.info(
                 f"TrainingLoop finished. Complete: {self.training_complete}, Exception: {self.training_exception is not None}"
             )
@@ -725,7 +725,6 @@ class TrainingLoop:
     def cleanup_actors(self):
         """Kills Ray actors associated with this loop."""
         logger.info("Cleaning up TrainingLoop actors...")
-        # Cancel pending tasks first
         for task_ref in list(self.worker_tasks.keys()):
             try:
                 ray.cancel(task_ref, force=True)
@@ -733,7 +732,6 @@ class TrainingLoop:
                 logger.warning(f"Error cancelling task {task_ref}: {cancel_e}")
         self.worker_tasks = {}
 
-        # Kill actors
         for i, worker in enumerate(self.workers):
             if worker:
                 try:

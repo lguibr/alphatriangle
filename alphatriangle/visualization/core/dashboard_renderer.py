@@ -1,4 +1,9 @@
 # File: alphatriangle/visualization/core/dashboard_renderer.py
+# Changes:
+# - Correct calculation of progress_bars_total_height.
+# - Render progress bars within the progress_bar_area_rect.
+# - Remove unused 'pad' variable in _calculate_worker_sub_layout.
+
 import logging
 import math
 from collections import deque
@@ -23,9 +28,7 @@ logger = logging.getLogger(__name__)
 
 class DashboardRenderer:
     """
-    Renders the training dashboard, including multiple worker game states
-    in a top grid area, and statistics plots/progress bars/model info
-    in a bottom area.
+    Renders the training dashboard with minimal spacing.
     """
 
     def __init__(
@@ -55,18 +58,22 @@ class DashboardRenderer:
         self.single_game_renderer = GameRenderer(vis_config, env_config, fonts)
         self.plotter = Plotter(plot_update_interval=0.2)
 
-        self.progress_bar_height_per_bar = 40
+        self.progress_bar_height_per_bar = 25
         self.num_progress_bars = 2
-        self.progress_bar_spacing = 5
+        self.progress_bar_spacing = 2
+        # --- CORRECTED: Progress bar total height calculation ---
         self.progress_bars_total_height = (
-            self.progress_bar_height_per_bar + self.progress_bar_spacing
-        ) * self.num_progress_bars
-
-        self.model_info_height = 75
-        self.model_info_padding = 5
+            (
+                (self.progress_bar_height_per_bar * self.num_progress_bars)
+                + (self.progress_bar_spacing * (self.num_progress_bars - 1))
+            )
+            if self.num_progress_bars > 0
+            else 0
+        )
+        # --- END CORRECTION ---
 
         self._layout_calculated_for_size: tuple[int, int] = (0, 0)
-        self.ensure_layout()
+        # Don't call ensure_layout here, wait for first render
 
     def ensure_layout(self):
         """Calculates or retrieves the main layout areas."""
@@ -77,17 +84,12 @@ class DashboardRenderer:
             self.layout_rects is None
             or self._layout_calculated_for_size != current_size
         ):
-            required_bottom_margin_for_stats = (
-                self.progress_bars_total_height
-                + self.model_info_height
-                + self.model_info_padding
-                + self.vis_config.PADDING
-            )
+            # Pass the calculated total height needed for progress bars
             self.layout_rects = layout.calculate_training_layout(
                 current_w,
                 current_h,
                 self.vis_config,
-                bottom_margin=required_bottom_margin_for_stats,
+                progress_bars_total_height=self.progress_bars_total_height,
             )
             self._layout_calculated_for_size = current_size
             logger.info(
@@ -100,7 +102,7 @@ class DashboardRenderer:
     def _calculate_worker_sub_layout(
         self, worker_grid_area: pygame.Rect, worker_ids: list[int]
     ):
-        """Calculates the grid layout within the worker_grid_area."""
+        """Calculates the grid layout within the worker_grid_area with NO padding."""
         area_w, area_h = worker_grid_area.size
         num_workers = len(worker_ids)
 
@@ -116,7 +118,9 @@ class DashboardRenderer:
         self.last_worker_grid_size = (area_w, area_h)
         self.last_num_workers = num_workers
         self.worker_sub_rects = {}
-        pad = 5
+        # --- REMOVED: Unused variable ---
+        # pad = 0  # No space between worker views
+        # --- END REMOVED ---
 
         if area_h <= 10 or area_w <= 10 or num_workers <= 0:
             if num_workers > 0:
@@ -132,92 +136,30 @@ class DashboardRenderer:
         cols = max(1, cols)
         rows = max(1, rows)
 
-        cell_w = max(1, (area_w - (cols - 1) * pad) / cols)
-        cell_h = max(1, (area_h - (rows - 1) * pad) / rows)
+        cell_w = max(1, area_w / cols)
+        cell_h = max(1, area_h / rows)
 
-        min_cell_w, min_cell_h = 80, 60
+        min_cell_w, min_cell_h = 60, 40
         if cell_w < min_cell_w or cell_h < min_cell_h:
             logger.warning(
                 f"Worker grid cells potentially too small ({cell_w:.1f}x{cell_h:.1f})."
             )
 
         logger.info(
-            f"Calculated worker sub-layout: {rows}x{cols} for {num_workers} workers. Cell: {cell_w:.1f}x{cell_h:.1f}"
+            f"Calculated worker sub-layout (no pad): {rows}x{cols} for {num_workers} workers. Cell: {cell_w:.1f}x{cell_h:.1f}"
         )
 
         sorted_worker_ids = sorted(worker_ids)
         for i, worker_id in enumerate(sorted_worker_ids):
             row = i // cols
             col = i % cols
-            worker_area_x = worker_grid_area.left + col * (cell_w + pad)
-            worker_area_y = worker_grid_area.top + row * (cell_h + pad)
-            worker_rect = pygame.Rect(worker_area_x, worker_area_y, cell_w, cell_h)
+            worker_area_x = int(worker_grid_area.left + col * cell_w)
+            worker_area_y = int(worker_grid_area.top + row * cell_h)
+            worker_w = int((col + 1) * cell_w) - int(col * cell_w)
+            worker_h = int((row + 1) * cell_h) - int(row * cell_h)
+
+            worker_rect = pygame.Rect(worker_area_x, worker_area_y, worker_w, worker_h)
             self.worker_sub_rects[worker_id] = worker_rect.clip(worker_grid_area)
-
-    def _render_model_info(self, area_rect: pygame.Rect):
-        """Renders model configuration details and parameter counts in the specified area."""
-        font = self.fonts.get("help")
-        if not font:
-            return
-
-        text_color = colors.LIGHT_GRAY
-        bg_color = colors.DARK_GRAY
-        border_color = colors.GRAY
-
-        pygame.draw.rect(self.screen, bg_color, area_rect)
-        pygame.draw.rect(self.screen, border_color, area_rect, 1)
-
-        y_offset = area_rect.top + 5
-        x_offset = area_rect.left + 10
-        line_height = font.get_height() + 2
-
-        def render_line(text: str, y: int):
-            max_width = area_rect.width - 2 * x_offset
-            original_text = text
-            while font and font.size(text)[0] > max_width and len(text) > 10:
-                text = text[:-4] + "..."
-            if text != original_text:
-                logger.debug(f"Truncated model info line: {original_text} -> {text}")
-
-            surf = font.render(text, True, text_color)
-            self.screen.blit(surf, (x_offset, y))
-            return y + line_height
-
-        current_y = render_line("Model Config:", y_offset)
-
-        if self.model_config:
-            current_y = render_line(
-                f"  CNN Filters: {self.model_config.CONV_FILTERS}", current_y
-            )
-            current_y = render_line(
-                f"  Res Blocks: {self.model_config.NUM_RESIDUAL_BLOCKS} x {self.model_config.RESIDUAL_BLOCK_FILTERS}",
-                current_y,
-            )
-            if self.model_config.USE_TRANSFORMER:
-                current_y = render_line(
-                    f"  Transformer: {self.model_config.TRANSFORMER_LAYERS}L x {self.model_config.TRANSFORMER_HEADS}H (Dim:{self.model_config.TRANSFORMER_DIM})",
-                    current_y,
-                )
-            else:
-                current_y = render_line("  Transformer: Disabled", current_y)
-            if current_y + line_height <= area_rect.bottom - 5:
-                current_y = render_line(
-                    f"  Shared FC: {self.model_config.FC_DIMS_SHARED}", current_y
-                )
-            if current_y + line_height <= area_rect.bottom - 5:
-                current_y = render_line(
-                    f"  Value Atoms: {self.model_config.NUM_VALUE_ATOMS} [{self.model_config.VALUE_MIN:.1f}, {self.model_config.VALUE_MAX:.1f}]",
-                    current_y,
-                )
-        else:
-            current_y = render_line("  (Config details unavailable)", current_y)
-
-        if self.total_params is not None and self.trainable_params is not None:
-            total_str = f"{self.total_params:,}"
-            trainable_str = f"{self.trainable_params:,}"
-            param_text = f"  Params: Total={total_str}, Trainable={trainable_str}"
-            if current_y + line_height <= area_rect.bottom - 5:
-                current_y = render_line(param_text, current_y)
 
     def render(
         self,
@@ -231,8 +173,8 @@ class DashboardRenderer:
             return
 
         worker_grid_area = layout_rects.get("worker_grid")
-        stats_area = layout_rects.get("stats_area")
         plots_rect = layout_rects.get("plots")
+        progress_bar_area_rect = layout_rects.get("progress_bar_area")
 
         worker_step_stats = (
             global_stats.get("worker_step_stats", {}) if global_stats else {}
@@ -244,7 +186,6 @@ class DashboardRenderer:
             and worker_grid_area.width > 0
             and worker_grid_area.height > 0
         ):
-            pygame.draw.rect(self.screen, colors.DARK_GRAY, worker_grid_area)
             worker_ids = list(worker_states.keys())
             if not worker_ids and global_stats and "num_workers" in global_stats:
                 worker_ids = list(range(global_stats["num_workers"]))
@@ -262,20 +203,17 @@ class DashboardRenderer:
                     game_state,
                     worker_step_stats=step_stats,
                 )
+                pygame.draw.rect(self.screen, colors.GRAY, worker_area_rect, 1)
         else:
             logger.warning("Worker grid area not available or too small.")
 
-        # --- Render Stats Area (Plots, Progress Bars, Model Info) ---
-        if stats_area and global_stats:
-            pygame.draw.rect(self.screen, colors.DARK_GRAY, stats_area)
-
-            # Render Plots
+        # --- Render Plot Area ---
+        if global_stats:
             plot_surface = None
             if plots_rect and plots_rect.width > 0 and plots_rect.height > 0:
                 stats_data_for_plot: StatsCollectorData | None = global_stats.get(
                     "stats_data"
                 )
-
                 if stats_data_for_plot is not None:
                     has_any_metric_data = any(
                         isinstance(dq, deque) and dq
@@ -312,86 +250,102 @@ class DashboardRenderer:
                         self.screen.blit(wait_surf, wait_rect)
                     pygame.draw.rect(self.screen, colors.GRAY, plots_rect, 1)
 
-            # --- Render Progress Bars and Model Info below plots ---
-            current_y = (
-                plots_rect.bottom + self.progress_bar_spacing
-                if plots_rect
-                else stats_area.top + self.vis_config.PADDING
-            )
+            # --- Render Progress Bars (in their dedicated area) ---
+            if progress_bar_area_rect:
+                current_y = (
+                    progress_bar_area_rect.top
+                )  # Start at the top of the PB area
+                progress_bar_font = self.fonts.get("help")
 
-            # Render Progress Bars
-            progress_bar_font = self.fonts.get("help")
-            if progress_bar_font:
-                bar_width = stats_area.width
-                bar_x = stats_area.left
-                bar_height = self.progress_bar_height_per_bar
+                if progress_bar_font:
+                    bar_width = progress_bar_area_rect.width  # Use the area width
+                    bar_x = progress_bar_area_rect.left
+                    bar_height = self.progress_bar_height_per_bar
 
-                # Training Progress Bar
-                if current_y + bar_height <= stats_area.bottom:
+                    # Generate Compact Info String
+                    compact_info_str = ""
+                    info_parts = []
+                    if self.model_config:
+                        model_str = f"CNN:{len(self.model_config.CONV_FILTERS)}L"
+                        if self.model_config.NUM_RESIDUAL_BLOCKS > 0:
+                            model_str += (
+                                f"/Res:{self.model_config.NUM_RESIDUAL_BLOCKS}L"
+                            )
+                        if (
+                            self.model_config.USE_TRANSFORMER
+                            and self.model_config.TRANSFORMER_LAYERS > 0
+                        ):
+                            model_str += f"/TF:{self.model_config.TRANSFORMER_LAYERS}L"
+                        info_parts.append(model_str)
+                    if self.total_params is not None:
+                        info_parts.append(f"P:{self.total_params / 1e6:.1f}M")
+                    updates = global_stats.get("global_step", "?")
+                    episodes = global_stats.get("total_episodes", "?")
+                    sims = global_stats.get("total_simulations", "?")
+                    num_workers = global_stats.get("num_workers", "?")
+                    pending_tasks = global_stats.get("pending_tasks", "?")
+                    info_parts.append(f"U:{updates}")
+                    info_parts.append(f"E:{episodes}")
+                    if isinstance(sims, int | float):
+                        sims_str = (
+                            f"{sims / 1e6:.1f}M"
+                            if sims >= 1e6
+                            else (
+                                f"{sims / 1e3:.0f}k" if sims >= 1000 else str(int(sims))
+                            )
+                        )
+                        info_parts.append(f"S:{sims_str}")
+                    else:
+                        info_parts.append(f"S:{sims}")
+                    info_parts.append(f"W:{pending_tasks}/{num_workers}")
+                    compact_info_str = " | ".join(info_parts)
+                    # End Generate Compact Info String
+
+                    # Training Progress Bar (with info line)
                     train_progress = global_stats.get("train_progress")
                     if isinstance(train_progress, ProgressBar):
-                        # --- CHANGED: Removed bar_color ---
+                        # --- Render within the progress_bar_area_rect ---
                         train_progress.render(
                             self.screen,
                             (bar_x, current_y),
                             int(bar_width),
                             bar_height,
                             progress_bar_font,
-                            # bar_color=colors.GREEN, # Removed
+                            border_radius=3,
+                            info_line=compact_info_str,
                         )
-                        # --- END CHANGED ---
                         current_y += bar_height + self.progress_bar_spacing
+                        # --- End render within ---
                     else:
                         logger.debug(
                             "Train progress bar data not available or invalid type."
                         )
 
-                # Buffer Progress Bar
-                if current_y + bar_height <= stats_area.bottom:
+                    # Buffer Progress Bar
                     buffer_progress = global_stats.get("buffer_progress")
                     if isinstance(buffer_progress, ProgressBar):
-                        # --- CHANGED: Removed bar_color ---
+                        # --- Render within the progress_bar_area_rect ---
                         buffer_progress.render(
                             self.screen,
                             (bar_x, current_y),
                             int(bar_width),
                             bar_height,
                             progress_bar_font,
-                            # bar_color=colors.ORANGE, # Removed
+                            border_radius=3,
                         )
-                        # --- END CHANGED ---
-                        current_y += bar_height + self.progress_bar_spacing
+                        # --- End render within ---
                     else:
                         logger.debug(
                             "Buffer progress bar data not available or invalid type."
                         )
-                elif current_y <= stats_area.bottom:
-                    logger.warning(
-                        "Not enough vertical space for the second progress bar."
-                    )
-
-            # Render Model Info below progress bars
-            model_info_y = current_y
-            model_info_rect = pygame.Rect(
-                stats_area.left,
-                model_info_y,
-                stats_area.width,
-                max(0, stats_area.bottom - model_info_y - self.vis_config.PADDING),
-            )
-            if model_info_rect.height >= self.model_info_height:
-                self._render_model_info(model_info_rect)
-            else:
-                logger.warning(
-                    f"Not enough space to render model info (Available: {model_info_rect.height}, Need: {self.model_info_height})."
-                )
 
         elif not global_stats:
             logger.debug("No global_stats provided to DashboardRenderer.")
 
-        # --- Render HUD ---
+        # --- Render HUD (Help Text Only) ---
         hud_drawing.render_hud(
             self.screen,
             mode="training_visual",
             fonts=self.fonts,
-            display_stats=global_stats,
+            display_stats=None,
         )

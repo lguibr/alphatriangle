@@ -23,6 +23,7 @@ class TrainConfig(BaseModel):
     LOAD_BUFFER_PATH: str | None = Field(default=None)
     AUTO_RESUME_LATEST: bool = Field(default=True)  # Resume if possible
     # --- DEVICE: Defaults to 'auto' for automatic detection (CUDA > MPS > CPU) ---
+    # This controls the device for the main Trainer process.
     DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="auto")
     RANDOM_SEED: int = Field(default=42)
 
@@ -30,9 +31,16 @@ class TrainConfig(BaseModel):
     MAX_TRAINING_STEPS: int | None = Field(default=100_000, ge=1)  # Target steps
 
     # --- Workers & Batching ---
-    NUM_SELF_PLAY_WORKERS: int = Field(default=12, ge=1)  # Adjust based on CPU cores
-    # --- WORKER_DEVICE: Defaults to 'auto' for automatic detection ---
-    WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="auto")
+    # --- CHANGED: Updated description ---
+    NUM_SELF_PLAY_WORKERS: int = Field(
+        default=8,
+        ge=1,
+        description="Suggested number of workers. Actual number may be adjusted based on detected CPU cores.",
+    )
+    # --- END CHANGED ---
+    # --- WORKER_DEVICE: Defaults to 'cpu' for self-play workers ---
+    # Workers run MCTS and NN eval; CPU is often sufficient and avoids GPU contention.
+    WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="cpu")
     BATCH_SIZE: int = Field(default=128, ge=1)  # Moderate batch size
     BUFFER_CAPACITY: int = Field(default=200_000, ge=1)  # Larger buffer
     MIN_BUFFER_SIZE_TO_TRAIN: int = Field(
@@ -81,7 +89,7 @@ class TrainConfig(BaseModel):
     COMPILE_MODEL: bool = Field(
         default=True,
         description=(
-            "Enable torch.compile() for potential speedup. Requires PyTorch 2.0+. "
+            "Enable torch.compile() for potential speedup (Trainer only). Requires PyTorch 2.0+. "
             "May have initial overhead or compatibility issues on some setups/GPUs "
             "(especially non-CUDA backends like MPS). Set to False if encountering problems. "
             "The application will attempt compilation and fall back gracefully if it fails."

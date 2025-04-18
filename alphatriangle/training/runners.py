@@ -9,7 +9,8 @@ from typing import Any
 
 import mlflow
 import pygame
-import torch  # Added torch import
+import ray  # Added ray import
+import torch
 
 from .. import config, environment, utils, visualization
 from ..data import DataManager
@@ -28,21 +29,69 @@ from .logging_utils import (
 visual_state_queue: queue.Queue[dict[int, Any] | None] = queue.Queue(maxsize=5)
 
 
+# --- CHANGED: Ray init and core detection moved inside ---
 def _setup_training_components(
     train_config_override: config.TrainConfig,
     persist_config_override: config.PersistenceConfig,
-) -> TrainingComponents | None:
-    """Initializes and returns the TrainingComponents bundle."""
+) -> tuple[TrainingComponents | None, bool]:
+    """
+    Initializes Ray, detects cores, updates config to match detected cores,
+    and returns the TrainingComponents bundle and a flag indicating if Ray was initialized here.
+    """
     logger = logging.getLogger(__name__)
+    ray_initialized_here = False
+    detected_cpu_cores: int | None = None
+
     try:
+        # --- Initialize Ray and Detect Cores ---
+        if not ray.is_initialized():
+            try:
+                # Keep log_to_driver=True for visibility, but set level higher
+                ray.init(logging_level=logging.WARNING, log_to_driver=True)
+                ray_initialized_here = True
+                logger.info("Ray initialized by _setup_training_components.")
+            except Exception as e:
+                logger.critical(f"Failed to initialize Ray: {e}", exc_info=True)
+                # Propagate the error to stop the setup
+                raise RuntimeError("Ray initialization failed") from e
+        else:
+            logger.info("Ray already initialized.")
+
+        try:
+            resources = ray.cluster_resources()
+            detected_cpu_cores = int(resources.get("CPU", 0))
+            logger.info(f"Ray detected {detected_cpu_cores} CPU cores.")
+        except Exception as e:
+            logger.error(f"Could not get Ray cluster resources: {e}")
+        # --- End Ray Init/Detection ---
+
         # --- Initialize Configurations ---
         # Use the potentially overridden configs passed in
         train_config = train_config_override
         persist_config = persist_config_override
-        # Instantiate Pydantic models using defaults
+        # Instantiate other Pydantic models using defaults
         env_config = config.EnvConfig()
         model_config = config.ModelConfig()
         mcts_config = config.MCTSConfig()
+
+        # --- Set Worker Count to Detected Cores --- # MODIFIED SECTION
+        if detected_cpu_cores is not None and detected_cpu_cores > 0:
+            if train_config.NUM_SELF_PLAY_WORKERS != detected_cpu_cores:
+                logger.info(
+                    f"Setting NUM_SELF_PLAY_WORKERS to detected {detected_cpu_cores} CPU cores (was {train_config.NUM_SELF_PLAY_WORKERS})."
+                )
+            else:
+                logger.info(
+                    f"Detected {detected_cpu_cores} CPU cores. NUM_SELF_PLAY_WORKERS already matches."
+                )
+            # Always set it to the detected number if detection was successful
+            train_config.NUM_SELF_PLAY_WORKERS = detected_cpu_cores
+        else:
+            logger.warning(
+                f"Could not detect valid CPU cores ({detected_cpu_cores}). Using configured NUM_SELF_PLAY_WORKERS: {train_config.NUM_SELF_PLAY_WORKERS}"
+            )
+        logger.info(f"Using {train_config.NUM_SELF_PLAY_WORKERS} self-play workers.")
+        # --- End Set Worker Count --- # END MODIFIED SECTION
 
         # --- Validate Configs ---
         config.print_config_info_and_validate(mcts_config)
@@ -50,13 +99,11 @@ def _setup_training_components(
         # --- Setup ---
         utils.set_random_seeds(train_config.RANDOM_SEED)
         device = utils.get_device(train_config.DEVICE)
-        # --- ADDED: Log determined device and compile setting ---
         logger.info(f"Determined Training Device: {device}")
         logger.info(f"Model Compilation Enabled: {train_config.COMPILE_MODEL}")
-        # --- END ADDED ---
 
         # --- Initialize Core Components ---
-        # Note: Ray initialization is handled within TrainingPipeline
+        # Ray is assumed to be initialized now
         stats_collector_actor = StatsCollectorActor.remote(max_history=500_000)  # type: ignore
         logger.info("Initialized StatsCollectorActor with large max_history (500k).")
         neural_net = NeuralNetwork(model_config, env_config, train_config, device)
@@ -71,16 +118,18 @@ def _setup_training_components(
             trainer=trainer,
             data_manager=data_manager,
             stats_collector_actor=stats_collector_actor,
-            train_config=train_config,
+            train_config=train_config,  # Pass the potentially modified config
             env_config=env_config,
             model_config=model_config,
             mcts_config=mcts_config,
             persist_config=persist_config,
         )
-        return components
+        # Return components and the flag indicating if Ray was initialized here
+        return components, ray_initialized_here
     except Exception as e:
         logger.critical(f"Error setting up training components: {e}", exc_info=True)
-        return None
+        # Return None and the Ray init flag
+        return None, ray_initialized_here
 
 
 # --- ADDED: Helper to count parameters ---
@@ -94,6 +143,7 @@ def count_parameters(model: torch.nn.Module) -> tuple[int, int]:
 # --- END ADDED ---
 
 
+# --- CHANGED: Removed Ray init/detection, handle shutdown based on flag ---
 def run_training_headless_mode(
     log_level_str: str,
     train_config_override: config.TrainConfig,
@@ -105,6 +155,7 @@ def run_training_headless_mode(
     exit_code = 1
     log_file_path = None
     file_handler = None
+    ray_initialized_by_setup = False  # Flag from setup function
 
     try:
         # --- Setup File Logging ---
@@ -116,8 +167,8 @@ def run_training_headless_mode(
             f"Logging {logging.getLevelName(log_level)} and higher messages to console and: {log_file_path}"
         )
 
-        # --- Setup Components ---
-        components = _setup_training_components(
+        # --- Setup Components (includes Ray init and core detection) ---
+        components, ray_initialized_by_setup = _setup_training_components(
             train_config_override, persist_config_override
         )
         if not components:
@@ -128,9 +179,7 @@ def run_training_headless_mode(
         logger.info(
             f"Model Parameters: Total={total_params:,}, Trainable={trainable_params:,}"
         )
-        if mlflow.active_run():
-            mlflow.log_param("model_total_params", total_params)
-            mlflow.log_param("model_trainable_params", trainable_params)
+        # MLflow logging happens within pipeline init now
         # END ADDED
 
         # --- Initialize and Run Pipeline ---
@@ -160,9 +209,18 @@ def run_training_headless_mode(
         exit_code = 1
 
     finally:
-        # Pipeline handles its own cleanup (Ray shutdown, MLflow end run, saving state)
+        # Pipeline handles its own cleanup (MLflow end run, saving state, actor cleanup)
         if pipeline:
             pipeline.cleanup()
+
+        # --- Shutdown Ray if initialized by setup function ---
+        if ray_initialized_by_setup and ray.is_initialized():
+            try:
+                ray.shutdown()
+                logger.info("Ray shut down by headless runner.")
+            except Exception as e:
+                logger.error(f"Error shutting down Ray: {e}", exc_info=True)
+        # --- End Ray Shutdown ---
 
         # Close file handler if it was set up
         root_logger = get_root_logger()
@@ -212,6 +270,7 @@ def _training_pipeline_thread_func(pipeline: TrainingPipeline):
             logger.error(f"Error putting None signal into visual queue: {e_q}")
 
 
+# --- CHANGED: Removed Ray init/detection, handle shutdown based on flag ---
 def run_training_visual_mode(
     log_level_str: str,
     train_config_override: config.TrainConfig,
@@ -228,6 +287,7 @@ def run_training_visual_mode(
     file_handler = None
     tee_stdout = None
     tee_stderr = None
+    ray_initialized_by_setup = False  # Flag from setup function
 
     try:
         # --- Setup File Logging & Redirection ---
@@ -265,8 +325,8 @@ def run_training_visual_mode(
             )
         # --- End Redirection ---
 
-        # --- Setup Components ---
-        components = _setup_training_components(
+        # --- Setup Components (includes Ray init and core detection) ---
+        components, ray_initialized_by_setup = _setup_training_components(
             train_config_override, persist_config_override
         )
         if not components:
@@ -473,7 +533,7 @@ def run_training_visual_mode(
                 logger.error("Training pipeline thread did not exit gracefully.")
 
         if pipeline:
-            pipeline.cleanup()
+            pipeline.cleanup()  # Pipeline cleanup no longer shuts down Ray
 
         # Determine final exit code
         if pipeline and pipeline.training_loop:
@@ -488,6 +548,15 @@ def run_training_visual_mode(
 
         pygame.quit()
         logger.info("Pygame quit.")
+
+        # --- Shutdown Ray if initialized by setup function ---
+        if ray_initialized_by_setup and ray.is_initialized():
+            try:
+                ray.shutdown()
+                logger.info("Ray shut down by visual runner.")
+            except Exception as e:
+                logger.error(f"Error shutting down Ray: {e}", exc_info=True)
+        # --- End Ray Shutdown ---
 
         if file_handler:
             try:
