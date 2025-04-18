@@ -1,7 +1,16 @@
+# File: alphatriangle/training/components.py
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+# --- ADDED: Import ActorHandle ---
+import ray
+
+# --- END ADDED ---
+
 if TYPE_CHECKING:
+    # Keep ray import here as well for consistency if needed elsewhere
+    # import ray
+
     from alphatriangle.config import (
         EnvConfig,
         MCTSConfig,
@@ -12,7 +21,10 @@ if TYPE_CHECKING:
     from alphatriangle.data import DataManager
     from alphatriangle.nn import NeuralNetwork
     from alphatriangle.rl import ExperienceBuffer, Trainer
-    from alphatriangle.stats import StatsCollectorActor
+
+    # --- REMOVED: Import StatsCollectorActor class ---
+    # from alphatriangle.stats import StatsCollectorActor
+    # --- END REMOVED ---
 
 
 @dataclass
@@ -23,7 +35,9 @@ class TrainingComponents:
     buffer: "ExperienceBuffer"
     trainer: "Trainer"
     data_manager: "DataManager"
-    stats_collector_actor: "StatsCollectorActor"
+    # --- CORRECTED: Use ActorHandle type hint ---
+    stats_collector_actor: ray.actor.ActorHandle | None
+    # --- END CORRECTED ---
     train_config: "TrainConfig"
     env_config: "EnvConfig"
     model_config: "ModelConfig"

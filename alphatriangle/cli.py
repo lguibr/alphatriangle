@@ -1,3 +1,4 @@
+# File: alphatriangle/cli.py
 import logging
 import sys
 from typing import Annotated
@@ -11,10 +12,14 @@ from alphatriangle.config import (
     PersistenceConfig,
     TrainConfig,
 )
+
+# --- REVERTED: Import from the re-exporting runners.py ---
 from alphatriangle.training.runners import (
     run_training_headless_mode,
     run_training_visual_mode,
 )
+
+# --- END REVERTED ---
 
 app = typer.Typer(
     name="alphatriangle",
@@ -73,18 +78,13 @@ def run_interactive_mode(mode: str, seed: int, log_level: str):
     logger.info(f"Running in {mode.capitalize()} mode...")
     utils.set_random_seeds(seed)
 
-    # Instantiate MCTSConfig needed for validation function
-    # Pydantic models with defaults can be instantiated without args
     mcts_config = MCTSConfig()
-    # Pass MCTSConfig instance to validation
     config.print_config_info_and_validate(mcts_config)
 
     try:
         app_instance = Application(mode=mode)
         app_instance.run()
     except ImportError as e:
-        # This catch block might be less relevant now imports are simplified,
-        # but keep it for general import issues during runtime.
         logger.error(f"Runtime ImportError: {e}")
         logger.error("Please ensure all dependencies are installed.")
         sys.exit(1)
@@ -122,25 +122,13 @@ def train(
     ] = False,
     log_level: LogLevelOption = "INFO",
     seed: SeedOption = 42,
-    # Add options to override specific TrainConfig parameters if desired
-    # e.g., run_name: Annotated[Optional[str], typer.Option("--run-name")] = None
 ):
     """Run the AlphaTriangle training pipeline."""
     setup_logging(log_level)
-    logger = logging.getLogger(__name__)  # Get logger after setup
+    logger = logging.getLogger(__name__)
 
-    # --- Configuration Overrides ---
-    # Create default configs first by calling constructors without args
-    # Pydantic models with defaults are expected to work correctly.
     train_config_override = TrainConfig()
     persist_config_override = PersistenceConfig()
-
-    # Apply overrides from CLI options if they were added
-    # if run_name:
-    #     train_config_override.RUN_NAME = run_name
-    #     persist_config_override.RUN_NAME = run_name
-
-    # Set seed in config
     train_config_override.RANDOM_SEED = seed
 
     if headless:

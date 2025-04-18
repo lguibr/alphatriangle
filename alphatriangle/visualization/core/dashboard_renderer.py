@@ -1,15 +1,11 @@
 # File: alphatriangle/visualization/core/dashboard_renderer.py
-# Changes:
-# - Correct calculation of progress_bars_total_height.
-# - Render progress bars within the progress_bar_area_rect.
-# - Remove unused 'pad' variable in _calculate_worker_sub_layout.
-
 import logging
 import math
 from collections import deque
 from typing import TYPE_CHECKING, Any, Optional
 
 import pygame
+import ray  # Import ray
 
 from ...environment import GameState
 from ...stats.plotter import Plotter
@@ -20,7 +16,7 @@ from .game_renderer import GameRenderer
 
 if TYPE_CHECKING:
     from ...config import EnvConfig, ModelConfig, VisConfig
-    from ...stats import StatsCollectorActor, StatsCollectorData
+    from ...stats import StatsCollectorData
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +25,7 @@ logger = logging.getLogger(__name__)
 class DashboardRenderer:
     """
     Renders the training dashboard with minimal spacing.
+    Displays worker states, plots, and progress bars with specific info lines.
     """
 
     def __init__(
@@ -37,7 +34,7 @@ class DashboardRenderer:
         vis_config: "VisConfig",
         env_config: "EnvConfig",
         fonts: dict[str, pygame.font.Font | None],
-        stats_collector_actor: Optional["StatsCollectorActor"] = None,
+        stats_collector_actor: ray.actor.ActorHandle | None = None,
         model_config: Optional["ModelConfig"] = None,
         total_params: int | None = None,
         trainable_params: int | None = None,
@@ -61,7 +58,6 @@ class DashboardRenderer:
         self.progress_bar_height_per_bar = 25
         self.num_progress_bars = 2
         self.progress_bar_spacing = 2
-        # --- CORRECTED: Progress bar total height calculation ---
         self.progress_bars_total_height = (
             (
                 (self.progress_bar_height_per_bar * self.num_progress_bars)
@@ -70,7 +66,6 @@ class DashboardRenderer:
             if self.num_progress_bars > 0
             else 0
         )
-        # --- END CORRECTION ---
 
         self._layout_calculated_for_size: tuple[int, int] = (0, 0)
         # Don't call ensure_layout here, wait for first render
@@ -118,9 +113,6 @@ class DashboardRenderer:
         self.last_worker_grid_size = (area_w, area_h)
         self.last_num_workers = num_workers
         self.worker_sub_rects = {}
-        # --- REMOVED: Unused variable ---
-        # pad = 0  # No space between worker views
-        # --- END REMOVED ---
 
         if area_h <= 10 or area_w <= 10 or num_workers <= 0:
             if num_workers > 0:
@@ -262,9 +254,12 @@ class DashboardRenderer:
                     bar_x = progress_bar_area_rect.left
                     bar_height = self.progress_bar_height_per_bar
 
-                    # Generate Compact Info String
-                    compact_info_str = ""
-                    info_parts = []
+                    # --- Generate Info Strings for Each Bar ---
+                    train_bar_info_str = ""
+                    buffer_bar_info_str = ""
+
+                    # Info for Training Bar (Model/Params)
+                    train_info_parts = []
                     if self.model_config:
                         model_str = f"CNN:{len(self.model_config.CONV_FILTERS)}L"
                         if self.model_config.NUM_RESIDUAL_BLOCKS > 0:
@@ -276,16 +271,24 @@ class DashboardRenderer:
                             and self.model_config.TRANSFORMER_LAYERS > 0
                         ):
                             model_str += f"/TF:{self.model_config.TRANSFORMER_LAYERS}L"
-                        info_parts.append(model_str)
+                        train_info_parts.append(model_str)
                     if self.total_params is not None:
-                        info_parts.append(f"P:{self.total_params / 1e6:.1f}M")
-                    updates = global_stats.get("global_step", "?")
+                        train_info_parts.append(
+                            f"Params:{self.total_params / 1e6:.1f}M"
+                        )
+                    train_bar_info_str = " | ".join(train_info_parts)
+
+                    # Info for Buffer Bar (Weight Updates, Episodes, Sims, Workers)
+                    buffer_info_parts = []
+                    # Use .get with default '?' for robustness
+                    updates = global_stats.get("worker_weight_updates", "?")
                     episodes = global_stats.get("total_episodes", "?")
-                    sims = global_stats.get("total_simulations", "?")
+                    sims = global_stats.get("total_simulations_run", "?")  # Correct key
                     num_workers = global_stats.get("num_workers", "?")
                     pending_tasks = global_stats.get("pending_tasks", "?")
-                    info_parts.append(f"U:{updates}")
-                    info_parts.append(f"E:{episodes}")
+
+                    buffer_info_parts.append(f"Weight Updates:{updates}")
+                    buffer_info_parts.append(f"Episodes:{episodes}")
                     if isinstance(sims, int | float):
                         sims_str = (
                             f"{sims / 1e6:.1f}M"
@@ -294,17 +297,27 @@ class DashboardRenderer:
                                 f"{sims / 1e3:.0f}k" if sims >= 1000 else str(int(sims))
                             )
                         )
-                        info_parts.append(f"S:{sims_str}")
+                        buffer_info_parts.append(f"Simulations:{sims_str}")
                     else:
-                        info_parts.append(f"S:{sims}")
-                    info_parts.append(f"W:{pending_tasks}/{num_workers}")
-                    compact_info_str = " | ".join(info_parts)
-                    # End Generate Compact Info String
+                        buffer_info_parts.append(f"Simulations:{sims}")
 
-                    # Training Progress Bar (with info line)
+                    # --- CHANGED: Robust worker status formatting ---
+                    if isinstance(pending_tasks, int) and isinstance(num_workers, int):
+                        buffer_info_parts.append(
+                            f"Workers:{pending_tasks}/{num_workers}"
+                        )
+                    else:
+                        buffer_info_parts.append(
+                            f"Workers:{pending_tasks or '?'}/{num_workers or '?'}"
+                        )
+                    # --- END CHANGED ---
+
+                    buffer_bar_info_str = " | ".join(buffer_info_parts)
+                    # --- End Generate Info Strings ---
+
+                    # Training Progress Bar (with model/param info)
                     train_progress = global_stats.get("train_progress")
                     if isinstance(train_progress, ProgressBar):
-                        # --- Render within the progress_bar_area_rect ---
                         train_progress.render(
                             self.screen,
                             (bar_x, current_y),
@@ -312,19 +325,17 @@ class DashboardRenderer:
                             bar_height,
                             progress_bar_font,
                             border_radius=3,
-                            info_line=compact_info_str,
+                            info_line=train_bar_info_str,  # Pass specific info
                         )
                         current_y += bar_height + self.progress_bar_spacing
-                        # --- End render within ---
                     else:
                         logger.debug(
                             "Train progress bar data not available or invalid type."
                         )
 
-                    # Buffer Progress Bar
+                    # Buffer Progress Bar (with global stats info)
                     buffer_progress = global_stats.get("buffer_progress")
                     if isinstance(buffer_progress, ProgressBar):
-                        # --- Render within the progress_bar_area_rect ---
                         buffer_progress.render(
                             self.screen,
                             (bar_x, current_y),
@@ -332,8 +343,8 @@ class DashboardRenderer:
                             bar_height,
                             progress_bar_font,
                             border_radius=3,
+                            info_line=buffer_bar_info_str,  # Pass specific info
                         )
-                        # --- End render within ---
                     else:
                         logger.debug(
                             "Buffer progress bar data not available or invalid type."

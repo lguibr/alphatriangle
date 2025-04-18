@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class TrainConfig(BaseModel):
     """
     Configuration for the training process (Pydantic model).
-    --- TUNED FOR LEARNING (Laptop Feasible) ---
+    --- TUNED FOR QUICK LOCAL TESTING ---
     """
 
     RUN_NAME: str = Field(
@@ -28,27 +28,23 @@ class TrainConfig(BaseModel):
     RANDOM_SEED: int = Field(default=42)
 
     # --- Training Loop ---
-    MAX_TRAINING_STEPS: int | None = Field(default=100_000, ge=1)  # Target steps
+    MAX_TRAINING_STEPS: int | None = Field(default=1000, ge=1)  # Reduced steps
 
     # --- Workers & Batching ---
-    # --- CHANGED: Updated description ---
     NUM_SELF_PLAY_WORKERS: int = Field(
-        default=8,
+        default=4,  # Reduced workers for local testing
         ge=1,
         description="Suggested number of workers. Actual number may be adjusted based on detected CPU cores.",
     )
-    # --- END CHANGED ---
     # --- WORKER_DEVICE: Defaults to 'cpu' for self-play workers ---
     # Workers run MCTS and NN eval; CPU is often sufficient and avoids GPU contention.
     WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="cpu")
-    BATCH_SIZE: int = Field(default=128, ge=1)  # Moderate batch size
-    BUFFER_CAPACITY: int = Field(default=200_000, ge=1)  # Larger buffer
+    BATCH_SIZE: int = Field(default=32, ge=1)  # Reduced batch size
+    BUFFER_CAPACITY: int = Field(default=1000, ge=1)  # Reduced buffer
     MIN_BUFFER_SIZE_TO_TRAIN: int = Field(
-        default=20_000, ge=1
-    )  # Start training after 20k samples
-    WORKER_UPDATE_FREQ_STEPS: int = Field(
-        default=100, ge=1
-    )  # Update workers every 100 steps
+        default=100, ge=1  # Start training much sooner
+    )
+    WORKER_UPDATE_FREQ_STEPS: int = Field(default=10, ge=1)  # Update workers frequently
 
     # --- N-Step Returns ---
     N_STEP_RETURNS: int = Field(default=5, ge=1)  # 5-step returns
@@ -56,7 +52,7 @@ class TrainConfig(BaseModel):
 
     # --- Optimizer ---
     OPTIMIZER_TYPE: Literal["Adam", "AdamW", "SGD"] = Field(default="AdamW")
-    LEARNING_RATE: float = Field(default=2e-4, gt=0)  # Slightly higher LR
+    LEARNING_RATE: float = Field(default=2e-4, gt=0)
     WEIGHT_DECAY: float = Field(default=1e-4, ge=0)
     GRADIENT_CLIP_VALUE: float | None = Field(default=1.0)
 
@@ -74,7 +70,7 @@ class TrainConfig(BaseModel):
     ENTROPY_BONUS_WEIGHT: float = Field(default=0.001, ge=0)  # Small entropy bonus
 
     # --- Checkpointing ---
-    CHECKPOINT_SAVE_FREQ_STEPS: int = Field(default=2500, ge=1)  # Save every 2500 steps
+    CHECKPOINT_SAVE_FREQ_STEPS: int = Field(default=50, ge=1)  # Save frequently
 
     # --- Prioritized Experience Replay (PER) ---
     USE_PER: bool = Field(default=True)  # Enable PER
@@ -118,7 +114,8 @@ class TrainConfig(BaseModel):
             and hasattr(self, "MIN_BUFFER_SIZE_TO_TRAIN")
             and self.BATCH_SIZE > self.MIN_BUFFER_SIZE_TO_TRAIN
         ):
-            pass  # This is acceptable
+            # Allow batch size to be larger than min buffer size (will just wait longer)
+            pass
         return self
 
     @model_validator(mode="after")
@@ -142,12 +139,12 @@ class TrainConfig(BaseModel):
                     )
                 else:
                     # Handle invalid MAX_TRAINING_STEPS case if necessary
-                    self.LR_SCHEDULER_T_MAX = 100_000  # Fallback
+                    self.LR_SCHEDULER_T_MAX = 1000  # Fallback (matches new default)
                     logger.warning(
                         f"Warning: MAX_TRAINING_STEPS is invalid ({self.MAX_TRAINING_STEPS}), setting LR_SCHEDULER_T_MAX to default {self.LR_SCHEDULER_T_MAX}"
                     )
             else:
-                self.LR_SCHEDULER_T_MAX = 100_000  # Fallback
+                self.LR_SCHEDULER_T_MAX = 1000  # Fallback (matches new default)
                 logger.warning(
                     f"Warning: MAX_TRAINING_STEPS is None, setting LR_SCHEDULER_T_MAX to default {self.LR_SCHEDULER_T_MAX}"
                 )
@@ -181,12 +178,12 @@ class TrainConfig(BaseModel):
                     )
                 else:
                     # Handle invalid MAX_TRAINING_STEPS case if necessary
-                    self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback
+                    self.PER_BETA_ANNEAL_STEPS = 1000  # Fallback (matches new default)
                     logger.warning(
                         f"Warning: MAX_TRAINING_STEPS is invalid ({self.MAX_TRAINING_STEPS}), setting PER_BETA_ANNEAL_STEPS to default {self.PER_BETA_ANNEAL_STEPS}"
                     )
             else:
-                self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback
+                self.PER_BETA_ANNEAL_STEPS = 1000  # Fallback (matches new default)
                 logger.warning(
                     f"Warning: MAX_TRAINING_STEPS is None, setting PER_BETA_ANNEAL_STEPS to default {self.PER_BETA_ANNEAL_STEPS}"
                 )

@@ -60,8 +60,12 @@ alphatriangle = "alphatriangle.cli:app"
 
 [tool.ruff]
 line-length = 88
+
+# --- CHANGED: Moved lint settings under [tool.ruff.lint] ---
+[tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "C4", "ARG", "SIM", "TCH", "PTH", "NPY"]
 ignore = ["E501"] # Ignore line length errors if needed selectively
+# --- END CHANGED ---
 
 [tool.ruff.format]
 quote-style = "double"

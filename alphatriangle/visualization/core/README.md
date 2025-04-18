@@ -1,3 +1,4 @@
+# File: alphatriangle/visualization/core/README.md
 # Visualization Core Submodule (`alphatriangle.visualization.core`)
 
 ## Purpose and Architecture
@@ -7,7 +8,7 @@ This submodule contains the central classes and foundational elements for the vi
 -   **Render Orchestration:**
     -   `Visualizer`: The main class for rendering in **interactive modes** ("play", "debug"). It maintains the Pygame screen, calculates layout using `layout.py`, manages cached preview area rectangles, and calls appropriate drawing functions from `alphatriangle.visualization.drawing`. **It receives interaction state (hover position, selected index) via its `render` method to display visual feedback.**
     -   `GameRenderer`: **Simplified renderer** responsible for drawing a **single** worker's `GameState` (grid and previews) within a specified sub-rectangle. Used by the `DashboardRenderer`.
-    -   `DashboardRenderer` **(New)**: Renderer specifically for the **training visualization mode**. It uses `layout.py` to divide the screen into a worker game grid area and a statistics area. It renders multiple worker `GameState` objects (using `GameRenderer` instances) in the top grid and displays statistics plots (using `alphatriangle.stats.Plotter`) and progress bars in the bottom area. It takes a dictionary mapping worker IDs to `GameState` objects and a dictionary of global statistics.
+    -   `DashboardRenderer` **(New)**: Renderer specifically for the **training visualization mode**. It uses `layout.py` to divide the screen into a worker game grid area and a statistics area. It renders multiple worker `GameState` objects (using `GameRenderer` instances) in the top grid and displays statistics plots (using `alphatriangle.stats.Plotter`) and progress bars in the bottom area. **The training progress bar shows model/parameter info, while the buffer progress bar shows global training stats (worker weight updates, episodes, sims, worker status). Plots now include black, solid vertical lines (drawn on top) indicating the `global_step` when worker weights were updated.** It takes a dictionary mapping worker IDs to `GameState` objects and a dictionary of global statistics.
 -   **Layout Management:**
     -   `layout.py`: Contains functions (`calculate_interactive_layout`, `calculate_training_layout`) to determine the size and position of the main UI areas based on the screen dimensions, mode, and `VisConfig`.
 -   **Coordinate System:**
@@ -48,8 +49,8 @@ This submodule contains the central classes and foundational elements for the vi
 
 -   **`alphatriangle.config`**: `VisConfig`, `EnvConfig`.
 -   **`alphatriangle.environment`**: `GameState`, `GridData`.
--   **`alphatriangle.stats`**: `Plotter`, `StatsCollectorActor` (used by `DashboardRenderer`).
--   **`alphatriangle.utils`**: `types`.
+-   **`alphatriangle.stats`**: `Plotter` (imported under `TYPE_CHECKING` in `dashboard_renderer`), `StatsCollectorActor`.
+-   **`alphatriangle.utils`**: `types`, `helpers`.
 -   **`alphatriangle.visualization.drawing`**: Drawing functions are called by renderers.
 -   **`alphatriangle.visualization.ui`**: `ProgressBar` (used by `DashboardRenderer`).
 -   **`pygame`**: Used for surfaces, rectangles, fonts, display management.

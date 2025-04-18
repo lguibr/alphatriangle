@@ -1,12 +1,14 @@
+# File: alphatriangle/visualization/README.md
 # Visualization Module (`alphatriangle.visualization`)
 
 ## Purpose and Architecture
 
-This module is responsible for rendering the game state visually using the Pygame library. It provides components for drawing the grid, shapes, previews, HUD elements, and statistics plots. **In training visualization mode, it now renders the states of multiple self-play workers in a grid layout alongside plots and progress bars.**
+This module is responsible for rendering the game state visually using the Pygame library. It provides components for drawing the grid, shapes, previews, HUD elements, and statistics plots. **In training visualization mode, it now renders the states of multiple self-play workers in a grid layout alongside plots and progress bars (with specific information displayed on each bar).**
 
 -   **Core Components (`alphatriangle.visualization.core`):**
     -   `Visualizer`: Orchestrates the rendering process for interactive modes ("play", "debug"). It manages the layout, calls drawing functions, and handles hover/selection states specific to visualization.
     -   `GameRenderer`: **Adapted renderer** for displaying **multiple** game states and statistics during training visualization (`run_training_visual.py`). It uses `layout.py` to divide the screen. It renders worker game states in one area and statistics plots/progress bars in another. It re-instantiates `alphatriangle.stats.Plotter`.
+    -   `DashboardRenderer`: Renderer specifically for the **training visualization mode**. It uses `layout.py` to divide the screen into a worker game grid area and a statistics area. It renders multiple worker `GameState` objects (using `GameRenderer` instances) in the top grid and displays statistics plots (using `alphatriangle.stats.Plotter`) and progress bars in the bottom area. **The training progress bar shows model/parameter info, while the buffer progress bar shows global training stats (updates, episodes, sims, workers).** It takes a dictionary mapping worker IDs to `GameState` objects and a dictionary of global statistics.
     -   `layout`: Calculates the screen positions and sizes for different UI areas (worker grid, stats area, plots).
     -   `fonts`: Loads necessary font files.
     -   `colors`: Defines a centralized palette of RGB color tuples.
@@ -25,7 +27,8 @@ This module is responsible for rendering the game state visually using the Pygam
 
 -   **Core Classes & Functions:**
     -   `Visualizer`: Main renderer for interactive modes.
-    -   `GameRenderer`: Renderer for combined multi-game/stats training visualization.
+    -   `GameRenderer`: Renderer for a single worker's game state.
+    -   `DashboardRenderer`: Renderer for combined multi-game/stats training visualization.
     -   `calculate_layout`: Calculates UI layout rectangles.
     -   `load_fonts`: Loads Pygame fonts.
     -   `colors`: Module containing color constants (e.g., `colors.WHITE`).
@@ -52,7 +55,7 @@ This module is responsible for rendering the game state visually using the Pygam
 -   **`alphatriangle.structs`**:
     -   Uses `Triangle`, `Shape`.
 -   **`alphatriangle.stats`**:
-    -   Uses `Plotter` within `GameRenderer`.
+    -   Uses `Plotter` within `DashboardRenderer`.
 -   **`alphatriangle.utils`**:
     -   Uses `geometry.is_point_in_polygon`, `helpers.format_eta`, `types.StatsCollectorData`.
 -   **`pygame`**:
