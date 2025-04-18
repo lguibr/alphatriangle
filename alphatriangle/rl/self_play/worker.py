@@ -130,31 +130,40 @@ class SelfPlayWorker:
         game_state: GameState,
         mcts_visits: int,
         mcts_depth: int,
-        step_reward: float,  # Add reward parameter
+        step_reward: float,
     ):
-        """Asynchronously logs per-step stats (including reward) to the collector."""
+        """
+        Asynchronously logs per-step stats (including reward, score, MCTS info)
+        to the collector using generic keys.
+        """
         if self.stats_collector_actor:
             try:
+                # --- CHANGED: Use generic keys for step-level stats ---
                 step_stats = {
-                    f"Worker_{self.actor_id}/Step_Score": (
+                    "RL/Current_Score": (
                         game_state.game_score,
                         game_state.current_step,
                     ),
-                    f"Worker_{self.actor_id}/Step_MCTS_Visits": (
+                    "MCTS/Step_Visits": (
                         mcts_visits,
                         game_state.current_step,
                     ),
-                    f"Worker_{self.actor_id}/Step_MCTS_Depth": (
+                    "MCTS/Step_Depth": (
                         mcts_depth,
                         game_state.current_step,
                     ),
-                    # Add the step reward metric
                     "RL/Step_Reward": (step_reward, game_state.current_step),
                 }
+                # --- END CHANGED ---
+                # --- ADDED: Logging before remote call ---
+                logger.debug(f"Sending step stats to collector: {step_stats}")
+                # --- END ADDED ---
                 # Correctly call remote method
                 self.stats_collector_actor.log_batch.remote(step_stats)  # type: ignore
             except Exception as e:
                 logger.error(f"Failed to log step stats to collector: {e}")
+
+    # --- REMOVED: _log_episode_stats_async ---
 
     def run_episode(self) -> SelfPlayResult:
         """
@@ -169,13 +178,10 @@ class SelfPlayWorker:
         game = GameState(self.env_config, initial_seed=episode_seed)
 
         # --- N-Step Buffers ---
-        # Stores (state_features, policy_target) tuples for past steps
         n_step_state_policy_buffer: deque[tuple[StateType, PolicyTargetMapping]] = (
             deque(maxlen=self.n_step)
         )
-        # Stores rewards received at steps t+1, t+2, ...
         n_step_reward_buffer: deque[float] = deque(maxlen=self.n_step)
-        # Stores the final experiences (s_t, pi_t, G_t^n)
         episode_experiences: list[Experience] = []
 
         step_root_visits: list[int] = []
@@ -223,7 +229,7 @@ class SelfPlayWorker:
             )
 
             # Log per-step MCTS stats (before selecting action)
-            # Pass reward=0.0 here as it hasn't been calculated yet for this step
+            # Pass 0.0 for reward here, as it hasn't happened yet for this step
             self._log_step_stats_async(
                 game, root_node.visit_count, mcts_max_depth, step_reward=0.0
             )
@@ -299,7 +305,6 @@ class SelfPlayWorker:
 
             # --- N-Step: Calculate and store experience if buffer full ---
             if len(n_step_reward_buffer) == self.n_step:
-                # Calculate the n-step return G for the state n steps ago
                 discounted_reward_sum = 0.0
                 for i in range(self.n_step):
                     discounted_reward_sum += (self.gamma**i) * n_step_reward_buffer[i]
@@ -307,26 +312,22 @@ class SelfPlayWorker:
                 bootstrap_value = 0.0
                 if not done:
                     try:
-                        # Evaluate the *current* state (S_{t+n}) for bootstrap value
                         _, bootstrap_value = self.nn_evaluator.evaluate(game)
                     except Exception as eval_err:
                         logger.error(
                             f"Error evaluating bootstrap state S_{game.current_step}: {eval_err}",
                             exc_info=True,
                         )
-                        # Handle error, maybe use 0 or skip? Using 0 for now.
                         bootstrap_value = 0.0
 
                 n_step_return = (
                     discounted_reward_sum + (self.gamma**self.n_step) * bootstrap_value
                 )
 
-                # Retrieve the state and policy from n steps ago
                 state_features_t_minus_n, policy_target_t_minus_n = (
                     n_step_state_policy_buffer[0]
-                )  # Deque automatically removes oldest
+                )
 
-                # Append the final experience tuple
                 episode_experiences.append(
                     (
                         state_features_t_minus_n,
@@ -372,45 +373,35 @@ class SelfPlayWorker:
                 break
 
         # --- Episode End ---
-        final_score = game.game_score  # Use the final score from the game state
+        final_score = game.game_score
         logger.info(
             f"Episode finished. Final Score: {final_score:.2f}, Steps: {game.current_step}"
         )
 
         # --- N-Step: Process remaining steps in the buffer ---
-        # --- REMOVED: Unused variable T ---
-        # T = game.current_step  # Terminal step index
-        # --- END REMOVED ---
         remaining_steps = len(n_step_reward_buffer)
-
         for k in range(remaining_steps):
-            # Calculate return G for state S_{T-remaining_steps+k}
             discounted_reward_sum = 0.0
             for i in range(remaining_steps - k):
                 discounted_reward_sum += (self.gamma**i) * n_step_reward_buffer[k + i]
 
-            # Bootstrap value is 0 because the episode terminated
             n_step_return = discounted_reward_sum
-
-            # Retrieve the corresponding state and policy
             state_features_t, policy_target_t = n_step_state_policy_buffer[k]
-
-            # Append the final experience tuple
             episode_experiences.append(
                 (state_features_t, policy_target_t, n_step_return)
             )
+
+        # --- REMOVED: Call to _log_episode_stats_async ---
 
         total_sims_episode = sum(step_simulations)
         avg_visits_episode = np.mean(step_root_visits) if step_root_visits else 0.0
         avg_depth_episode = np.mean(step_tree_depths) if step_tree_depths else 0.0
 
-        # --- CHANGE: Use correct keyword avg_tree_depth ---
         return SelfPlayResult(
             episode_experiences=episode_experiences,
             final_score=final_score,
             episode_steps=game.current_step,
             total_simulations=total_sims_episode,
             avg_root_visits=float(avg_visits_episode),
-            avg_tree_depth=float(avg_depth_episode),  # Corrected keyword
+            avg_tree_depth=float(avg_depth_episode),
         )
-        # --- END CHANGE ---

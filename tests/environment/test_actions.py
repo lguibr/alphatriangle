@@ -31,9 +31,9 @@ def game_state_almost_full(default_env_config: EnvConfig) -> GameState:
         if gs.grid_data.valid(r_empty, c_empty):
             gs.grid_data._occupied_np[r_empty, c_empty] = False
             # Reset color ID as well
-            gs.grid_data._color_id_np[r_empty, c_empty] = (
-                -1
-            )  # Assuming -1 is NO_COLOR_ID
+            gs.grid_data._color_id_np[
+                r_empty, c_empty
+            ] = -1  # Assuming -1 is NO_COLOR_ID
     return gs
 
 
@@ -77,9 +77,9 @@ def test_get_valid_actions_almost_full(game_state_almost_full: GameState):
     # Expect fewer valid actions
     assert isinstance(valid_actions, list)
     # The setup should allow placing shape 0 at (0,4) and shape 1 at (0,5)
-    assert (
-        len(valid_actions) == 2
-    ), f"Expected 2 valid actions, found {len(valid_actions)}. Actions: {valid_actions}"
+    assert len(valid_actions) == 2, (
+        f"Expected 2 valid actions, found {len(valid_actions)}. Actions: {valid_actions}"
+    )
 
     expected_placements = {(0, 0, 4), (1, 0, 5)}  # (shape_idx, r, c)
     found_placements = set()
@@ -89,16 +89,16 @@ def test_get_valid_actions_almost_full(game_state_almost_full: GameState):
         shape_idx, r, c = decode_action(action_index, gs.env_config)
         shape = gs.shapes[shape_idx]
         assert shape is not None, f"Shape at index {shape_idx} is None"
-        assert GridLogic.can_place(
-            gs.grid_data, shape, r, c
-        ), f"can_place returned False for action {action_index} -> shape_idx={shape_idx}, r={r}, c={c}"
+        assert GridLogic.can_place(gs.grid_data, shape, r, c), (
+            f"can_place returned False for action {action_index} -> shape_idx={shape_idx}, r={r}, c={c}"
+        )
         # Check if placement is in the expected empty area
         is_expected_placement = (r == 0 and c == 4 and shape_idx == 0) or (
             r == 0 and c == 5 and shape_idx == 1
         )
-        assert (
-            is_expected_placement
-        ), f"Action {action_index} -> {(shape_idx, r, c)} is not one of the expected placements (0,0,4) or (1,0,5)"
+        assert is_expected_placement, (
+            f"Action {action_index} -> {(shape_idx, r, c)} is not one of the expected placements (0,0,4) or (1,0,5)"
+        )
         found_placements.add((shape_idx, r, c))
 
     assert found_placements == expected_placements

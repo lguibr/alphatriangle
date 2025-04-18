@@ -1,3 +1,4 @@
+# File: alphatriangle/visualization/drawing/hud.py
 from typing import Any
 
 import pygame
@@ -26,7 +27,7 @@ def render_hud(
     stats_rect = None
     step_rect = None
 
-    # Render Global Step prominently
+    # --- CHANGED: Render Global Step as "Weight Updates" ---
     if step_font and display_stats:
         train_progress = display_stats.get("train_progress")
         global_step = (
@@ -34,12 +35,14 @@ def render_hud(
             if isinstance(train_progress, ProgressBar)  # Check type
             else display_stats.get("global_step", "?")
         )
-        step_text = f"Step: {global_step}"
+        # Use a more descriptive label
+        step_text = f"Weight Updates: {global_step}"
         step_surf = step_font.render(
             step_text, True, colors.YELLOW
         )  # Yellow for prominence
         step_rect = step_surf.get_rect(bottomleft=(15, bottom_y))
         surface.blit(step_surf, step_rect)
+    # --- END CHANGED ---
 
     # Render other global training stats if available, positioned after the step count
     if stats_font and display_stats and step_rect:

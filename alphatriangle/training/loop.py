@@ -1,3 +1,4 @@
+# File: alphatriangle/training/loop.py
 import logging
 import queue
 import threading
@@ -10,8 +11,14 @@ from pydantic import ValidationError
 
 from ..environment import GameState
 from ..rl import SelfPlayResult, SelfPlayWorker
+from ..stats.plotter import WEIGHT_UPDATE_METRIC_KEY  # Import the key
+
+# --- CHANGED: Import format_eta ---
 from ..utils import format_eta
+
+# --- END CHANGED ---
 from ..utils.types import Experience, PERBatchSample, StatsCollectorData
+from ..visualization.core import colors
 from ..visualization.ui import ProgressBar
 
 if TYPE_CHECKING:
@@ -19,7 +26,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-LARGE_STEP_COUNT = 10_000_000
 VISUAL_UPDATE_INTERVAL = 0.2  # How often to push state to the visual queue
 STATS_FETCH_INTERVAL = 0.5
 VIS_STATE_FETCH_TIMEOUT = 0.1  # Timeout for getting states from collector
@@ -29,7 +35,8 @@ class TrainingLoop:
     """
     Manages the core asynchronous training loop logic: worker management,
     data collection, triggering training steps, and updating visual queue.
-    Receives initialized components via TrainingComponents.
+    Receives initialized components via TrainingComponents. Runs indefinitely
+    until stop_requested is set.
     """
 
     def __init__(
@@ -56,8 +63,7 @@ class TrainingLoop:
         self.best_eval_score = -float("inf")
         self.start_time = time.time()
         self.stop_requested = threading.Event()
-        self.training_complete = False
-        self.target_steps_reached = False
+        self.training_complete = False  # Will be set based on stop_requested
         self.training_exception: Exception | None = None
         self.last_visual_update_time = 0.0
         self.last_stats_fetch_time = 0.0
@@ -101,7 +107,6 @@ class TrainingLoop:
                     mcts_config=self.mcts_config,
                     model_config=self.model_config,
                     train_config=self.train_config,
-                    # Pass the stats collector handle to the worker
                     stats_collector_actor=self.stats_collector_actor,
                     initial_weights=weights_ref,
                     seed=self.train_config.RANDOM_SEED + i,
@@ -119,18 +124,28 @@ class TrainingLoop:
 
     def _initialize_progress_bars(self):
         """Initializes progress bars based on current state."""
-        train_total_steps = self.train_config.MAX_TRAINING_STEPS or LARGE_STEP_COUNT
+        train_total_steps = self.train_config.MAX_TRAINING_STEPS
+        if train_total_steps is None:
+            logger.info(
+                "MAX_TRAINING_STEPS is None, progress bar will show total steps."
+            )
+            train_total_steps_for_bar = 1  # Set to 1 for immediate overflow display
+        else:
+            train_total_steps_for_bar = train_total_steps
+
         self.train_step_progress = ProgressBar(
             "Training Steps",
-            train_total_steps,
+            total_steps=train_total_steps_for_bar,
             start_time=self.start_time,
             initial_steps=self.global_step,
+            initial_color=colors.GREEN,  # Start with green
         )
         self.buffer_fill_progress = ProgressBar(
             "Buffer Fill",
             self.train_config.BUFFER_CAPACITY,
             start_time=self.start_time,
             initial_steps=len(self.buffer),
+            initial_color=colors.ORANGE,  # Start with orange
         )
 
     def _update_worker_networks(self):
@@ -154,6 +169,10 @@ class TrainingLoop:
         try:
             ray.get(update_tasks, timeout=15.0)
             logger.debug(f"Worker networks updated for {len(active_workers)} workers.")
+            # Log weight update event
+            if self.stats_collector_actor:
+                update_step_metric = {WEIGHT_UPDATE_METRIC_KEY: (1.0, self.global_step)}
+                self.stats_collector_actor.log_batch.remote(update_step_metric)  # type: ignore
         except ray.exceptions.RayActorError as e:
             logger.error(
                 f"A worker actor failed during weight update: {e}", exc_info=True
@@ -182,7 +201,7 @@ class TrainingLoop:
 
     def _log_progress_eta(self):
         """Logs progress and ETA."""
-        if self.global_step % 50 != 0 and not self.target_steps_reached:
+        if self.global_step % 50 != 0:  # Log every 50 steps
             return
         if not self.train_step_progress:
             return
@@ -191,17 +210,12 @@ class TrainingLoop:
         steps_since_load = self.global_step - self.train_step_progress.initial_steps
         steps_per_sec = steps_since_load / elapsed_time if elapsed_time > 1 else 0
         target_steps = self.train_config.MAX_TRAINING_STEPS
-        target_steps_str = str(target_steps) if target_steps else "inf"
-        eta_str = (
-            format_eta(self.train_step_progress.get_eta_seconds())
-            if not self.target_steps_reached and target_steps is not None
-            else "N/A"
-        )
-        progress_str = f"Step {self.global_step}/{target_steps_str}"
-        if self.target_steps_reached:
-            progress_str += (
-                f" (TARGET REACHED +{self.global_step - (target_steps or 0)} extra)"
-            )
+        target_steps_str = f"{target_steps:,}" if target_steps else "Infinite"
+        progress_str = f"Step {self.global_step:,}/{target_steps_str}"
+        # --- CHANGED: Call format_eta directly ---
+        eta_str = format_eta(self.train_step_progress.get_eta_seconds())
+        # --- END CHANGED ---
+
         buffer_fill_perc = (
             (len(self.buffer) / self.buffer.capacity) * 100
             if self.buffer.capacity > 0
@@ -218,8 +232,8 @@ class TrainingLoop:
         )
         num_pending_tasks = len(self.worker_tasks)
         logger.info(
-            f"Progress: {progress_str}, Episodes: {self.episodes_played}, Total Sims: {total_sims_str}, "
-            f"Buffer: {len(self.buffer)}/{self.buffer.capacity} ({buffer_fill_perc:.1f}%), "
+            f"Progress: {progress_str}, Episodes: {self.episodes_played:,}, Total Sims: {total_sims_str}, "
+            f"Buffer: {len(self.buffer):,}/{self.buffer.capacity:,} ({buffer_fill_perc:.1f}%), "
             f"Pending Tasks: {num_pending_tasks}, Speed: {steps_per_sec:.2f} steps/sec, ETA: {eta_str}"
         )
 
@@ -241,7 +255,6 @@ class TrainingLoop:
             return
         self.last_visual_update_time = current_time
 
-        # Fetch latest worker states from the collector actor
         latest_worker_states: dict[int, GameState] = {}
         try:
             states_ref = self.stats_collector_actor.get_latest_worker_states.remote()  # type: ignore
@@ -257,25 +270,20 @@ class TrainingLoop:
             )
             latest_worker_states = {}
 
-        # Fetch latest metrics data (needed for plots and per-step worker stats)
         self._fetch_latest_stats()
 
-        # Extract per-worker step stats from the fetched metrics data
         worker_step_stats: dict[int, dict[str, Any]] = {}
         active_worker_ids_copy = self.active_worker_indices.copy()
         for worker_id in active_worker_ids_copy:
             worker_stats = {}
-            visits_key = f"Worker_{worker_id}/Step_MCTS_Visits"
-            depth_key = f"Worker_{worker_id}/Step_MCTS_Depth"
-            score_key = f"Worker_{worker_id}/Step_Score"
-
+            visits_key = "MCTS/Step_Visits"
+            depth_key = "MCTS/Step_Depth"
+            score_key = "RL/Current_Score"
             if (
                 visits_key in self.latest_stats_data
                 and self.latest_stats_data[visits_key]
             ):
-                worker_stats["mcts_visits"] = self.latest_stats_data[visits_key][-1][
-                    1
-                ]  # Get last value
+                worker_stats["mcts_visits"] = self.latest_stats_data[visits_key][-1][1]
             if (
                 depth_key in self.latest_stats_data
                 and self.latest_stats_data[depth_key]
@@ -290,22 +298,17 @@ class TrainingLoop:
             if worker_stats:
                 worker_step_stats[worker_id] = worker_stats
 
-        # Assemble the data dictionary for the queue
         visual_data: dict[int, Any] = {}
-
-        # Add worker states (already copies from the actor)
         for worker_id, state in latest_worker_states.items():
-            if isinstance(state, GameState):  # Basic type check
+            if isinstance(state, GameState):
                 visual_data[worker_id] = state
             else:
                 logger.warning(
                     f"Received invalid state type for worker {worker_id} from collector: {type(state)}"
                 )
 
-        # Add global stats and per-worker step stats
         global_stats_for_vis = {
             "global_step": self.global_step,
-            "target_steps_reached": self.target_steps_reached,
             "total_episodes": self.episodes_played,
             "total_simulations": self.total_simulations_run,
             "train_progress": self.train_step_progress,
@@ -317,7 +320,7 @@ class TrainingLoop:
         }
         visual_data[-1] = global_stats_for_vis
 
-        if not visual_data or len(visual_data) == 1:  # Only global stats present
+        if not visual_data or len(visual_data) == 1:
             logger.debug(
                 "No worker states available from collector to send to visual queue."
             )
@@ -329,7 +332,6 @@ class TrainingLoop:
         )
 
         try:
-            # Clear older states if queue is getting full
             while self.visual_state_queue.qsize() > 2:
                 try:
                     self.visual_state_queue.get_nowait()
@@ -359,7 +361,6 @@ class TrainingLoop:
                         and isinstance(state_type["grid"], np.ndarray)
                         and isinstance(state_type["other_features"], np.ndarray)
                         and isinstance(policy_map, dict)
-                        # Use isinstance with | for multiple types
                         and isinstance(value, float | int)
                     ):
                         if np.all(np.isfinite(state_type["grid"])) and np.all(
@@ -396,7 +397,6 @@ class TrainingLoop:
         logger.debug(
             f"Processing result from worker {worker_id} (Ep Steps: {result.episode_steps}, Score: {result.final_score:.2f})"
         )
-        # Removed: self.latest_final_worker_states[worker_id] = result.final_game_state
 
         valid_experiences, _ = self._validate_experiences(result.episode_experiences)
         if valid_experiences:
@@ -410,57 +410,16 @@ class TrainingLoop:
                     f"Error adding batch to buffer from worker {worker_id}: {e}",
                     exc_info=True,
                 )
-                return  # Don't update counters if buffer add fails
+                return
 
             if self.buffer_fill_progress:
                 self.buffer_fill_progress.set_current_steps(len(self.buffer))
             self.episodes_played += 1
             self.total_simulations_run += result.total_simulations
-            self._log_self_play_results_async(result, worker_id)
         else:
             logger.warning(
                 f"Self-play episode from worker {worker_id} produced no valid experiences."
             )
-
-    def _log_self_play_results_async(self, result: SelfPlayResult, worker_id: int):
-        """Logs self-play results asynchronously."""
-        episode_num = (
-            self.episodes_played
-        )  # Use episode number as step for episode stats
-        global_step = self.global_step  # Use global step for buffer/sim stats
-        buffer_size = len(self.buffer)
-        total_sims = self.total_simulations_run
-        buffer_fill_perc = (
-            (self.buffer_fill_progress.get_progress() * 100)
-            if self.buffer_fill_progress
-            else 0.0
-        )
-
-        logger.info(
-            f"[W{worker_id}] Ep {episode_num} ({result.episode_steps} steps, Score: {result.final_score:.2f}, "
-            f"Visits: {result.avg_root_visits:.1f}, Depth: {result.avg_tree_depth:.1f}). Buffer: {buffer_size}"
-        )
-
-        if self.stats_collector_actor:
-            stats_batch = {
-                # Log episode stats against episode number
-                "SelfPlay/Episode_Score": (result.final_score, episode_num),
-                "SelfPlay/Episode_Length": (result.episode_steps, episode_num),
-                "MCTS/Avg_Root_Visits": (result.avg_root_visits, episode_num),
-                "MCTS/Avg_Tree_Depth": (result.avg_tree_depth, episode_num),
-                # Log buffer/sim stats against global step
-                "Buffer/Size": (buffer_size, global_step),
-                "Progress/Total_Simulations": (total_sims, global_step),
-                "Buffer/Fill_Percent": (buffer_fill_perc, global_step),
-            }
-            try:
-                # Correctly call remote method
-                self.stats_collector_actor.log_batch.remote(stats_batch)  # type: ignore
-                logger.debug(
-                    f"Logged self-play batch to StatsCollectorActor for Ep {episode_num} / Step {global_step}."
-                )
-            except Exception as e:
-                logger.error(f"Failed to log batch to StatsCollectorActor: {e}")
 
     def _run_training_step(self) -> bool:
         """Runs one training step."""
@@ -495,9 +454,11 @@ class TrainingLoop:
     def _log_training_results_async(self, loss_info: dict):
         """Logs training results asynchronously."""
         current_lr = self.trainer.get_current_lr()
-        step = self.global_step  # Log training stats against global step
+        step = self.global_step
         train_step_perc = (
-            (self.train_step_progress.get_progress() * 100)
+            (
+                self.train_step_progress.get_progress_fraction() * 100
+            )  # Use fraction for display
             if self.train_step_progress
             else 0.0
         )
@@ -514,11 +475,12 @@ class TrainingLoop:
                 "Loss/Mean_TD_Error": (loss_info["mean_td_error"], step),
                 "LearningRate": (current_lr, step),
                 "Progress/Train_Step_Percent": (train_step_perc, step),
+                "Buffer/Size": (len(self.buffer), step),
+                "Progress/Total_Simulations": (self.total_simulations_run, step),
             }
             if per_beta is not None:
                 stats_batch["PER/Beta"] = (per_beta, step)
             try:
-                # Correctly call remote method
                 self.stats_collector_actor.log_batch.remote(stats_batch)  # type: ignore
                 logger.debug(
                     f"Logged training batch to StatsCollectorActor for Step {step}."
@@ -528,9 +490,12 @@ class TrainingLoop:
 
     def run(self):
         """Main training loop."""
-        logger.info(
-            f"Starting TrainingLoop run... Target steps: {self.train_config.MAX_TRAINING_STEPS or 'Infinite'}"
+        max_steps_info = (
+            f"Target steps: {self.train_config.MAX_TRAINING_STEPS}"
+            if self.train_config.MAX_TRAINING_STEPS is not None
+            else "Running indefinitely (no MAX_TRAINING_STEPS)"
         )
+        logger.info(f"Starting TrainingLoop run... {max_steps_info}")
         self.start_time = time.time()
 
         try:
@@ -542,17 +507,6 @@ class TrainingLoop:
                     self.worker_tasks[task_ref] = worker_idx
 
             while not self.stop_requested.is_set():
-                # Check Target Steps
-                if (
-                    not self.target_steps_reached
-                    and self.train_config.MAX_TRAINING_STEPS
-                    and self.global_step >= self.train_config.MAX_TRAINING_STEPS
-                ):
-                    logger.info(
-                        f"Reached target training steps ({self.train_config.MAX_TRAINING_STEPS}). Training continues..."
-                    )
-                    self.target_steps_reached = True
-
                 # Training Step
                 if self.buffer.is_ready():
                     trained_this_cycle = self._run_training_step()
@@ -659,7 +613,7 @@ class TrainingLoop:
                     break
 
                 # Periodic Tasks
-                self._update_visual_queue()  # Now fetches states from collector
+                self._update_visual_queue()
                 self._log_progress_eta()
 
                 # Checkpointing (handled by TrainingPipeline)
@@ -676,12 +630,13 @@ class TrainingLoop:
             self.request_stop()
         finally:
             if self.training_exception:
-                self.training_complete = False
+                self.training_complete = False  # Failed
             elif self.stop_requested.is_set():
-                self.training_complete = self.target_steps_reached
+                self.training_complete = False  # Interrupted
             else:
-                self.training_complete = self.target_steps_reached or (
-                    self.train_config.MAX_TRAINING_STEPS is None
+                # Should not be reached if loop runs indefinitely, but handle defensively
+                self.training_complete = (
+                    False  # Assume interrupted if loop exits unexpectedly
                 )
             logger.info(
                 f"TrainingLoop finished. Complete: {self.training_complete}, Exception: {self.training_exception is not None}"

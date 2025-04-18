@@ -7,64 +7,53 @@ from pydantic import BaseModel, Field, model_validator
 class ModelConfig(BaseModel):
     """
     Configuration for the Neural Network model (Pydantic model).
-    --- Further Enhanced Capacity Configuration ---
-    --- Includes Distributional RL (C51) Parameters ---
+    --- TUNED FOR LEARNING (Laptop Feasible) ---
     """
 
+    # Input channels for the grid (e.g., 1 for occupancy, more for history/colors)
     GRID_INPUT_CHANNELS: int = Field(default=1, gt=0)
+
     # --- CNN Architecture Parameters ---
-    # Increased depth and width again
-    CONV_FILTERS: list[int] = Field(default=[128, 256, 512])  # CHANGED
+    CONV_FILTERS: list[int] = Field(default=[32, 64, 128])  # Moderate CNN
     CONV_KERNEL_SIZES: list[int | tuple[int, int]] = Field(default=[3, 3, 3])
     CONV_STRIDES: list[int | tuple[int, int]] = Field(default=[1, 1, 1])
     CONV_PADDING: list[int | tuple[int, int] | str] = Field(default=[1, 1, 1])
 
-    # Increased residual blocks and match filter size
-    NUM_RESIDUAL_BLOCKS: int = Field(default=8, ge=0)  # CHANGED
-    RESIDUAL_BLOCK_FILTERS: int = Field(
-        default=512, gt=0
-    )  # CHANGED (Match last conv filter)
+    # --- Residual Block Parameters ---
+    NUM_RESIDUAL_BLOCKS: int = Field(default=2, ge=0)  # Fewer blocks
+    RESIDUAL_BLOCK_FILTERS: int = Field(default=128, gt=0)  # Match last conv filter
 
-    # --- Transformer Parameters (Further Enhanced) ---
-    USE_TRANSFORMER: bool = Field(default=True)
-    # Increased dimensions for Transformer capacity, match ResNet output
-    TRANSFORMER_DIM: int = Field(default=512, gt=0)  # CHANGED
-    TRANSFORMER_HEADS: int = Field(
-        default=16, gt=0
-    )  # CHANGED (Needs to divide TRANSFORMER_DIM: 512/16=32)
-    TRANSFORMER_LAYERS: int = Field(default=6, ge=0)  # CHANGED
-    TRANSFORMER_FC_DIM: int = Field(
-        default=1024, gt=0
-    )  # CHANGED (Increased feedforward dim)
+    # --- Transformer Parameters (Optional) ---
+    USE_TRANSFORMER: bool = Field(default=True)  # Enable Transformer
+    TRANSFORMER_DIM: int = Field(default=128, gt=0)  # Match Res block filters
+    TRANSFORMER_HEADS: int = Field(default=4, gt=0)  # Moderate heads
+    TRANSFORMER_LAYERS: int = Field(default=2, ge=0)  # Fewer layers
+    TRANSFORMER_FC_DIM: int = Field(default=256, gt=0)  # Moderate feedforward dim
 
-    # --- Fully Connected Layers (Further Enhanced) ---
-    # Increased dimensions for shared and head layers
-    FC_DIMS_SHARED: list[int] = Field(default=[1024])  # CHANGED
-    POLICY_HEAD_DIMS: list[int] = Field(
-        default=[1024]
-    )  # CHANGED (Output dim added automatically)
+    # --- Fully Connected Layers ---
+    FC_DIMS_SHARED: list[int] = Field(default=[128])  # Single shared layer
 
-    # --- Distributional Value Head Parameters --- ADDED
-    NUM_VALUE_ATOMS: int = Field(default=51, gt=1)  # Number of atoms for C51
-    VALUE_MIN: float = Field(default=-10.0)  # Minimum value support
-    VALUE_MAX: float = Field(default=10.0)  # Maximum value support
+    # --- Policy Head ---
+    POLICY_HEAD_DIMS: list[int] = Field(default=[128])  # Single policy layer
 
-    # --- Value Head Dims (Now outputs NUM_VALUE_ATOMS) --- CHANGED
-    VALUE_HEAD_DIMS: list[int] = Field(
-        default=[1024]
-    )  # Final output dim (NUM_VALUE_ATOMS) added automatically
+    # --- Distributional Value Head Parameters ---
+    NUM_VALUE_ATOMS: int = Field(default=51, gt=1)  # Standard C51 atoms
+    VALUE_MIN: float = Field(default=-10.0)  # Reasonable expected value range
+    VALUE_MAX: float = Field(default=10.0)  # Reasonable expected value range
+
+    # --- Value Head Dims ---
+    VALUE_HEAD_DIMS: list[int] = Field(default=[128])  # Single value layer
 
     # --- Other Hyperparameters ---
     ACTIVATION_FUNCTION: Literal["ReLU", "GELU", "SiLU", "Tanh", "Sigmoid"] = Field(
-        default="ReLU"  # GELU or SiLU might also work well with Transformers
+        default="ReLU"
     )
     USE_BATCH_NORM: bool = Field(default=True)
 
     # --- Input Feature Dimension ---
-    # This depends on alphatriangle/features/extractor.py and should match its output.
-    # Default calculation: 3 slots * 7 shape feats + 3 avail feats + 6 explicit feats = 30
-    # This calculation has NOT changed with the model architecture changes.
-    OTHER_NN_INPUT_FEATURES_DIM: int = Field(default=30, gt=0)  # UNCHANGED
+    # Dimension of the non-grid feature vector concatenated after CNN/Transformer.
+    # Must match the output of features.extractor.get_combined_other_features.
+    OTHER_NN_INPUT_FEATURES_DIM: int = Field(default=30, gt=0)  # Keep default
 
     @model_validator(mode="after")
     def check_conv_layers_consistency(self) -> "ModelConfig":
@@ -157,14 +146,12 @@ class ModelConfig(BaseModel):
     # --- ADDED: Validation for distributional parameters ---
     @model_validator(mode="after")
     def check_value_distribution_params(self) -> "ModelConfig":
-        # --- CHANGED: Combined nested if ---
         if (
             hasattr(self, "VALUE_MIN")
             and hasattr(self, "VALUE_MAX")
             and self.VALUE_MIN >= self.VALUE_MAX
         ):
             raise ValueError("VALUE_MIN must be strictly less than VALUE_MAX.")
-        # --- END CHANGED ---
         return self
 
 

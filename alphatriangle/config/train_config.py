@@ -8,53 +8,41 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class TrainConfig(BaseModel):
     """
     Configuration for the training process (Pydantic model).
-    --- Tuned for 100k Steps ---
+    --- TUNED FOR LEARNING (Laptop Feasible) ---
     """
 
     RUN_NAME: str = Field(
         # More descriptive default run name
-        default_factory=lambda: f"train_{time.strftime('%Y%m%d_%H%M%S')}"
+        default_factory=lambda: f"train_{time.strftime('%Y%m%d_%H%M%S')}"  # Changed prefix
     )
-    LOAD_CHECKPOINT_PATH: str | None = Field(
-        default=None
-    )  # Explicit path overrides auto-resume
-    LOAD_BUFFER_PATH: str | None = Field(
-        default=None
-    )  # Explicit path overrides auto-resume
-    AUTO_RESUME_LATEST: bool = Field(
-        default=True
-    )  # Resume from latest previous run if no explicit path
-    DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(
-        default="auto"
-    )  # 'auto' is recommended
+    LOAD_CHECKPOINT_PATH: str | None = Field(default=None)
+    LOAD_BUFFER_PATH: str | None = Field(default=None)
+    AUTO_RESUME_LATEST: bool = Field(default=True)  # Resume if possible
+    DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="auto")
     RANDOM_SEED: int = Field(default=42)
 
     # --- Training Loop ---
-    # Adjusted steps for a shorter run
-    MAX_TRAINING_STEPS: int | None = Field(default=100_000, ge=1)  # CHANGED
+    MAX_TRAINING_STEPS: int | None = Field(default=100_000, ge=1)  # Target steps
 
     # --- Workers & Batching ---
-    # Keep workers high for data generation
-    NUM_SELF_PLAY_WORKERS: int = Field(default=12, ge=1)
-    WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(
-        default="cpu"
-    )  # Workers usually on CPU
-    # Keep batch size reasonable
-    BATCH_SIZE: int = Field(default=128, ge=1)
-    # Keep buffer large relative to training steps
-    BUFFER_CAPACITY: int = Field(default=100_000, ge=1)
-    # Start training earlier relative to buffer size
-    MIN_BUFFER_SIZE_TO_TRAIN: int = Field(default=10_000, ge=1)
-    # Update worker networks reasonably often
-    WORKER_UPDATE_FREQ_STEPS: int = Field(default=100, ge=1)
+    NUM_SELF_PLAY_WORKERS: int = Field(default=8, ge=1)  # Adjust based on CPU cores
+    WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="cpu")
+    BATCH_SIZE: int = Field(default=128, ge=1)  # Moderate batch size
+    BUFFER_CAPACITY: int = Field(default=200_000, ge=1)  # Larger buffer
+    MIN_BUFFER_SIZE_TO_TRAIN: int = Field(
+        default=20_000, ge=1
+    )  # Start training after 20k samples
+    WORKER_UPDATE_FREQ_STEPS: int = Field(
+        default=100, ge=1
+    )  # Update workers every 100 steps
 
-    # --- N-Step Returns --- ADDED
-    N_STEP_RETURNS: int = Field(default=5, ge=1)
-    GAMMA: float = Field(default=0.99, gt=0, le=1.0)
+    # --- N-Step Returns ---
+    N_STEP_RETURNS: int = Field(default=5, ge=1)  # 5-step returns
+    GAMMA: float = Field(default=0.99, gt=0, le=1.0)  # Discount factor
 
     # --- Optimizer ---
     OPTIMIZER_TYPE: Literal["Adam", "AdamW", "SGD"] = Field(default="AdamW")
-    LEARNING_RATE: float = Field(default=1e-4, gt=0)
+    LEARNING_RATE: float = Field(default=2e-4, gt=0)  # Slightly higher LR
     WEIGHT_DECAY: float = Field(default=1e-4, ge=0)
     GRADIENT_CLIP_VALUE: float | None = Field(default=1.0)
 
@@ -62,25 +50,24 @@ class TrainConfig(BaseModel):
     LR_SCHEDULER_TYPE: Literal["StepLR", "CosineAnnealingLR"] | None = Field(
         default="CosineAnnealingLR"
     )
-    # T_MAX will be set automatically based on new MAX_TRAINING_STEPS
+    # T_MAX will be set automatically based on MAX_TRAINING_STEPS
     LR_SCHEDULER_T_MAX: int | None = Field(default=None)
-    LR_SCHEDULER_ETA_MIN: float = Field(default=1e-6, ge=0)  # End LR
+    LR_SCHEDULER_ETA_MIN: float = Field(default=1e-6, ge=0)
 
     # --- Loss Weights ---
     POLICY_LOSS_WEIGHT: float = Field(default=1.0, ge=0)
     VALUE_LOSS_WEIGHT: float = Field(default=1.0, ge=0)
-    ENTROPY_BONUS_WEIGHT: float = Field(default=0.01, ge=0)
+    ENTROPY_BONUS_WEIGHT: float = Field(default=0.001, ge=0)  # Small entropy bonus
 
     # --- Checkpointing ---
-    # Save checkpoints reasonably often during shorter run
-    CHECKPOINT_SAVE_FREQ_STEPS: int = Field(default=500, ge=1)  # CHANGED
+    CHECKPOINT_SAVE_FREQ_STEPS: int = Field(default=2500, ge=1)  # Save every 2500 steps
 
     # --- Prioritized Experience Replay (PER) ---
-    USE_PER: bool = Field(default=True)
+    USE_PER: bool = Field(default=True)  # Enable PER
     PER_ALPHA: float = Field(default=0.6, ge=0)
     PER_BETA_INITIAL: float = Field(default=0.4, ge=0, le=1.0)
     PER_BETA_FINAL: float = Field(default=1.0, ge=0, le=1.0)
-    # Anneal steps will be set automatically based on new MAX_TRAINING_STEPS
+    # Anneal steps will be set automatically based on MAX_TRAINING_STEPS
     PER_BETA_ANNEAL_STEPS: int | None = Field(default=None)
     PER_EPSILON: float = Field(default=1e-5, gt=0)
 
@@ -130,12 +117,12 @@ class TrainConfig(BaseModel):
                     )
                 else:
                     # Handle invalid MAX_TRAINING_STEPS case if necessary
-                    self.LR_SCHEDULER_T_MAX = 100_000  # Fallback for 100k run
+                    self.LR_SCHEDULER_T_MAX = 100_000  # Fallback
                     print(
                         f"Warning: MAX_TRAINING_STEPS is invalid ({self.MAX_TRAINING_STEPS}), setting LR_SCHEDULER_T_MAX to default {self.LR_SCHEDULER_T_MAX}"
                     )
             else:
-                self.LR_SCHEDULER_T_MAX = 100_000  # Fallback for 100k run
+                self.LR_SCHEDULER_T_MAX = 100_000  # Fallback
                 print(
                     f"Warning: MAX_TRAINING_STEPS is None, setting LR_SCHEDULER_T_MAX to default {self.LR_SCHEDULER_T_MAX}"
                 )
@@ -169,12 +156,12 @@ class TrainConfig(BaseModel):
                     )
                 else:
                     # Handle invalid MAX_TRAINING_STEPS case if necessary
-                    self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback for 100k run
+                    self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback
                     print(
                         f"Warning: MAX_TRAINING_STEPS is invalid ({self.MAX_TRAINING_STEPS}), setting PER_BETA_ANNEAL_STEPS to default {self.PER_BETA_ANNEAL_STEPS}"
                     )
             else:
-                self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback for 100k run
+                self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback
                 print(
                     f"Warning: MAX_TRAINING_STEPS is None, setting PER_BETA_ANNEAL_STEPS to default {self.PER_BETA_ANNEAL_STEPS}"
                 )

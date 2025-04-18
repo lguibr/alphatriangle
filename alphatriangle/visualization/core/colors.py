@@ -1,3 +1,4 @@
+# File: alphatriangle/visualization/core/colors.py
 """Centralized color definitions (RGB tuples 0-255)."""
 
 WHITE: tuple[int, int, int] = (255, 255, 255)
@@ -15,6 +16,7 @@ ORANGE: tuple[int, int, int] = (240, 150, 20)
 PURPLE: tuple[int, int, int] = (140, 40, 140)
 CYAN: tuple[int, int, int] = (40, 200, 200)
 LIGHTG: tuple[int, int, int] = (144, 238, 144)
+HOTPINK: tuple[int, int, int] = (255, 105, 180)  # Added for plots
 
 GOOGLE_COLORS: list[tuple[int, int, int]] = [
     (15, 157, 88),  # Green
@@ -34,3 +36,16 @@ PREVIEW_SELECTED_BORDER: tuple[int, int, int] = BLUE
 PLACEMENT_VALID_COLOR: tuple[int, int, int, int] = (*GREEN, 150)  # RGBA
 PLACEMENT_INVALID_COLOR: tuple[int, int, int, int] = (*RED, 100)  # RGBA
 DEBUG_TOGGLE_COLOR: tuple[int, int, int] = YELLOW
+
+# --- ADDED: Colors for Progress Bar Cycling ---
+PROGRESS_BAR_CYCLE_COLORS: list[tuple[int, int, int]] = [
+    GREEN,
+    BLUE,
+    YELLOW,
+    ORANGE,
+    PURPLE,
+    CYAN,
+    HOTPINK,
+    RED,  # Add red towards the end
+]
+# --- END ADDED ---

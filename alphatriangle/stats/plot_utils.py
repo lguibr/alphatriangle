@@ -1,3 +1,4 @@
+# File: alphatriangle/stats/plot_utils.py
 import logging
 
 import matplotlib.pyplot as plt
@@ -68,7 +69,10 @@ def render_single_plot(
     placeholder_text: str | None = None,
     y_log_scale: bool = False,
 ):
-    """Renders a single metric plot onto a Matplotlib Axes object."""
+    """
+    Renders a single metric plot onto a Matplotlib Axes object.
+    Plots raw data and the single best rolling average line.
+    """
     ax.clear()
     ax.set_facecolor((0.15, 0.15, 0.15))  # Dark background for axes
 
@@ -96,32 +100,28 @@ def render_single_plot(
     # Plot raw data (thin, semi-transparent)
     ax.plot(steps, values, color=color, alpha=0.3, linewidth=0.7, label="_nolegend_")
 
-    # Plot rolling averages
+    # --- CHANGED: Plot only the single best rolling average ---
     num_points = len(steps)
-    plotted_rolling = False
-    for i, window in enumerate(reversed(rolling_window_sizes)):
+    best_window = 0
+    # Iterate through window sizes in descending order
+    for window in sorted(rolling_window_sizes, reverse=True):
         if num_points >= window:
-            rolling_avg = calculate_rolling_average(values, window)
-            alpha = (
-                0.6 + 0.4 * (i / (len(rolling_window_sizes) - 1))
-                if len(rolling_window_sizes) > 1
-                else 1.0
-            )
-            linewidth = (
-                1.0 + 0.5 * (i / (len(rolling_window_sizes) - 1))
-                if len(rolling_window_sizes) > 1
-                else 1.5
-            )
-            ax.plot(
-                steps,
-                rolling_avg,
-                color=color,
-                alpha=alpha,
-                linewidth=linewidth,
-                label=f"Avg {window}" if not plotted_rolling else "_nolegend_",
-            )
-            plotted_rolling = True
-            break  # Only plot the largest applicable rolling average
+            best_window = window
+            break  # Found the largest applicable window
+
+    if best_window > 0:
+        rolling_avg = calculate_rolling_average(values, best_window)
+        ax.plot(
+            steps,
+            rolling_avg,
+            color=color,
+            alpha=0.9,  # Make it more prominent
+            linewidth=1.5,
+            label=f"Avg {best_window}",  # Label this single line
+        )
+        # Add legend only if rolling average was plotted
+        ax.legend(fontsize=6, loc="upper right", frameon=False, labelcolor="lightgray")
+    # --- END CHANGED ---
 
     # Formatting
     ax.set_title(label, loc="left", fontsize=9, color="white", pad=2)
@@ -140,7 +140,14 @@ def render_single_plot(
             min(v for v in values if v > 0) if any(v > 0 for v in values) else 1e-6
         )
         max_val = max(values) if values else 1.0
-        ax.set_ylim(bottom=max(1e-9, min_val * 0.5), top=max_val * 1.5)
+        # Add buffer for log scale
+        ylim_bottom = max(1e-9, min_val * 0.1)
+        ylim_top = max_val * 10
+        # Prevent potential errors if limits are invalid
+        if ylim_bottom < ylim_top:
+            ax.set_ylim(bottom=ylim_bottom, top=ylim_top)
+        else:
+            ax.set_ylim(bottom=1e-9, top=1.0)  # Fallback limits
     else:
         ax.set_yscale("linear")
 

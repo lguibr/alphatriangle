@@ -341,9 +341,9 @@ def test_execute_placement_game_over_v3(game_state: GameState, mocker: MockerFix
     mock_clear.assert_called_once()
 
     # Verify game is over
-    assert (
-        game_state.is_over()
-    ), "Game should be over after placing the final piece with no other valid moves"
+    assert game_state.is_over(), (
+        "Game should be over after placing the final piece with no other valid moves"
+    )
 
     # Verify reward (placement + game over penalty)
     expected_reward = (

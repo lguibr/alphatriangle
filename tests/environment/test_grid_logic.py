@@ -119,9 +119,9 @@ def test_check_and_clear_lines_single_line(grid_data: GridData):
             expected_line_coords = frozenset(coords)
             break
 
-    assert (
-        expected_line_coords is not None
-    ), "Could not find a suitable horizontal line in row 1 for testing"
+    assert expected_line_coords is not None, (
+        "Could not find a suitable horizontal line in row 1 for testing"
+    )
     # line_len = len(expected_line_coords) # Removed unused variable
     coords_list = list(expected_line_coords)
 
@@ -145,4 +145,3 @@ def test_check_and_clear_lines_single_line(grid_data: GridData):
     # Verify the line is now empty in the NumPy array
     for r, c in expected_line_coords:
         assert not grid_data._occupied_np[r, c]
-

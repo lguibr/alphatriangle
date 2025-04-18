@@ -1,3 +1,4 @@
+# File: alphatriangle/stats/collector.py
 import logging
 import time
 from collections import deque
@@ -27,16 +28,24 @@ class StatsCollectorActor:
         self._latest_worker_states: dict[int, GameState] = {}
         self._last_state_update_time: dict[int, float] = {}
 
-        print(f"[StatsCollectorActor] Initialized with max_history={max_history}.")
+        # Ensure logger is configured for the actor process
+        log_level = logging.DEBUG  # Or INFO if DEBUG is too verbose
+        log_format = f"%(asctime)s [%(levelname)s] [StatsCollectorActor pid={ray.get_runtime_context().get_actor_id()}] %(name)s: %(message)s"
+        logging.basicConfig(level=log_level, format=log_format, force=True)
+        global logger  # Re-assign logger after config
+        logger = logging.getLogger(__name__)
+
         logger.info(f"Initialized with max_history={max_history}.")
 
     # --- Metric Logging ---
 
     def log(self, metric_name: str, value: float, step: int):
         """Logs a single metric value."""
+        # --- ADDED: More detailed logging ---
         logger.debug(
-            f"Log received: metric='{metric_name}', value={value}, step={step}"
+            f"Attempting to log metric='{metric_name}', value={value}, step={step}"
         )
+        # --- END ADDED ---
         if not isinstance(metric_name, str):
             logger.error(f"Invalid metric_name type: {type(metric_name)}")
             return
@@ -45,21 +54,41 @@ class StatsCollectorActor:
                 f"Received non-finite value for metric '{metric_name}': {value}. Skipping log."
             )
             return
-        if metric_name not in self._data:
-            self._data[metric_name] = deque(maxlen=self.max_history)
+
+        # --- ADDED: Log before accessing/modifying deque ---
         try:
+            if metric_name not in self._data:
+                logger.debug(f"Creating new deque for metric: '{metric_name}'")
+                self._data[metric_name] = deque(maxlen=self.max_history)
+
             # Ensure step is int and value is float for consistency
-            self._data[metric_name].append((int(step), float(value)))
+            step_int = int(step)
+            value_float = float(value)
+            self._data[metric_name].append((step_int, value_float))
+            # Log success after appending
+            logger.debug(
+                f"Successfully logged metric='{metric_name}', value={value_float}, step={step_int}. Deque size: {len(self._data[metric_name])}"
+            )
         except (ValueError, TypeError) as e:
             logger.error(
-                f"Could not log metric '{metric_name}'. Invalid step/value: {e}"
+                f"Could not log metric '{metric_name}'. Invalid step/value conversion: {e}"
             )
+        except Exception as e:
+            # Catch any other potential errors during deque append
+            logger.error(
+                f"Unexpected error logging metric '{metric_name}' (value={value}, step={step}): {e}",
+                exc_info=True,
+            )
+        # --- END ADDED ---
 
     def log_batch(self, metrics: dict[str, tuple[float, int]]):
         """Logs a batch of metrics."""
+        # --- ADDED: Logging received keys ---
+        received_keys = list(metrics.keys())
         logger.debug(
-            f"Log batch received with {len(metrics)} metrics: {list(metrics.keys())}"
+            f"Log batch received with {len(metrics)} metrics. Keys: {received_keys}"
         )
+        # --- END ADDED ---
         for name, (value, step) in metrics.items():
             self.log(name, value, step)  # Delegate to single log method
 

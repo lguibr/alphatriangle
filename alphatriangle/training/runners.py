@@ -1,3 +1,4 @@
+# File: alphatriangle/training/runners.py
 import logging
 import queue
 import sys
@@ -8,6 +9,7 @@ from typing import Any
 
 import mlflow
 import pygame
+import torch  # Added torch import
 
 from .. import config, environment, utils, visualization
 from ..data import DataManager
@@ -51,8 +53,10 @@ def _setup_training_components(
 
         # --- Initialize Core Components ---
         # Note: Ray initialization is handled within TrainingPipeline
-        # Correctly call remote method
-        stats_collector_actor = StatsCollectorActor.remote(max_history=100_000)  # type: ignore
+        # --- CHANGED: Increase max_history significantly ---
+        stats_collector_actor = StatsCollectorActor.remote(max_history=500_000)  # type: ignore
+        logger.info("Initialized StatsCollectorActor with large max_history (500k).")
+        # --- END CHANGED ---
         neural_net = NeuralNetwork(model_config, env_config, train_config, device)
         buffer = ExperienceBuffer(train_config)
         trainer = Trainer(neural_net, train_config, env_config)
@@ -75,6 +79,17 @@ def _setup_training_components(
     except Exception as e:
         logger.critical(f"Error setting up training components: {e}", exc_info=True)
         return None
+
+
+# --- ADDED: Helper to count parameters ---
+def count_parameters(model: torch.nn.Module) -> tuple[int, int]:
+    """Counts total and trainable parameters."""
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return total_params, trainable_params
+
+
+# --- END ADDED ---
 
 
 def run_training_headless_mode(
@@ -105,6 +120,16 @@ def run_training_headless_mode(
         )
         if not components:
             raise RuntimeError("Failed to initialize training components.")
+
+        # ADDED: Calculate and Log Parameter Count
+        total_params, trainable_params = count_parameters(components.nn.model)
+        logger.info(
+            f"Model Parameters: Total={total_params:,}, Trainable={trainable_params:,}"
+        )
+        if mlflow.active_run():
+            mlflow.log_param("model_total_params", total_params)
+            mlflow.log_param("model_trainable_params", trainable_params)
+        # END ADDED
 
         # --- Initialize and Run Pipeline ---
         pipeline = TrainingPipeline(components, visual_mode=False)
@@ -245,6 +270,14 @@ def run_training_visual_mode(
         if not components:
             raise RuntimeError("Failed to initialize training components.")
 
+        # ADDED: Calculate Parameter Count
+        total_params, trainable_params = count_parameters(components.nn.model)
+        logger.info(
+            f"Model Parameters: Total={total_params:,}, Trainable={trainable_params:,}"
+        )
+        # Note: MLflow logging happens within pipeline init now
+        # END ADDED
+
         # --- Initialize Pipeline ---
         pipeline = TrainingPipeline(
             components, visual_mode=True, visual_state_queue=visual_state_queue
@@ -258,10 +291,7 @@ def run_training_visual_mode(
         logger.info("Training pipeline thread launched.")
 
         # --- Initialize Visualization ---
-        # Instantiate Pydantic models using defaults
-        # --- CHANGE: Removed type ignore ---
         vis_config = config.VisConfig()
-        # --- END CHANGE ---
         pygame.init()
         pygame.font.init()
         screen = pygame.display.set_mode(
@@ -272,6 +302,7 @@ def run_training_visual_mode(
         )
         clock = pygame.time.Clock()
         fonts = visualization.load_fonts()
+        # Pass param counts to DashboardRenderer
         dashboard_renderer = visualization.DashboardRenderer(
             screen,
             vis_config,
@@ -279,6 +310,8 @@ def run_training_visual_mode(
             fonts,
             components.stats_collector_actor,
             components.model_config,
+            total_params=total_params,
+            trainable_params=trainable_params,
         )
 
         current_worker_states: dict[int, environment.GameState] = {}
