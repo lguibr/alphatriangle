@@ -7,34 +7,34 @@ from pydantic import BaseModel, Field, model_validator
 class ModelConfig(BaseModel):
     """
     Configuration for the Neural Network model (Pydantic model).
-    --- TUNED FOR MEDIUM-LARGE CAPACITY (~12M Params Target) ---
+    --- TUNED FOR SMALLER CAPACITY (~3M Params Target, Laptop Feasible) ---
     """
 
     # Input channels for the grid (e.g., 1 for occupancy, more for history/colors)
     GRID_INPUT_CHANNELS: int = Field(default=1, gt=0)
 
     # --- CNN Architecture Parameters ---
-    CONV_FILTERS: list[int] = Field(default=[64, 128, 256])  # Medium-Large CNN
+    CONV_FILTERS: list[int] = Field(default=[32, 64, 128])  # Smaller CNN
     CONV_KERNEL_SIZES: list[int | tuple[int, int]] = Field(default=[3, 3, 3])
     CONV_STRIDES: list[int | tuple[int, int]] = Field(default=[1, 1, 1])
     CONV_PADDING: list[int | tuple[int, int] | str] = Field(default=[1, 1, 1])
 
     # --- Residual Block Parameters ---
-    NUM_RESIDUAL_BLOCKS: int = Field(default=3, ge=0)  # Intermediate blocks
-    RESIDUAL_BLOCK_FILTERS: int = Field(default=256, gt=0)  # Match last conv filter
+    NUM_RESIDUAL_BLOCKS: int = Field(default=2, ge=0)  # Fewer blocks
+    RESIDUAL_BLOCK_FILTERS: int = Field(default=128, gt=0)  # Match last conv filter
 
     # --- Transformer Parameters (Optional) ---
-    USE_TRANSFORMER: bool = Field(default=True)  # Enable Transformer
-    TRANSFORMER_DIM: int = Field(default=256, gt=0)  # Match Res block filters
-    TRANSFORMER_HEADS: int = Field(default=8, gt=0)  # Keep 8 heads
-    TRANSFORMER_LAYERS: int = Field(default=3, ge=0)  # Intermediate layers
-    TRANSFORMER_FC_DIM: int = Field(default=512, gt=0)  # Keep larger feedforward dim
+    USE_TRANSFORMER: bool = Field(default=True)  # Keep Transformer enabled
+    TRANSFORMER_DIM: int = Field(default=128, gt=0)  # Match Res block filters
+    TRANSFORMER_HEADS: int = Field(default=4, gt=0)  # Moderate heads
+    TRANSFORMER_LAYERS: int = Field(default=2, ge=0)  # Fewer layers
+    TRANSFORMER_FC_DIM: int = Field(default=256, gt=0)  # Moderate feedforward dim
 
     # --- Fully Connected Layers ---
-    FC_DIMS_SHARED: list[int] = Field(default=[256])  # Larger shared layer
+    FC_DIMS_SHARED: list[int] = Field(default=[128])  # Single shared layer
 
     # --- Policy Head ---
-    POLICY_HEAD_DIMS: list[int] = Field(default=[256])  # Larger policy layer
+    POLICY_HEAD_DIMS: list[int] = Field(default=[128])  # Single policy layer
 
     # --- Distributional Value Head Parameters ---
     NUM_VALUE_ATOMS: int = Field(default=51, gt=1)  # Standard C51 atoms
@@ -42,7 +42,7 @@ class ModelConfig(BaseModel):
     VALUE_MAX: float = Field(default=10.0)  # Reasonable expected value range
 
     # --- Value Head Dims ---
-    VALUE_HEAD_DIMS: list[int] = Field(default=[256])  # Larger value layer
+    VALUE_HEAD_DIMS: list[int] = Field(default=[128])  # Single value layer
 
     # --- Other Hyperparameters ---
     ACTIVATION_FUNCTION: Literal["ReLU", "GELU", "SiLU", "Tanh", "Sigmoid"] = Field(

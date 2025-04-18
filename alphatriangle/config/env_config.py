@@ -14,10 +14,10 @@ class EnvConfig(BaseModel):
     MIN_LINE_LENGTH: int = Field(default=3, gt=0)
 
     # --- Reward System Constants (v3) ---
-    REWARD_PER_PLACED_TRIANGLE: float = Field(default=0.02)
-    REWARD_PER_CLEARED_TRIANGLE: float = Field(default=0.4)
+    REWARD_PER_PLACED_TRIANGLE: float = Field(default=0.01)
+    REWARD_PER_CLEARED_TRIANGLE: float = Field(default=0.5)
     REWARD_PER_STEP_ALIVE: float = Field(default=0.005)
-    PENALTY_GAME_OVER: float = Field(default=-3.0)
+    PENALTY_GAME_OVER: float = Field(default=-1.0)
     # --- End Reward System Constants ---
 
     @field_validator("COLS_PER_ROW")

@@ -5,19 +5,19 @@ from pydantic import BaseModel, Field, field_validator
 class MCTSConfig(BaseModel):
     """
     Configuration for Monte Carlo Tree Search (Pydantic model).
-    --- TUNED FOR LEARNING (Laptop Feasible) ---
+    --- TUNED FOR INCREASED EXPLORATION & DEPTH ---
     """
 
-    num_simulations: int = Field(default=800, ge=1)  # Moderate simulations for speed
-    puct_coefficient: float = Field(default=1.5, gt=0)
+    num_simulations: int = Field(default=768, ge=1)  # Increased simulations
+    puct_coefficient: float = Field(default=2.0, gt=0)  # Increased exploration bias
     temperature_initial: float = Field(default=1.0, ge=0)
     temperature_final: float = Field(default=0.1, ge=0)
     temperature_anneal_steps: int = Field(
-        default=50000, ge=0
-    )  # Anneal over first half of training
+        default=50000, ge=0  # Anneal over first half of 100k steps
+    )
     dirichlet_alpha: float = Field(default=0.3, gt=0)
     dirichlet_epsilon: float = Field(default=0.25, ge=0, le=1.0)
-    max_search_depth: int = Field(default=32, ge=1)  # Reasonable depth limit
+    max_search_depth: int = Field(default=24, ge=1)  # Increased depth limit
 
     @field_validator("temperature_final")
     @classmethod
