@@ -1,5 +1,6 @@
 # File: alphatriangle/nn/network.py
 import logging
+import sys  # Import sys for platform check
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
@@ -55,9 +56,17 @@ class NeuralNetwork:
             self.v_min, self.v_max, self.num_atoms, device=self.device
         )
 
-        # --- ADDED: Check for MPS before attempting compile ---
+        # --- ADDED: Check for Windows/MPS before attempting compile ---
         if self.train_config.COMPILE_MODEL:
-            if self.device.type == "mps":
+            # --- ADDED: Skip compilation entirely on Windows due to Triton dependency ---
+            if sys.platform == "win32":
+                logger.warning(
+                    "Model compilation requested but running on Windows. "
+                    "Skipping torch.compile() as the default CUDA backend (Inductor) requires Triton, "
+                    "which is not officially supported on Windows. Proceeding with eager execution."
+                )
+            # --- END ADDED ---
+            elif self.device.type == "mps":
                 logger.warning(
                     "Model compilation requested but device is 'mps'. "
                     "Skipping torch.compile() due to known compatibility issues with this backend. "
@@ -68,8 +77,6 @@ class NeuralNetwork:
                     logger.info(
                         f"Attempting to compile model with torch.compile() on device '{self.device}'..."
                     )
-                    # Note: Consider adding mode="reduce-overhead" or "max-autotune" for potentially better performance
-                    # but "default" is safer to start with.
                     self.model = torch.compile(self.model)  # type: ignore
                     logger.info(
                         f"Model compiled successfully on device '{self.device}'."
@@ -79,7 +86,7 @@ class NeuralNetwork:
                         f"torch.compile() failed on device '{self.device}': {e}. "
                         f"Proceeding without compilation (using eager mode). "
                         f"Compilation might not be supported for this model/backend combination.",
-                        exc_info=False,  # Keep traceback concise unless debugging
+                        exc_info=False,
                     )
             else:
                 logger.warning(

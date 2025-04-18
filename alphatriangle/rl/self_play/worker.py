@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import ray
+import torch  # Import torch
+from pydantic import ValidationError
 
 from ...config import MCTSConfig, ModelConfig, TrainConfig
 from ...environment import EnvConfig, GameState
@@ -63,10 +65,9 @@ class SelfPlayWorker:
         self.seed = seed if seed is not None else random.randint(0, 1_000_000)
         self.worker_device_str = worker_device_str
 
-        # --- N-Step Config --- ADDED
+        # --- N-Step Config ---
         self.n_step = self.train_config.N_STEP_RETURNS
         self.gamma = self.train_config.GAMMA
-        # --- END ADDED ---
 
         # Configure logging for the worker process
         worker_log_level = logging.INFO  # Keep INFO for workers
@@ -85,12 +86,42 @@ class SelfPlayWorker:
         set_random_seeds(self.seed)
 
         self.device = get_device(self.worker_device_str)
+
+        if self.device.type == "cuda":
+            try:
+                # This is crucial for aligning PyTorch with Ray's CUDA_VISIBLE_DEVICES
+                torch.cuda.set_device(self.device)
+                logger.info(
+                    f"Successfully set default CUDA device for worker {self.actor_id} to {self.device} (Index: {torch.cuda.current_device()})."
+                )
+                # Verify device count within the actor's view
+                count = torch.cuda.device_count()
+                if count != 1:
+                    logger.warning(
+                        f"Worker {self.actor_id} sees {count} CUDA devices, expected 1 after Ray assignment. This might indicate an issue."
+                    )
+                else:
+                    logger.info(
+                        f"Worker {self.actor_id} sees 1 CUDA device as expected."
+                    )
+
+            except Exception as cuda_set_err:
+                logger.error(
+                    f"Failed to set default CUDA device for worker {self.actor_id} to {self.device}: {cuda_set_err}. "
+                    f"Compilation or CUDA operations might fail.",
+                    exc_info=True,
+                )
+        # --- END ADDED ---
+
+        # Initialize NeuralNetwork - it will handle its own compile logic based on config and device checks
+        # It should now succeed on CUDA because the default device is set correctly.
         self.nn_evaluator = NeuralNetwork(
             model_config=self.model_config,
             env_config=self.env_config,
-            train_config=self.train_config,  # Pass train_config here
+            train_config=self.train_config,  # Pass the original train_config
             device=self.device,
         )
+
         if initial_weights:
             self.set_weights(initial_weights)
         else:
@@ -138,7 +169,6 @@ class SelfPlayWorker:
         """
         if self.stats_collector_actor:
             try:
-                # --- CHANGED: Use generic keys for step-level stats ---
                 step_stats = {
                     "RL/Current_Score": (
                         game_state.game_score,
@@ -154,16 +184,10 @@ class SelfPlayWorker:
                     ),
                     "RL/Step_Reward": (step_reward, game_state.current_step),
                 }
-                # --- END CHANGED ---
-                # --- ADDED: Logging before remote call ---
                 logger.debug(f"Sending step stats to collector: {step_stats}")
-                # --- END ADDED ---
-                # Correctly call remote method
                 self.stats_collector_actor.log_batch.remote(step_stats)  # type: ignore
             except Exception as e:
                 logger.error(f"Failed to log step stats to collector: {e}")
-
-    # --- REMOVED: _log_episode_stats_async ---
 
     def run_episode(self) -> SelfPlayResult:
         """
@@ -177,7 +201,6 @@ class SelfPlayWorker:
         episode_seed = self.seed + random.randint(0, 1000)
         game = GameState(self.env_config, initial_seed=episode_seed)
 
-        # --- ADDED: Check if game is over immediately after reset ---
         if game.is_over():
             logger.error(
                 f"Game is over immediately after reset with seed {episode_seed}. Returning empty result."
@@ -190,9 +213,7 @@ class SelfPlayWorker:
                 avg_root_visits=0.0,
                 avg_tree_depth=0.0,
             )
-        # --- END ADDED ---
 
-        # --- N-Step Buffers ---
         n_step_state_policy_buffer: deque[tuple[StateType, PolicyTargetMapping]] = (
             deque(maxlen=self.n_step)
         )
@@ -216,13 +237,11 @@ class SelfPlayWorker:
                 )
                 break
 
-            # --- ADDED: Check if root state is already terminal before MCTS ---
             if root_node.state.is_over():
                 logger.warning(
                     f"MCTS root node state (Step {root_node.state.current_step}) is already terminal before running simulations. Ending episode."
                 )
                 break
-            # --- END ADDED ---
 
             logger.info(
                 f"Step {game.current_step}: Running MCTS simulations ({self.mcts_config.num_simulations}) on state from step {root_node.state.current_step}..."
@@ -251,8 +270,6 @@ class SelfPlayWorker:
                 f"Step {game.current_step}: MCTS finished ({mcts_duration:.3f}s). Max Depth: {mcts_max_depth}, Root Visits: {root_node.visit_count}"
             )
 
-            # Log per-step MCTS stats (before selecting action)
-            # Pass 0.0 for reward here, as it hasn't happened yet for this step
             self._log_step_stats_async(
                 game, root_node.visit_count, mcts_max_depth, step_reward=0.0
             )
@@ -281,7 +298,6 @@ class SelfPlayWorker:
 
             feature_start_time = time.monotonic()
             try:
-                # Extract features from the state *before* taking the action
                 state_features: StateType = extract_state_features(
                     game, self.model_config
                 )
@@ -297,7 +313,6 @@ class SelfPlayWorker:
                 f"Step {game.current_step}: Feature extraction time: {feature_duration:.4f}s"
             )
 
-            # --- N-Step: Store state and policy ---
             n_step_state_policy_buffer.append((state_features, policy_target))
 
             step_simulations.append(self.mcts_config.num_simulations)
@@ -305,12 +320,9 @@ class SelfPlayWorker:
             step_tree_depths.append(mcts_max_depth)
 
             game_step_start_time = time.monotonic()
-            step_reward = 0.0  # Initialize reward for this step
+            step_reward = 0.0
             try:
-                # Capture the reward returned by step()
-                step_reward, done = game.step(
-                    action
-                )  # Updates the local 'game' instance
+                step_reward, done = game.step(action)
             except Exception as step_err:
                 logger.error(
                     f"Error executing game step for action {action}: {step_err}",
@@ -323,10 +335,8 @@ class SelfPlayWorker:
                 f"Step {game.current_step}: Action {action} taken. Reward: {step_reward:.3f}, Done: {done}. Game step time: {game_step_duration:.4f}s"
             )
 
-            # --- N-Step: Store reward ---
             n_step_reward_buffer.append(step_reward)
 
-            # --- N-Step: Calculate and store experience if buffer full ---
             if len(n_step_reward_buffer) == self.n_step:
                 discounted_reward_sum = 0.0
                 for i in range(self.n_step):
@@ -359,9 +369,7 @@ class SelfPlayWorker:
                     )
                 )
 
-            # Report the new state after the step
             self._report_current_state(game)
-            # Log stats AFTER the step, including the calculated reward
             self._log_step_stats_async(
                 game, root_node.visit_count, mcts_max_depth, step_reward=step_reward
             )
@@ -395,39 +403,31 @@ class SelfPlayWorker:
             if done:
                 break
 
-        # --- Episode End ---
         final_score = game.game_score
         logger.info(
             f"Episode finished. Final Score: {final_score:.2f}, Steps: {game.current_step}"
         )
 
-        # --- N-Step: Process remaining steps in the buffer ---
         remaining_steps = len(n_step_reward_buffer)
         for k in range(remaining_steps):
             discounted_reward_sum = 0.0
             for i in range(remaining_steps - k):
                 discounted_reward_sum += (self.gamma**i) * n_step_reward_buffer[k + i]
 
-            # --- CHANGED: No bootstrap value for final steps ---
             n_step_return = discounted_reward_sum
-            # --- END CHANGED ---
             state_features_t, policy_target_t = n_step_state_policy_buffer[k]
             episode_experiences.append(
                 (state_features_t, policy_target_t, n_step_return)
             )
 
-        # --- REMOVED: Call to _log_episode_stats_async ---
-
         total_sims_episode = sum(step_simulations)
         avg_visits_episode = np.mean(step_root_visits) if step_root_visits else 0.0
         avg_depth_episode = np.mean(step_tree_depths) if step_tree_depths else 0.0
 
-        # --- ADDED: Log if experiences are empty ---
         if not episode_experiences:
             logger.warning(
                 f"Episode finished with 0 experiences collected. Final score: {final_score}, Steps: {game.current_step}"
             )
-        # --- END ADDED ---
 
         return SelfPlayResult(
             episode_experiences=episode_experiences,
