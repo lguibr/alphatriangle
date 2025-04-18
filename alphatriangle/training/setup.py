@@ -25,6 +25,7 @@ def setup_training_components(
     """
     Initializes Ray (if not already initialized), detects cores, updates config,
     and returns the TrainingComponents bundle and a flag indicating if Ray was initialized here.
+    Adjusts worker count based on detected cores.
     """
     ray_initialized_here = False
     detected_cpu_cores: int | None = None
@@ -63,26 +64,30 @@ def setup_training_components(
         mcts_config = config.MCTSConfig()
 
         # --- Adjust Worker Count based on Detected Cores ---
-        if detected_cpu_cores is not None and detected_cpu_cores > 0:
-            requested_workers = train_config.NUM_SELF_PLAY_WORKERS
-            # Cap requested workers at detected cores
-            actual_workers = min(requested_workers, detected_cpu_cores)
+        requested_workers = train_config.NUM_SELF_PLAY_WORKERS
+        actual_workers = requested_workers  # Start with configured value
 
+        if detected_cpu_cores is not None and detected_cpu_cores > 0:
+            # --- CHANGED: Prioritize detected cores ---
+            actual_workers = detected_cpu_cores  # Use detected cores
             if actual_workers != requested_workers:
-                logger.warning(
-                    f"Requested {requested_workers} workers, but only {detected_cpu_cores} CPU cores detected/available. "
-                    f"Using {actual_workers} workers."
+                logger.info(
+                    f"Overriding configured workers ({requested_workers}) with detected CPU cores ({actual_workers})."
                 )
             else:
                 logger.info(
-                    f"Using {actual_workers} self-play workers (Detected Cores: {detected_cpu_cores})."
+                    f"Using {actual_workers} self-play workers (matches detected cores)."
                 )
-            train_config.NUM_SELF_PLAY_WORKERS = actual_workers
+            # --- END CHANGED ---
         else:
             logger.warning(
-                f"Could not detect valid CPU cores ({detected_cpu_cores}). Using configured NUM_SELF_PLAY_WORKERS: {train_config.NUM_SELF_PLAY_WORKERS}"
+                f"Could not detect valid CPU cores ({detected_cpu_cores}). Using configured NUM_SELF_PLAY_WORKERS: {requested_workers}"
             )
-        logger.info(f"Final worker count: {train_config.NUM_SELF_PLAY_WORKERS}")
+            actual_workers = requested_workers  # Fallback to configured value
+
+        # Update the config object with the final determined number
+        train_config.NUM_SELF_PLAY_WORKERS = actual_workers
+        logger.info(f"Final worker count set to: {train_config.NUM_SELF_PLAY_WORKERS}")
 
         # --- Validate Configs ---
         config.print_config_info_and_validate(mcts_config)

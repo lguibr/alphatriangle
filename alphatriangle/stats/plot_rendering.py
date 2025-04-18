@@ -1,18 +1,56 @@
 # File: alphatriangle/stats/plot_rendering.py
 import logging
 from collections import deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any  # Added Any
 
 import matplotlib.pyplot as plt
+import numpy as np  # Import numpy for interpolation
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
+from ..utils.types import StepInfo
 from .plot_definitions import PlotDefinition
 from .plot_utils import calculate_rolling_average, format_value
+
 
 if TYPE_CHECKING:
     from .collector import StatsCollectorData
 
 logger = logging.getLogger(__name__)
+
+
+def _find_closest_index_for_global_step(
+    target_global_step: int,
+    step_info_list: list[StepInfo],
+) -> int | None:
+    """
+    Finds the index in the step_info_list where the stored 'global_step'
+    is closest to the target_global_step.
+    Returns None if no suitable point is found or list is empty.
+    """
+    if not step_info_list:
+        return None
+
+    best_match_idx = None
+    min_step_diff = float("inf")
+
+    for i, step_info in enumerate(step_info_list):
+        global_step_in_info = step_info.get("global_step")
+
+        if global_step_in_info is not None:
+            step_diff = abs(global_step_in_info - target_global_step)
+            if step_diff < min_step_diff:
+                min_step_diff = step_diff
+                best_match_idx = i
+            # Optimization: If we found an exact match, we can stop early
+            # Also, if the steps start increasing again, we passed the best point
+            if step_diff == 0 or (
+                best_match_idx is not None and global_step_in_info > target_global_step
+            ):
+                break
+
+    # Optional: Add a tolerance? If min_step_diff is too large, maybe don't return a match?
+    # For now, return the index of the closest found value.
+    return best_match_idx
 
 
 def render_subplot(
@@ -21,12 +59,12 @@ def render_subplot(
     plot_def: PlotDefinition,
     colors: dict[str, tuple[float, float, float]],
     rolling_window_sizes: list[int],
-    weight_update_steps: list[int] | None = None,  # Added argument
+    weight_update_steps: list[int] | None = None,  # Global steps where updates happened
 ) -> bool:
     """
     Renders data for a single metric onto the given Matplotlib Axes object.
-    Draws black, solid vertical lines for weight updates on all plots if available,
-    drawn on top of other data.
+    Scatter point size/alpha decrease linearly as more data/longer averages are shown.
+    Draws semi-transparent black, solid vertical lines for weight updates on all plots.
     Returns True if data was plotted, False otherwise.
     """
     ax.clear()
@@ -35,34 +73,50 @@ def render_subplot(
     metric_key = plot_def.metric_key
     label = plot_def.label
     log_scale = plot_def.y_log_scale
-    x_axis_type = plot_def.x_axis_type
+    x_axis_type = plot_def.x_axis_type  # e.g., "global_step", "buffer_size", "index"
 
     x_data: list[int] = []
     y_data: list[float] = []
     x_label_text = "Index"  # Default label
+    step_info_list: list[StepInfo] = []  # Store step info for mapping
 
     dq = plot_data.get(metric_key, deque())
     if dq:
-        combined_steps_values = list(dq)
-        if combined_steps_values:
+        # Extract x-axis value and store StepInfo
+        temp_x = []
+        temp_y = []
+        for i, (step_info, value) in enumerate(dq):
+            x_val: int | None = None
             if x_axis_type == "global_step":
-                x_data = [s for s, v in combined_steps_values]
+                x_val = step_info.get("global_step")
                 x_label_text = "Train Step"
             elif x_axis_type == "buffer_size":
-                # Use the step value (which represents buffer size for these metrics)
-                x_data = [s for s, v in combined_steps_values]
+                x_val = step_info.get("buffer_size")
                 x_label_text = "Buffer Size"
-            else:  # Default to index
-                x_data = list(range(len(combined_steps_values)))
+            else:  # index
+                x_val = i  # Use the simple index 'i' as the x-value
                 if (
                     "Score" in metric_key
                     or "Reward" in metric_key
                     or "MCTS" in metric_key
                 ):
-                    x_label_text = "Game Step Index"
+                    x_label_text = "Game Step Index"  # Label remains descriptive
                 else:
                     x_label_text = "Data Point Index"
-            y_data = [v for s, v in combined_steps_values]
+
+            if x_val is not None:
+                temp_x.append(x_val)
+                temp_y.append(value)
+                step_info_list.append(
+                    step_info
+                )  # Keep StepInfo aligned with data points
+            else:
+                logger.warning(
+                    f"Missing x-axis key '{x_axis_type}' in step_info for metric '{metric_key}'. Skipping point."
+                )
+
+        x_data = temp_x
+        y_data = temp_y
 
     color_mpl = colors.get(metric_key, (0.5, 0.5, 0.5))
     placeholder_color_mpl = colors.get("placeholder", (0.5, 0.5, 0.5))
@@ -85,18 +139,7 @@ def render_subplot(
     else:
         data_plotted = True
 
-        # Plot raw data (thin, semi-transparent) - Lower zorder
-        ax.scatter(
-            x_data,
-            y_data,
-            color=color_mpl,
-            alpha=0.1,
-            s=2,
-            label="_nolegend_",
-            zorder=2,  # Draw above background/grid
-        )
-
-        # Plot best rolling average - Mid zorder
+        # Determine best rolling average window
         num_points = len(y_data)
         best_window = 0
         for window in sorted(rolling_window_sizes, reverse=True):
@@ -104,6 +147,40 @@ def render_subplot(
                 best_window = window
                 break
 
+        # Determine scatter size/alpha based on best_window
+        max_scatter_size = 5
+        min_scatter_size = 0.5
+        max_scatter_alpha = 0.4
+        min_scatter_alpha = 0.04
+        max_window_for_interp = float(max(rolling_window_sizes))
+
+        if best_window == 0:
+            scatter_size = max_scatter_size
+            scatter_alpha = max_scatter_alpha
+        elif best_window >= max_window_for_interp:
+            scatter_size = min_scatter_size
+            scatter_alpha = min_scatter_alpha
+        else:
+            interp_fraction = best_window / max_window_for_interp
+            scatter_size = np.interp(
+                interp_fraction, [0, 1], [max_scatter_size, min_scatter_size]
+            )
+            scatter_alpha = np.interp(
+                interp_fraction, [0, 1], [max_scatter_alpha, min_scatter_alpha]
+            )
+
+        # Plot raw data with dynamic size/alpha
+        ax.scatter(
+            x_data,
+            y_data,
+            color=color_mpl,
+            alpha=scatter_alpha,
+            s=scatter_size,
+            label="_nolegend_",
+            zorder=2,
+        )
+
+        # Plot best rolling average
         if best_window > 0:
             rolling_avg = calculate_rolling_average(y_data, best_window)
             if len(rolling_avg) == len(x_data):
@@ -114,7 +191,7 @@ def render_subplot(
                     alpha=0.9,
                     linewidth=1.5,
                     label=f"Avg {best_window}",
-                    zorder=3,  # Draw above scatter
+                    zorder=3,
                 )
                 ax.legend(
                     fontsize=6, loc="upper right", frameon=False, labelcolor="lightgray"
@@ -124,32 +201,38 @@ def render_subplot(
                     f"Length mismatch for rolling avg ({len(rolling_avg)}) vs x_data ({len(x_data)}) for {label}. Skipping avg plot."
                 )
 
-        # --- CHANGED: Draw vertical lines if weight_update_steps exist, ON ALL PLOTS, ON TOP ---
-        if weight_update_steps:
-            # NOTE: These lines represent the global_step value when a weight update occurred.
-            # On plots where the x-axis is NOT global_step (e.g., index, buffer_size),
-            # the line's position relative to the x-axis values requires careful interpretation.
-            # It indicates *when* the update happened in training time, not necessarily
-            # at the corresponding x-value shown on that specific plot's axis.
-            plot_max_x = max(x_data) if x_data else 0
-            relevant_updates = weight_update_steps
-            # Only filter if x-axis is global_step to avoid drawing lines way off-screen
-            if x_axis_type == "global_step":
-                relevant_updates = [
-                    step for step in weight_update_steps if step <= plot_max_x * 1.05
-                ]
-
-            for update_step in relevant_updates:
-                # Draw the line at the global_step value on the current axis
-                ax.axvline(
-                    x=update_step,
-                    color="black",  # Black color
-                    linestyle="-",  # Solid line
-                    linewidth=0.7,  # Slightly thicker? Or keep 0.5? Let's try 0.7
-                    alpha=0.8,  # Slightly transparent if needed, or 1.0 for solid
-                    zorder=10,  # High zorder to draw on top
+        # Draw vertical lines by mapping global_step to current x-axis value
+        if weight_update_steps and step_info_list:
+            plotted_line_x_values = set()
+            for update_global_step in weight_update_steps:
+                x_index_for_line = _find_closest_index_for_global_step(
+                    update_global_step, step_info_list
                 )
-        # --- END CHANGED ---
+
+                if x_index_for_line is not None and x_index_for_line < len(x_data):
+                    # --- CHANGED: Determine x-coordinate based on axis type ---
+                    if x_axis_type == "index":
+                        actual_x_value = x_index_for_line  # Use the index directly
+                    else:
+                        actual_x_value = x_data[
+                            x_index_for_line
+                        ]  # Use value from x_data
+                    # --- END CHANGED ---
+
+                    if actual_x_value not in plotted_line_x_values:
+                        ax.axvline(
+                            x=actual_x_value,
+                            color="black",
+                            linestyle="-",
+                            linewidth=0.7,
+                            alpha=0.5,
+                            zorder=10,
+                        )
+                        plotted_line_x_values.add(actual_x_value)
+                else:
+                    logger.debug(
+                        f"Could not map global_step {update_global_step} to an index for plot '{label}'"
+                    )
 
         # Formatting
         ax.set_title(label, loc="left", fontsize=9, color="white", pad=2)

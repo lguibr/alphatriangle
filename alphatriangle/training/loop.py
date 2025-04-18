@@ -84,7 +84,7 @@ class TrainingLoop:
             "global_step": self.global_step,
             "episodes_played": self.episodes_played,
             "total_simulations_run": self.total_simulations_run,
-            "worker_weight_updates": self.worker_weight_updates_count,  # Added
+            "worker_weight_updates": self.worker_weight_updates_count,
             "buffer_size": len(self.buffer),
             "buffer_capacity": self.buffer.capacity,
             "num_active_workers": self.worker_manager.get_num_active_workers(),
@@ -92,7 +92,6 @@ class TrainingLoop:
             "train_progress": self.train_step_progress,
             "buffer_progress": self.buffer_fill_progress,
             "start_time": self.start_time,
-            # Include num_workers from config for display robustness
             "num_workers": self.train_config.NUM_SELF_PLAY_WORKERS,
         }
 
@@ -169,11 +168,9 @@ class TrainingLoop:
         """Runs one training step."""
         if not self.buffer.is_ready():
             return False
-        # --- Use TYPE_CHECKING import ---
         per_sample: PERBatchSample | None = self.buffer.sample(
             self.train_config.BATCH_SIZE, current_train_step=self.global_step
         )
-        # --- END Use TYPE_CHECKING import ---
         if not per_sample:
             return False
 
@@ -194,7 +191,9 @@ class TrainingLoop:
             # Check if it's time to update worker networks
             if self.global_step % self.train_config.WORKER_UPDATE_FREQ_STEPS == 0:
                 try:
-                    self.worker_manager.update_worker_networks()
+                    # --- CHANGED: Pass global_step ---
+                    self.worker_manager.update_worker_networks(self.global_step)
+                    # --- END CHANGED ---
                     self.worker_weight_updates_count += 1  # Increment counter
                     # Log the update event using the helper
                     self.loop_helpers.log_weight_update_event(self.global_step)
@@ -240,13 +239,8 @@ class TrainingLoop:
                     break
 
                 # Training Step
-                # --- REMOVED: trained_this_cycle unused ---
-                # trained_this_cycle = False
-                # --- END REMOVED ---
                 if self.buffer.is_ready():
-                    # --- REMOVED: trained_this_cycle unused ---
                     _ = self._run_training_step()  # Call training step
-                    # --- END REMOVED ---
                 else:
                     time.sleep(0.01)
 

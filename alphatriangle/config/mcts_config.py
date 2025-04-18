@@ -8,7 +8,7 @@ class MCTSConfig(BaseModel):
     --- TUNED FOR LEARNING (Laptop Feasible) ---
     """
 
-    num_simulations: int = Field(default=512, ge=1)  # Moderate simulations for speed
+    num_simulations: int = Field(default=800, ge=1)  # Moderate simulations for speed
     puct_coefficient: float = Field(default=1.5, gt=0)
     temperature_initial: float = Field(default=1.0, ge=0)
     temperature_final: float = Field(default=0.1, ge=0)
@@ -17,7 +17,7 @@ class MCTSConfig(BaseModel):
     )  # Anneal over first half of training
     dirichlet_alpha: float = Field(default=0.3, gt=0)
     dirichlet_epsilon: float = Field(default=0.25, ge=0, le=1.0)
-    max_search_depth: int = Field(default=15, ge=1)  # Reasonable depth limit
+    max_search_depth: int = Field(default=32, ge=1)  # Reasonable depth limit
 
     @field_validator("temperature_final")
     @classmethod

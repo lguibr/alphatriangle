@@ -6,11 +6,7 @@ import ray
 from pydantic import ValidationError
 
 from ..rl import SelfPlayResult, SelfPlayWorker
-
-# --- CHANGED: Import from plot_definitions ---
 from ..stats.plot_definitions import WEIGHT_UPDATE_METRIC_KEY
-
-# --- END CHANGED ---
 
 if TYPE_CHECKING:
     from .components import TrainingComponents
@@ -99,9 +95,7 @@ class WorkerManager:
         Checks for completed worker tasks using ray.wait.
         Returns a list of tuples: (worker_id, result_or_exception).
         """
-        # --- ADDED: Type annotation ---
         completed_results: list[tuple[int, SelfPlayResult | Exception]] = []
-        # --- END ADDED ---
         if not self.worker_tasks:
             return completed_results
 
@@ -134,23 +128,17 @@ class WorkerManager:
                     error_msg = f"Pydantic validation failed for result from worker {worker_idx}: {e_val}"
                     logger.error(error_msg, exc_info=False)
                     logger.debug(f"Invalid data structure received: {result_raw}")
-                    # --- FIXED: Append exception ---
                     completed_results.append((worker_idx, ValueError(error_msg)))
-                    # --- END FIXED ---
                 except Exception as e_other_val:
                     error_msg = f"Unexpected error during result validation for worker {worker_idx}: {e_other_val}"
                     logger.error(error_msg, exc_info=True)
-                    # --- FIXED: Append exception ---
                     completed_results.append((worker_idx, e_other_val))
-                    # --- END FIXED ---
 
             except ray.exceptions.RayActorError as e_actor:
                 logger.error(
                     f"Worker {worker_idx} actor failed: {e_actor}", exc_info=True
                 )
-                # --- FIXED: Append exception ---
                 completed_results.append((worker_idx, e_actor))
-                # --- END FIXED ---
                 self.workers[worker_idx] = None
                 self.active_worker_indices.discard(worker_idx)
             except Exception as e_get:
@@ -158,16 +146,14 @@ class WorkerManager:
                     f"Error getting result from worker {worker_idx} task {ref}: {e_get}",
                     exc_info=True,
                 )
-                # --- FIXED: Append exception ---
                 completed_results.append((worker_idx, e_get))
-                # --- END FIXED ---
 
-        # --- FIXED: Return type matches annotation ---
         return completed_results
-        # --- END FIXED ---
 
-    def update_worker_networks(self):
-        """Sends the latest network weights to all active workers."""
+    # --- CHANGED: Accept global_step ---
+    def update_worker_networks(self, global_step: int):
+        """Sends the latest network weights and current global_step to all active workers."""
+        # --- END CHANGED ---
         active_workers = [
             w
             for i, w in enumerate(self.workers)
@@ -175,34 +161,43 @@ class WorkerManager:
         ]
         if not active_workers:
             return
-        logger.debug("Updating worker networks...")
+        logger.debug(f"Updating worker networks for step {global_step}...")
         current_weights = self.nn.get_weights()
         weights_ref = ray.put(current_weights)
-        update_tasks = [
+        # --- CHANGED: Create separate task lists ---
+        set_weights_tasks = [
             worker.set_weights.remote(weights_ref) for worker in active_workers
         ]
-        if not update_tasks:
+        set_step_tasks = [
+            worker.set_current_trainer_step.remote(global_step)
+            for worker in active_workers
+        ]
+        # --- END CHANGED ---
+
+        all_tasks = set_weights_tasks + set_step_tasks
+        if not all_tasks:
             del weights_ref
             return
         try:
-            ray.get(update_tasks, timeout=15.0)
-            logger.debug(f"Worker networks updated for {len(active_workers)} workers.")
-            if self.stats_collector_actor:
-                # TODO: Pass global_step if needed for accurate logging
-                update_step_metric = {WEIGHT_UPDATE_METRIC_KEY: (1.0, 0)}
-                self.stats_collector_actor.log_batch.remote(update_step_metric)  # type: ignore
+            # Wait for all tasks to complete
+            ray.get(all_tasks, timeout=15.0)
+            logger.debug(
+                f"Worker networks updated for {len(active_workers)} workers to step {global_step}."
+            )
+            # Logging the update event is now handled in TrainingLoop after this call succeeds
         except ray.exceptions.RayActorError as e:
             logger.error(
-                f"A worker actor failed during weight update: {e}", exc_info=True
+                f"A worker actor failed during weight/step update: {e}", exc_info=True
             )
+            # Consider attempting to identify and remove the failed worker
         except ray.exceptions.GetTimeoutError:
-            logger.error("Timeout waiting for workers to update weights.")
+            logger.error("Timeout waiting for workers to update weights/step.")
         except Exception as e:
             logger.error(
-                f"Unexpected error updating worker networks: {e}", exc_info=True
+                f"Unexpected error updating worker networks/step: {e}", exc_info=True
             )
         finally:
-            del weights_ref
+            del weights_ref  # Ensure ref is deleted
 
     def get_num_active_workers(self) -> int:
         """Returns the number of currently active workers."""

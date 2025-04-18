@@ -30,28 +30,26 @@ class PlotDefinitions:
         # Define the layout and properties of each plot
         self._definitions: list[PlotDefinition] = [
             # Row 1
+            # --- CHANGED: x_axis_type to "index" ---
             PlotDefinition("RL/Current_Score", "Score", False, "index"),
             PlotDefinition(
                 "Rate/Episodes_Per_Sec", "Episodes/sec", False, "buffer_size"
-            ),  # X-axis: Buffer Size
+            ),
             PlotDefinition("Loss/Total", "Total Loss", True, "global_step"),
             # Row 2
             PlotDefinition("RL/Step_Reward", "Step Reward", False, "index"),
             PlotDefinition(
                 "Rate/Simulations_Per_Sec", "Sims/sec", False, "buffer_size"
-            ),  # X-axis: Buffer Size
+            ),
             PlotDefinition("Loss/Policy", "Policy Loss", True, "global_step"),
             # Row 3
             PlotDefinition("MCTS/Step_Visits", "MCTS Visits", False, "index"),
-            PlotDefinition(
-                "Buffer/Size", "Buffer Size", False, "buffer_size"
-            ),  # X-axis: Buffer Size
+            PlotDefinition("Buffer/Size", "Buffer Size", False, "buffer_size"),
             PlotDefinition("Loss/Value", "Value Loss", True, "global_step"),
             # Row 4
             PlotDefinition("MCTS/Step_Depth", "MCTS Depth", False, "index"),
-            PlotDefinition(
-                "Rate/Steps_Per_Sec", "Steps/sec", False, "global_step"
-            ),  # X-axis: Global Step
+            # --- END CHANGED ---
+            PlotDefinition("Rate/Steps_Per_Sec", "Steps/sec", False, "global_step"),
             PlotDefinition("LearningRate", "Learn Rate", True, "global_step"),
         ]
 

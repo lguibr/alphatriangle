@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class TrainConfig(BaseModel):
     """
     Configuration for the training process (Pydantic model).
-    --- TUNED FOR QUICK LOCAL TESTING ---
+    --- TUNED FOR MORE SUBSTANTIAL LEARNING RUNS ---
     """
 
     RUN_NAME: str = Field(
@@ -28,23 +28,25 @@ class TrainConfig(BaseModel):
     RANDOM_SEED: int = Field(default=42)
 
     # --- Training Loop ---
-    MAX_TRAINING_STEPS: int | None = Field(default=1000, ge=1)  # Reduced steps
+    MAX_TRAINING_STEPS: int | None = Field(default=100_000, ge=1)  # Target steps
 
     # --- Workers & Batching ---
     NUM_SELF_PLAY_WORKERS: int = Field(
-        default=4,  # Reduced workers for local testing
+        default=8,  # Default workers, capped by cores
         ge=1,
         description="Suggested number of workers. Actual number may be adjusted based on detected CPU cores.",
     )
     # --- WORKER_DEVICE: Defaults to 'cpu' for self-play workers ---
     # Workers run MCTS and NN eval; CPU is often sufficient and avoids GPU contention.
     WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="cpu")
-    BATCH_SIZE: int = Field(default=32, ge=1)  # Reduced batch size
-    BUFFER_CAPACITY: int = Field(default=1000, ge=1)  # Reduced buffer
+    BATCH_SIZE: int = Field(default=128, ge=1)  # Moderate batch size
+    BUFFER_CAPACITY: int = Field(default=200_000, ge=1)  # Larger buffer
     MIN_BUFFER_SIZE_TO_TRAIN: int = Field(
-        default=100, ge=1  # Start training much sooner
+        default=20_000, ge=1  # Start training after 10% fill
     )
-    WORKER_UPDATE_FREQ_STEPS: int = Field(default=10, ge=1)  # Update workers frequently
+    WORKER_UPDATE_FREQ_STEPS: int = Field(
+        default=100, ge=1  # Update workers every 100 steps
+    )
 
     # --- N-Step Returns ---
     N_STEP_RETURNS: int = Field(default=5, ge=1)  # 5-step returns
@@ -70,7 +72,7 @@ class TrainConfig(BaseModel):
     ENTROPY_BONUS_WEIGHT: float = Field(default=0.001, ge=0)  # Small entropy bonus
 
     # --- Checkpointing ---
-    CHECKPOINT_SAVE_FREQ_STEPS: int = Field(default=50, ge=1)  # Save frequently
+    CHECKPOINT_SAVE_FREQ_STEPS: int = Field(default=2500, ge=1)  # Save every 2500 steps
 
     # --- Prioritized Experience Replay (PER) ---
     USE_PER: bool = Field(default=True)  # Enable PER
@@ -139,12 +141,12 @@ class TrainConfig(BaseModel):
                     )
                 else:
                     # Handle invalid MAX_TRAINING_STEPS case if necessary
-                    self.LR_SCHEDULER_T_MAX = 1000  # Fallback (matches new default)
+                    self.LR_SCHEDULER_T_MAX = 100_000  # Fallback (matches new default)
                     logger.warning(
                         f"Warning: MAX_TRAINING_STEPS is invalid ({self.MAX_TRAINING_STEPS}), setting LR_SCHEDULER_T_MAX to default {self.LR_SCHEDULER_T_MAX}"
                     )
             else:
-                self.LR_SCHEDULER_T_MAX = 1000  # Fallback (matches new default)
+                self.LR_SCHEDULER_T_MAX = 100_000  # Fallback (matches new default)
                 logger.warning(
                     f"Warning: MAX_TRAINING_STEPS is None, setting LR_SCHEDULER_T_MAX to default {self.LR_SCHEDULER_T_MAX}"
                 )
@@ -178,12 +180,14 @@ class TrainConfig(BaseModel):
                     )
                 else:
                     # Handle invalid MAX_TRAINING_STEPS case if necessary
-                    self.PER_BETA_ANNEAL_STEPS = 1000  # Fallback (matches new default)
+                    self.PER_BETA_ANNEAL_STEPS = (
+                        100_000  # Fallback (matches new default)
+                    )
                     logger.warning(
                         f"Warning: MAX_TRAINING_STEPS is invalid ({self.MAX_TRAINING_STEPS}), setting PER_BETA_ANNEAL_STEPS to default {self.PER_BETA_ANNEAL_STEPS}"
                     )
             else:
-                self.PER_BETA_ANNEAL_STEPS = 1000  # Fallback (matches new default)
+                self.PER_BETA_ANNEAL_STEPS = 100_000  # Fallback (matches new default)
                 logger.warning(
                     f"Warning: MAX_TRAINING_STEPS is None, setting PER_BETA_ANNEAL_STEPS to default {self.PER_BETA_ANNEAL_STEPS}"
                 )

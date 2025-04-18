@@ -21,7 +21,11 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 # --- MOVED: Import normalize_color_for_matplotlib here ---
 from ..utils.helpers import normalize_color_for_matplotlib  # noqa: E402
-from .collector import StatsCollectorData  # noqa: E402
+
+# --- CHANGED: Import StepInfo ---
+from ..utils.types import StatsCollectorData, StepInfo  # noqa: E402
+
+# --- END CHANGED ---
 from .plot_definitions import (  # noqa: E402
     PlotDefinitions,
     WEIGHT_UPDATE_METRIC_KEY,  # Import key
@@ -37,9 +41,7 @@ class Plotter:
     Uses PlotDefinitions for layout and plot_rendering for drawing subplots.
     """
 
-    def __init__(
-        self, plot_update_interval: float = 0.5
-    ):  # Slightly longer default interval
+    def __init__(self, plot_update_interval: float = 0.75):  # Increased interval
         self.plot_surface_cache: pygame.Surface | None = None
         self.last_plot_update_time: float = 0.0
         self.plot_update_interval: float = plot_update_interval
@@ -47,9 +49,7 @@ class Plotter:
         self.plot_definitions = PlotDefinitions(self.colors)  # Instantiate definitions
 
         self.rolling_window_sizes: list[int] = [
-            5,
             10,
-            20,
             50,
             100,
             500,
@@ -58,7 +58,7 @@ class Plotter:
         ]
 
         self.fig: plt.Figure | None = None
-        self.axes: np.ndarray | None = None  # type: ignore # numpy is type-checked only
+        self.axes: np.ndarray | None = None  # type: ignore # numpy is type-checked \only
         self.last_target_size: tuple[int, int] = (0, 0)
         self.last_data_hash: int | None = None
 
@@ -176,8 +176,11 @@ class Plotter:
             try:
                 num_to_sample = min(len(dq), sample_size)
                 for i in range(-1, -num_to_sample - 1, -1):
-                    step, val = dq[i]
-                    hash_val ^= hash(step) ^ hash(f"{val:.6f}")
+                    # Hash StepInfo dict and value
+                    step_info, val = dq[i]
+                    # Simple hash for dict: hash tuple of sorted items
+                    step_info_hash = hash(tuple(sorted(step_info.items())))
+                    hash_val ^= step_info_hash ^ hash(f"{val:.6f}")
             except IndexError:
                 pass
         return hash_val
@@ -194,19 +197,23 @@ class Plotter:
             plot_defs = self.plot_definitions.get_definitions()
             num_plots = len(plot_defs)
 
-            # --- Extract weight update steps ---
+            # Extract weight update steps (global_step values)
             weight_update_steps: list[int] = []
             if WEIGHT_UPDATE_METRIC_KEY in plot_data:
                 dq = plot_data[WEIGHT_UPDATE_METRIC_KEY]
                 if dq:
-                    weight_update_steps = [step for step, _ in dq]
-            # --- End Extract ---
+                    # Extract global_step from StepInfo
+                    weight_update_steps = [
+                        step_info["global_step"]
+                        for step_info, _ in dq
+                        if "global_step" in step_info
+                    ]
 
             for i, plot_def in enumerate(plot_defs):
                 if i >= len(axes_flat):
                     break
                 ax = axes_flat[i]
-                # --- Pass weight_update_steps ---
+                # Pass weight_update_steps
                 render_subplot(
                     ax=ax,
                     plot_data=plot_data,
@@ -215,7 +222,6 @@ class Plotter:
                     rolling_window_sizes=self.rolling_window_sizes,
                     weight_update_steps=weight_update_steps,  # Pass the list
                 )
-                # --- End Pass ---
 
             for i in range(num_plots, len(axes_flat)):
                 ax = axes_flat[i]
@@ -340,7 +346,6 @@ class Plotter:
                 self._init_figure(target_width, target_height)
                 needs_update = True
 
-            # --- CHANGED: Combine nested ifs ---
             if needs_update and self.fig:
                 if self._update_plot_data(plot_data):
                     self.plot_surface_cache = self._render_figure_to_surface(
@@ -362,7 +367,6 @@ class Plotter:
                 )
                 self.last_plot_update_time = current_time
                 self.last_data_hash = current_data_hash
-            # --- END CHANGED ---
 
         except Exception as e:
             logger.error(f"[Plotter] Error in get_plot_surface: {e}", exc_info=True)

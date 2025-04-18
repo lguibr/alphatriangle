@@ -21,10 +21,11 @@ from ...mcts import (
 )
 from ...nn import NeuralNetwork
 from ...utils import get_device, set_random_seeds
+from ...utils.types import Experience, PolicyTargetMapping, StateType, StepInfo
 
 if TYPE_CHECKING:
     from ...stats import StatsCollectorActor
-    from ...utils.types import Experience, PolicyTargetMapping, StateType
+
 
 from ..types import SelfPlayResult
 
@@ -38,7 +39,7 @@ class SelfPlayWorker:
     Implements MCTS tree reuse between steps.
     Stores extracted features (StateType) and the N-STEP RETURN in the experience buffer.
     Returns a SelfPlayResult Pydantic model including aggregated stats.
-    Reports current state and step stats asynchronously.
+    Reports current state and step stats asynchronously using StepInfo including game_step and trainer_step.
     """
 
     def __init__(
@@ -48,7 +49,6 @@ class SelfPlayWorker:
         mcts_config: MCTSConfig,
         model_config: ModelConfig,
         train_config: TrainConfig,
-        # Add stats_collector_actor handle
         stats_collector_actor: "StatsCollectorActor",
         initial_weights: dict | None = None,
         seed: int | None = None,
@@ -59,7 +59,6 @@ class SelfPlayWorker:
         self.mcts_config = mcts_config
         self.model_config = model_config
         self.train_config = train_config
-        # Store the handle to the stats collector
         self.stats_collector_actor = stats_collector_actor
         self.seed = seed if seed is not None else random.randint(0, 1_000_000)
         self.worker_device_str = worker_device_str
@@ -68,8 +67,11 @@ class SelfPlayWorker:
         self.n_step = self.train_config.N_STEP_RETURNS
         self.gamma = self.train_config.GAMMA
 
+        # Store the global step of the current weights
+        self.current_trainer_step = 0
+
         # Configure logging for the worker process
-        worker_log_level = logging.INFO  # Keep INFO for workers
+        worker_log_level = logging.INFO
         log_format = (
             f"%(asctime)s [%(levelname)s] [W{self.actor_id}] %(name)s: %(message)s"
         )
@@ -77,8 +79,8 @@ class SelfPlayWorker:
         global logger
         logger = logging.getLogger(__name__)
 
-        mcts_log_level = logging.WARNING  # Reduce MCTS verbosity
-        nn_log_level = logging.WARNING  # Reduce NN verbosity
+        mcts_log_level = logging.WARNING
+        nn_log_level = logging.WARNING
         logging.getLogger("alphatriangle.mcts").setLevel(mcts_log_level)
         logging.getLogger("alphatriangle.nn").setLevel(nn_log_level)
 
@@ -88,12 +90,10 @@ class SelfPlayWorker:
 
         if self.device.type == "cuda":
             try:
-                # This is crucial for aligning PyTorch with Ray's CUDA_VISIBLE_DEVICES
                 torch.cuda.set_device(self.device)
                 logger.info(
                     f"Successfully set default CUDA device for worker {self.actor_id} to {self.device} (Index: {torch.cuda.current_device()})."
                 )
-                # Verify device count within the actor's view
                 count = torch.cuda.device_count()
                 if count != 1:
                     logger.warning(
@@ -110,14 +110,11 @@ class SelfPlayWorker:
                     f"Compilation or CUDA operations might fail.",
                     exc_info=True,
                 )
-        # --- END ADDED ---
 
-        # Initialize NeuralNetwork - it will handle its own compile logic based on config and device checks
-        # It should now succeed on CUDA because the default device is set correctly.
         self.nn_evaluator = NeuralNetwork(
             model_config=self.model_config,
             env_config=self.env_config,
-            train_config=self.train_config,  # Pass the original train_config
+            train_config=self.train_config,
             device=self.device,
         )
 
@@ -135,16 +132,21 @@ class SelfPlayWorker:
     def set_weights(self, weights: dict):
         """Updates the neural network weights."""
         try:
+            # Removed attempt to get step from weights dict
             self.nn_evaluator.set_weights(weights)
             logger.debug("Weights updated.")
         except Exception as e:
             logger.error(f"Failed to set weights: {e}", exc_info=True)
 
+    def set_current_trainer_step(self, global_step: int):
+        """Sets the global step corresponding to the current network weights."""
+        self.current_trainer_step = global_step
+        logger.debug(f"Worker {self.actor_id} trainer step set to {global_step}")
+
     def _report_current_state(self, game_state: GameState):
         """Asynchronously sends the current game state to the collector."""
         if self.stats_collector_actor:
             try:
-                # Send a copy to avoid potential issues with shared state
                 state_copy = game_state.copy()
                 self.stats_collector_actor.update_worker_game_state.remote(  # type: ignore
                     self.actor_id, state_copy
@@ -163,25 +165,21 @@ class SelfPlayWorker:
         step_reward: float,
     ):
         """
-        Asynchronously logs per-step stats (including reward, score, MCTS info)
-        to the collector using generic keys.
+        Asynchronously logs per-step stats to the collector using StepInfo,
+        including the current game_step_index and the stored current_trainer_step.
         """
         if self.stats_collector_actor:
             try:
-                step_stats = {
-                    "RL/Current_Score": (
-                        game_state.game_score,
-                        game_state.current_step,
-                    ),
-                    "MCTS/Step_Visits": (
-                        mcts_visits,
-                        game_state.current_step,
-                    ),
-                    "MCTS/Step_Depth": (
-                        mcts_depth,
-                        game_state.current_step,
-                    ),
-                    "RL/Step_Reward": (step_reward, game_state.current_step),
+                # Include current_trainer_step
+                step_info: StepInfo = {
+                    "game_step_index": game_state.current_step,
+                    "global_step": self.current_trainer_step,  # Add trainer step context
+                }
+                step_stats: dict[str, tuple[float, StepInfo]] = {
+                    "RL/Current_Score": (game_state.game_score, step_info),
+                    "MCTS/Step_Visits": (float(mcts_visits), step_info),
+                    "MCTS/Step_Depth": (float(mcts_depth), step_info),
+                    "RL/Step_Reward": (step_reward, step_info),
                 }
                 logger.debug(f"Sending step stats to collector: {step_stats}")
                 self.stats_collector_actor.log_batch.remote(step_stats)  # type: ignore
@@ -269,6 +267,7 @@ class SelfPlayWorker:
                 f"Step {game.current_step}: MCTS finished ({mcts_duration:.3f}s). Max Depth: {mcts_max_depth}, Root Visits: {root_node.visit_count}"
             )
 
+            # Log stats *before* taking the step
             self._log_step_stats_async(
                 game, root_node.visit_count, mcts_max_depth, step_reward=0.0
             )
@@ -369,13 +368,17 @@ class SelfPlayWorker:
                 )
 
             self._report_current_state(game)
+            # Log stats *after* taking the step
             self._log_step_stats_async(
-                game, root_node.visit_count, mcts_max_depth, step_reward=step_reward
+                game,
+                root_node.visit_count if root_node else 0,
+                mcts_max_depth,
+                step_reward=step_reward,
             )
 
             tree_reuse_start_time = time.monotonic()
             if not done:
-                if action in root_node.children:
+                if root_node and action in root_node.children:  # Check root_node exists
                     root_node = root_node.children[action]
                     root_node.parent = None
                     logger.debug(
@@ -383,7 +386,7 @@ class SelfPlayWorker:
                     )
                 else:
                     logger.error(
-                        f"Child node for selected action {action} not found in MCTS tree children: {list(root_node.children.keys())}. Resetting MCTS root to current game state."
+                        f"Child node for selected action {action} not found in MCTS tree children: {list(root_node.children.keys()) if root_node else 'No Root'}. Resetting MCTS root to current game state."
                     )
                     root_node = Node(state=game.copy())
             else:

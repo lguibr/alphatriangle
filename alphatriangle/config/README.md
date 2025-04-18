@@ -10,14 +10,14 @@ This module centralizes all configuration parameters for the AlphaTriangle proje
 -   **Validation Script:** The `validation.py` script instantiates all configuration models, triggering Pydantic's validation, and prints a summary.
 -   **Dynamic Defaults:** Some configurations, like `RUN_NAME` in `TrainConfig`, use `default_factory` for dynamic defaults (e.g., timestamp).
 -   **Computed Fields:** Properties like `ACTION_DIM` in `EnvConfig` or `MLFLOW_TRACKING_URI` in `PersistenceConfig` are defined using `@computed_field` for clarity.
--   **Tuned Defaults:** The default values in `TrainConfig` are now tuned for **rapid local testing** to provide quick feedback on training dynamics. For longer runs or production, these values should be increased significantly.
+-   **Tuned Defaults:** The default values in `TrainConfig` and `ModelConfig` are now tuned for **more substantial learning runs** compared to the previous quick-testing defaults.
 
 ## Exposed Interfaces
 
 -   **Pydantic Models:**
     -   `EnvConfig`: Environment parameters (grid size, shapes).
-    -   `ModelConfig`: Neural network architecture parameters.
-    -   `TrainConfig`: Training loop hyperparameters (batch size, learning rate, workers, **PER settings**, etc.). **Defaults tuned for quick testing.**
+    -   `ModelConfig`: Neural network architecture parameters. **Defaults tuned for larger capacity.**
+    -   `TrainConfig`: Training loop hyperparameters (batch size, learning rate, workers, **PER settings**, etc.). **Defaults tuned for longer runs.**
     -   `VisConfig`: Visualization parameters (screen size, FPS, layout).
     -   `PersistenceConfig`: Data saving/loading parameters (directories, filenames).
     -   `MCTSConfig`: MCTS parameters (simulations, exploration constants, temperature). - *Note: Defined in `alphatriangle.mcts.core.config` but often used alongside other configs.*

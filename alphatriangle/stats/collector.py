@@ -7,7 +7,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import ray
 
-from ..utils.types import StatsCollectorData
+# --- CHANGED: Import StepInfo ---
+from ..utils.types import StatsCollectorData, StepInfo
+
+# --- END CHANGED ---
 
 if TYPE_CHECKING:
     from ..environment import GameState
@@ -19,11 +22,14 @@ logger = logging.getLogger(__name__)
 class StatsCollectorActor:
     """
     Ray actor for collecting time-series statistics and latest worker game states.
+    Stores metrics as (StepInfo, value) tuples.
     """
 
     def __init__(self, max_history: int | None = 1000):
         self.max_history = max_history
+        # --- CHANGED: Type hint uses StepInfo ---
         self._data: StatsCollectorData = {}
+        # --- END CHANGED ---
         # Store the latest GameState reported by each worker
         self._latest_worker_states: dict[int, GameState] = {}
         self._last_state_update_time: dict[int, float] = {}
@@ -39,15 +45,17 @@ class StatsCollectorActor:
 
     # --- Metric Logging ---
 
-    def log(self, metric_name: str, value: float, step: int):
-        """Logs a single metric value."""
-        # --- ADDED: More detailed logging ---
+    # --- CHANGED: Accepts StepInfo dict ---
+    def log(self, metric_name: str, value: float, step_info: StepInfo):
+        """Logs a single metric value with its associated step information."""
         logger.debug(
-            f"Attempting to log metric='{metric_name}', value={value}, step={step}"
+            f"Attempting to log metric='{metric_name}', value={value}, step_info={step_info}"
         )
-        # --- END ADDED ---
         if not isinstance(metric_name, str):
             logger.error(f"Invalid metric_name type: {type(metric_name)}")
+            return
+        if not isinstance(step_info, dict):
+            logger.error(f"Invalid step_info type: {type(step_info)}")
             return
         if not np.isfinite(value):
             logger.warning(
@@ -55,44 +63,43 @@ class StatsCollectorActor:
             )
             return
 
-        # --- ADDED: Log before accessing/modifying deque ---
         try:
             if metric_name not in self._data:
                 logger.debug(f"Creating new deque for metric: '{metric_name}'")
                 self._data[metric_name] = deque(maxlen=self.max_history)
 
-            # Ensure step is int and value is float for consistency
-            step_int = int(step)
+            # Ensure value is float for consistency
             value_float = float(value)
-            self._data[metric_name].append((step_int, value_float))
-            # Log success after appending
+            # Store the StepInfo dict directly
+            self._data[metric_name].append((step_info, value_float))
             logger.debug(
-                f"Successfully logged metric='{metric_name}', value={value_float}, step={step_int}. Deque size: {len(self._data[metric_name])}"
+                f"Successfully logged metric='{metric_name}', value={value_float}, step_info={step_info}. Deque size: {len(self._data[metric_name])}"
             )
         except (ValueError, TypeError) as e:
             logger.error(
-                f"Could not log metric '{metric_name}'. Invalid step/value conversion: {e}"
+                f"Could not log metric '{metric_name}'. Invalid value conversion: {e}"
             )
         except Exception as e:
-            # Catch any other potential errors during deque append
             logger.error(
-                f"Unexpected error logging metric '{metric_name}' (value={value}, step={step}): {e}",
+                f"Unexpected error logging metric '{metric_name}' (value={value}, step_info={step_info}): {e}",
                 exc_info=True,
             )
-        # --- END ADDED ---
 
-    def log_batch(self, metrics: dict[str, tuple[float, int]]):
-        """Logs a batch of metrics."""
-        # --- ADDED: Logging received keys ---
+    # --- END CHANGED ---
+
+    # --- CHANGED: Accepts dict with StepInfo ---
+    def log_batch(self, metrics: dict[str, tuple[float, StepInfo]]):
+        """Logs a batch of metrics, each with its StepInfo."""
         received_keys = list(metrics.keys())
         logger.debug(
             f"Log batch received with {len(metrics)} metrics. Keys: {received_keys}"
         )
-        # --- END ADDED ---
-        for name, (value, step) in metrics.items():
-            self.log(name, value, step)  # Delegate to single log method
+        for name, (value, step_info) in metrics.items():
+            self.log(name, value, step_info)  # Delegate to single log method
 
-    # --- Game State Handling ---
+    # --- END CHANGED ---
+
+    # --- Game State Handling (No change needed) ---
 
     def update_worker_game_state(self, worker_id: int, game_state: "GameState"):
         """Stores the latest game state received from a worker."""
@@ -114,7 +121,6 @@ class StatsCollectorActor:
 
     def get_latest_worker_states(self) -> dict[int, "GameState"]:
         """Returns a shallow copy of the latest worker states dictionary."""
-        # Return a copy to prevent external modification of the internal dict
         logger.debug(
             f"get_latest_worker_states called. Returning states for workers: {list(self._latest_worker_states.keys())}"
         )
@@ -128,10 +134,13 @@ class StatsCollectorActor:
         # Return copies of deques to prevent external modification
         return {k: dq.copy() for k, dq in self._data.items()}
 
-    def get_metric_data(self, metric_name: str) -> deque[tuple[int, float]] | None:
+    # --- CHANGED: Return type uses StepInfo ---
+    def get_metric_data(self, metric_name: str) -> deque[tuple[StepInfo, float]] | None:
         """Returns a copy of the data deque for a specific metric."""
         dq = self._data.get(metric_name)
         return dq.copy() if dq else None
+
+    # --- END CHANGED ---
 
     def clear(self):
         """Clears all collected statistics and worker states."""
@@ -143,17 +152,12 @@ class StatsCollectorActor:
     def get_state(self) -> dict[str, Any]:
         """Returns the internal state for saving."""
         # Convert deques to lists for serialization compatibility with cloudpickle/json
+        # The items in the list are now (StepInfo, float) tuples
         serializable_metrics = {key: list(dq) for key, dq in self._data.items()}
 
-        # Note: GameState objects are complex and might be large.
-        # Saving them frequently might be slow and consume disk space.
-        # Consider if saving the latest worker states is truly necessary for resuming,
-        # or if just saving metrics/model/buffer is sufficient.
-        # For now, we exclude worker states from the checkpoint state.
         state = {
             "max_history": self.max_history,
             "_metrics_data_list": serializable_metrics,  # Use the list version
-            # "_latest_worker_states": self._latest_worker_states # Excluded for now
         }
         logger.info(
             f"get_state called. Returning state for {len(serializable_metrics)} metrics. Worker states NOT included."
@@ -167,21 +171,29 @@ class StatsCollectorActor:
         self._data = {}
         restored_metrics_count = 0
         for key, items_list in loaded_metrics_list.items():
+            # --- CHANGED: Validate (StepInfo, float) structure ---
             if isinstance(items_list, list) and all(
-                isinstance(item, tuple) and len(item) == 2 for item in items_list
+                isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], dict)
+                for item in items_list
             ):
-                # Ensure items are (int, float)
+                # Ensure items are (StepInfo, float)
                 valid_items = []
                 for item in items_list:
                     try:
-                        valid_items.append((int(item[0]), float(item[1])))
-                    except (ValueError, TypeError):
+                        # Basic check for StepInfo structure (can be enhanced)
+                        if not isinstance(item[0], dict):
+                            raise TypeError("StepInfo is not a dict")
+                        # Ensure value is float
+                        value = float(item[1])
+                        valid_items.append((item[0], value))  # Store StepInfo dict
+                    except (ValueError, TypeError, IndexError) as e:
                         logger.warning(
-                            f"Skipping invalid item {item} in metric '{key}' during state restore."
+                            f"Skipping invalid item {item} in metric '{key}' during state restore: {e}"
                         )
                 # Convert list back to deque with maxlen
                 self._data[key] = deque(valid_items, maxlen=self.max_history)
                 restored_metrics_count += 1
+            # --- END CHANGED ---
             else:
                 logger.warning(
                     f"Skipping restore for metric '{key}'. Invalid data format: {type(items_list)}"
