@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alphatriangle"
-version = "0.3.3"
+version = "0.4.0"
 authors = [{ name="Luis Guilherme P. M.", email="lgpelin92@gmail.com" }]
 description = "AlphaZero implementation for a triangle puzzle game."
 readme = "README.md"
