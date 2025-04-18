@@ -21,10 +21,18 @@ from ...mcts import (
 )
 from ...nn import NeuralNetwork
 from ...utils import get_device, set_random_seeds
-from ...utils.types import Experience, PolicyTargetMapping, StateType, StepInfo
+
+# --- REMOVED: Type imports moved below ---
+# from ...utils.types import Experience, PolicyTargetMapping, StateType, StepInfo
+# --- END REMOVED ---
 
 if TYPE_CHECKING:
     from ...stats import StatsCollectorActor
+
+    # --- ADDED: Type imports moved here ---
+    from ...utils.types import Experience, PolicyTargetMapping, StateType, StepInfo
+
+    # --- END ADDED ---
 
 
 from ..types import SelfPlayResult

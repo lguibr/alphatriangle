@@ -9,13 +9,9 @@ import numpy as np
 import ray
 
 from ..environment import GameState
-from ..stats.plot_definitions import WEIGHT_UPDATE_METRIC_KEY  # Import key
+from ..stats.plot_definitions import WEIGHT_UPDATE_METRIC_KEY
 from ..utils import format_eta
-
-# --- CHANGED: Import StepInfo ---
 from ..utils.types import Experience, StatsCollectorData, StepInfo
-
-# --- END CHANGED ---
 from ..visualization.core import colors
 from ..visualization.ui import ProgressBar
 
@@ -129,7 +125,6 @@ class LoopHelpers:
         sims_per_sec = sims_delta / time_delta if time_delta > 0 else 0.0
 
         if self.stats_collector_actor:
-            # --- CHANGED: Construct StepInfo and log batch ---
             step_info_buffer: StepInfo = {
                 "global_step": global_step,
                 "buffer_size": current_buffer_size,
@@ -155,7 +150,6 @@ class LoopHelpers:
                 )
             except Exception as e:
                 logger.error(f"Failed to log rate/buffer stats to collector: {e}")
-            # --- END CHANGED ---
 
         self.reset_rate_counters(global_step, episodes_played, total_simulations)
 
@@ -165,7 +159,7 @@ class LoopHelpers:
         global_step = loop_state["global_step"]
         train_progress = loop_state["train_progress"]
 
-        if global_step is 0 or global_step % 100 != 0 or not train_progress:
+        if global_step == 0 or global_step % 100 != 0 or not train_progress:
             return
 
         elapsed_time = time.time() - loop_state["start_time"]
@@ -173,12 +167,10 @@ class LoopHelpers:
         steps_per_sec = 0.0
         self._fetch_latest_stats()  # Fetch stats to get latest rate
 
-        # --- CHANGED: Extract rate value from tuple ---
         rate_dq = self.latest_stats_data.get("Rate/Steps_Per_Sec")
         if rate_dq:
             # Get the value from the last tuple (step_info, value)
             steps_per_sec = rate_dq[-1][1]
-        # --- END CHANGED ---
         elif elapsed_time > 1 and steps_since_load > 0:
             # Fallback calculation if rate not in stats yet
             steps_per_sec = steps_since_load / elapsed_time
@@ -319,8 +311,8 @@ class LoopHelpers:
         return valid_experiences, invalid_count
 
     def log_training_results_async(
-        self, loss_info: dict, global_step: int, total_simulations: int
-    ):
+        self, loss_info: dict[str, float], global_step: int, total_simulations: int
+    ) -> None:
         """
         Logs training results asynchronously to the StatsCollectorActor.
         Logs metrics with StepInfo containing global_step.
@@ -338,7 +330,6 @@ class LoopHelpers:
         )
 
         if self.stats_collector_actor:
-            # --- CHANGED: Construct StepInfo and log batch ---
             step_info: StepInfo = {"global_step": global_step}
             stats_batch: dict[str, tuple[float, StepInfo]] = {
                 "Loss/Total": (loss_info["total_loss"], step_info),
@@ -359,9 +350,8 @@ class LoopHelpers:
                 )
             except Exception as e:
                 logger.error(f"Failed to log batch to StatsCollectorActor: {e}")
-            # --- END CHANGED ---
 
-    def log_weight_update_event(self, global_step: int):
+    def log_weight_update_event(self, global_step: int) -> None:
         """Logs the event of a worker weight update with StepInfo."""
         if self.stats_collector_actor:
             try:

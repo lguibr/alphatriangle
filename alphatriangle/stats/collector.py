@@ -2,15 +2,12 @@
 import logging
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast  # Added cast
 
 import numpy as np
 import ray
 
-# --- CHANGED: Import StepInfo ---
 from ..utils.types import StatsCollectorData, StepInfo
-
-# --- END CHANGED ---
 
 if TYPE_CHECKING:
     from ..environment import GameState
@@ -27,16 +24,21 @@ class StatsCollectorActor:
 
     def __init__(self, max_history: int | None = 1000):
         self.max_history = max_history
-        # --- CHANGED: Type hint uses StepInfo ---
         self._data: StatsCollectorData = {}
-        # --- END CHANGED ---
         # Store the latest GameState reported by each worker
         self._latest_worker_states: dict[int, GameState] = {}
         self._last_state_update_time: dict[int, float] = {}
 
         # Ensure logger is configured for the actor process
         log_level = logging.INFO
-        log_format = f"%(asctime)s [%(levelname)s] [StatsCollectorActor pid={ray.get_runtime_context().get_actor_id()}] %(name)s: %(message)s"
+        # Check if runtime_context is available before using it
+        actor_id_str = "UnknownActor"
+        try:
+            if ray.is_initialized():
+                actor_id_str = ray.get_runtime_context().get_actor_id()
+        except Exception:
+            pass  # Ignore if context cannot be retrieved
+        log_format = f"%(asctime)s [%(levelname)s] [StatsCollectorActor pid={actor_id_str}] %(name)s: %(message)s"
         logging.basicConfig(level=log_level, format=log_format, force=True)
         global logger  # Re-assign logger after config
         logger = logging.getLogger(__name__)
@@ -45,7 +47,6 @@ class StatsCollectorActor:
 
     # --- Metric Logging ---
 
-    # --- CHANGED: Accepts StepInfo dict ---
     def log(self, metric_name: str, value: float, step_info: StepInfo):
         """Logs a single metric value with its associated step information."""
         logger.debug(
@@ -85,9 +86,6 @@ class StatsCollectorActor:
                 exc_info=True,
             )
 
-    # --- END CHANGED ---
-
-    # --- CHANGED: Accepts dict with StepInfo ---
     def log_batch(self, metrics: dict[str, tuple[float, StepInfo]]):
         """Logs a batch of metrics, each with its StepInfo."""
         received_keys = list(metrics.keys())
@@ -96,8 +94,6 @@ class StatsCollectorActor:
         )
         for name, (value, step_info) in metrics.items():
             self.log(name, value, step_info)  # Delegate to single log method
-
-    # --- END CHANGED ---
 
     # --- Game State Handling (No change needed) ---
 
@@ -134,13 +130,10 @@ class StatsCollectorActor:
         # Return copies of deques to prevent external modification
         return {k: dq.copy() for k, dq in self._data.items()}
 
-    # --- CHANGED: Return type uses StepInfo ---
     def get_metric_data(self, metric_name: str) -> deque[tuple[StepInfo, float]] | None:
         """Returns a copy of the data deque for a specific metric."""
         dq = self._data.get(metric_name)
         return dq.copy() if dq else None
-
-    # --- END CHANGED ---
 
     def clear(self):
         """Clears all collected statistics and worker states."""
@@ -171,13 +164,12 @@ class StatsCollectorActor:
         self._data = {}
         restored_metrics_count = 0
         for key, items_list in loaded_metrics_list.items():
-            # --- CHANGED: Validate (StepInfo, float) structure ---
             if isinstance(items_list, list) and all(
                 isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], dict)
                 for item in items_list
             ):
                 # Ensure items are (StepInfo, float)
-                valid_items = []
+                valid_items: list[tuple[StepInfo, float]] = []
                 for item in items_list:
                     try:
                         # Basic check for StepInfo structure (can be enhanced)
@@ -185,15 +177,20 @@ class StatsCollectorActor:
                             raise TypeError("StepInfo is not a dict")
                         # Ensure value is float
                         value = float(item[1])
-                        valid_items.append((item[0], value))  # Store StepInfo dict
+                        # Cast the dict to StepInfo for type safety
+                        step_info = cast("StepInfo", item[0])
+                        valid_items.append((step_info, value))
                     except (ValueError, TypeError, IndexError) as e:
                         logger.warning(
                             f"Skipping invalid item {item} in metric '{key}' during state restore: {e}"
                         )
                 # Convert list back to deque with maxlen
-                self._data[key] = deque(valid_items, maxlen=self.max_history)
+                # Cast valid_items to the expected type for deque
+                self._data[key] = deque(
+                    cast("list[tuple[StepInfo, float]]", valid_items),
+                    maxlen=self.max_history,
+                )
                 restored_metrics_count += 1
-            # --- END CHANGED ---
             else:
                 logger.warning(
                     f"Skipping restore for metric '{key}'. Invalid data format: {type(items_list)}"

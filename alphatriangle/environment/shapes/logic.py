@@ -1,9 +1,9 @@
+# File: alphatriangle/environment/shapes/logic.py
 import logging
 import random
 from typing import TYPE_CHECKING
 
-from alphatriangle.structs import SHAPE_COLORS, Shape
-
+from ...structs import SHAPE_COLORS, Shape
 from .templates import PREDEFINED_SHAPE_TEMPLATES
 
 if TYPE_CHECKING:
@@ -13,68 +13,62 @@ logger = logging.getLogger(__name__)
 
 
 def generate_random_shape(rng: random.Random) -> Shape:
-    """Generates a random shape from the predefined templates."""
+    """Generates a random shape from predefined templates and colors."""
     template = rng.choice(PREDEFINED_SHAPE_TEMPLATES)
     color = rng.choice(SHAPE_COLORS)
     return Shape(template, color)
 
 
-def refill_shape_slots(game_state: "GameState", rng: random.Random):
+def refill_shape_slots(game_state: "GameState", rng: random.Random) -> None:
     """
-    Refills ALL empty shape slots in the game state with new random shapes.
-    This is typically called only when all slots are empty.
+    Refills ALL empty shape slots in the GameState, but ONLY if ALL slots are currently empty.
+    This implements batch refilling.
     """
-    refilled_count = 0
-    for i in range(game_state.env_config.NUM_SHAPE_SLOTS):
-        if game_state.shapes[i] is None:
+    # --- CHANGED: Check if ALL slots are None ---
+    if all(shape is None for shape in game_state.shapes):
+        logger.debug("All shape slots are empty. Refilling all slots.")
+        for i in range(game_state.env_config.NUM_SHAPE_SLOTS):
             game_state.shapes[i] = generate_random_shape(rng)
-            refilled_count += 1
-    if refilled_count > 0:
-        logger.debug(f"Refilled {refilled_count} shape slots.")
+            logger.debug(f"Refilled slot {i} with {game_state.shapes[i]}")
+    else:
+        logger.debug("Not all shape slots are empty. Skipping refill.")
+    # --- END CHANGED ---
 
 
 def get_neighbors(r: int, c: int, is_up: bool) -> list[tuple[int, int]]:
-    """Gets potential neighbor coordinates for a triangle."""
+    """Gets potential neighbor coordinates for connectivity check."""
     if is_up:
-        # Up-pointing triangle neighbors: Left, Right, Below
+        # Up triangle neighbors: (r, c-1), (r, c+1), (r+1, c)
         return [(r, c - 1), (r, c + 1), (r + 1, c)]
     else:
-        # Down-pointing triangle neighbors: Left, Right, Above
+        # Down triangle neighbors: (r, c-1), (r, c+1), (r-1, c)
         return [(r, c - 1), (r, c + 1), (r - 1, c)]
 
 
-def is_shape_connected(triangles: list[tuple[int, int, bool]]) -> bool:
-    """Checks if all triangles in a shape definition are connected."""
-    if not triangles or len(triangles) == 1:
+def is_shape_connected(shape: Shape) -> bool:
+    """Checks if all triangles in a shape are connected."""
+    if not shape.triangles or len(shape.triangles) <= 1:
         return True
 
-    adj: dict[tuple[int, int], list[tuple[int, int]]] = {}
-    triangle_coords = {(r, c) for r, c, _ in triangles}
-
-    for r, c, is_up in triangles:
-        pos = (r, c)
-        if pos not in adj:
-            adj[pos] = []
-        for nr, nc in get_neighbors(r, c, is_up):
-            neighbor_pos = (nr, nc)
-            if neighbor_pos in triangle_coords:
-                if neighbor_pos not in adj:
-                    adj[neighbor_pos] = []
-                if neighbor_pos not in adj[pos]:
-                    adj[pos].append(neighbor_pos)
-                if pos not in adj[neighbor_pos]:
-                    adj[neighbor_pos].append(pos)
-
-    # Perform BFS or DFS to check connectivity
-    start_node = (triangles[0][0], triangles[0][1])
-    visited = {start_node}
+    coords_set = {(r, c) for r, c, _ in shape.triangles}
+    start_node = shape.triangles[0][:2]  # (r, c) of the first triangle
+    visited: set[tuple[int, int]] = set()
     queue = [start_node]
-    while queue:
-        node = queue.pop(0)
-        if node in adj:
-            for neighbor in adj[node]:
-                if neighbor not in visited:
-                    visited.add(neighbor)
-                    queue.append(neighbor)
+    visited.add(start_node)
 
-    return len(visited) == len(triangle_coords)
+    while queue:
+        current_r, current_c = queue.pop(0)
+        # Find the orientation of the current triangle in the shape list
+        current_is_up = False
+        for r, c, is_up in shape.triangles:
+            if r == current_r and c == current_c:
+                current_is_up = is_up
+                break
+
+        for nr, nc in get_neighbors(current_r, current_c, current_is_up):
+            neighbor_coord = (nr, nc)
+            if neighbor_coord in coords_set and neighbor_coord not in visited:
+                visited.add(neighbor_coord)
+                queue.append(neighbor_coord)
+
+    return len(visited) == len(coords_set)

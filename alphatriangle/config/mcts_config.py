@@ -7,8 +7,9 @@ class MCTSConfig(BaseModel):
     Configuration for Monte Carlo Tree Search (Pydantic model).
     --- TUNED FOR INCREASED EXPLORATION & DEPTH ---
     """
-    num_simulations: int = Field(default=1536, ge=1)
-    puct_coefficient: float = Field(default=2.5, gt=0)
+
+    num_simulations: int = Field(default=2048, ge=1)
+    puct_coefficient: float = Field(default=2.0, gt=0)
     temperature_initial: float = Field(default=1.0, ge=0)
     temperature_final: float = Field(default=0.1, ge=0)
     temperature_anneal_steps: int = Field(default=100, ge=0)

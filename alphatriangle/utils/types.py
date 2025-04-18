@@ -1,7 +1,6 @@
 # File: alphatriangle/utils/types.py
 from collections import deque
 from collections.abc import Mapping
-from typing import Any  # Added Any
 
 import numpy as np
 from typing_extensions import TypedDict

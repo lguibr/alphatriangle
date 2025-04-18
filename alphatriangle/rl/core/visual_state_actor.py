@@ -1,3 +1,4 @@
+# File: alphatriangle/rl/core/visual_state_actor.py
 import logging
 import time
 from typing import Any
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 class VisualStateActor:
     """A simple Ray actor to hold the latest game states from workers for visualization."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.worker_states: dict[int, GameState] = {}
         self.global_stats: dict[str, Any] = {}
         self.last_update_times: dict[int, float] = {}

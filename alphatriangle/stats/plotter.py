@@ -23,12 +23,12 @@ import matplotlib.pyplot as plt  # noqa: E402
 from ..utils.helpers import normalize_color_for_matplotlib  # noqa: E402
 
 # --- CHANGED: Import StepInfo ---
-from ..utils.types import StatsCollectorData, StepInfo  # noqa: E402
+from ..utils.types import StatsCollectorData  # noqa: E402
 
 # --- END CHANGED ---
 from .plot_definitions import (  # noqa: E402
-    PlotDefinitions,
     WEIGHT_UPDATE_METRIC_KEY,  # Import key
+    PlotDefinitions,
 )
 from .plot_rendering import render_subplot  # Import subplot rendering logic
 

@@ -1,16 +1,15 @@
 # File: alphatriangle/stats/plot_rendering.py
 import logging
 from collections import deque
-from typing import TYPE_CHECKING, Any  # Added Any
+from typing import TYPE_CHECKING  # Added cast
 
 import matplotlib.pyplot as plt
-import numpy as np  # Import numpy for interpolation
+import numpy as np
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 from ..utils.types import StepInfo
 from .plot_definitions import PlotDefinition
 from .plot_utils import calculate_rolling_average, format_value
-
 
 if TYPE_CHECKING:
     from .collector import StatsCollectorData
@@ -148,8 +147,11 @@ def render_subplot(
                 break
 
         # Determine scatter size/alpha based on best_window
-        max_scatter_size = 10
-        min_scatter_size = 1
+        # Initialize as float
+        scatter_size: float = 0.0
+        scatter_alpha: float = 0.0
+        max_scatter_size = 10.0  # Use float
+        min_scatter_size = 1.0  # Use float
         max_scatter_alpha = 0.3
         min_scatter_alpha = 0.03
         max_window_for_interp = float(max(rolling_window_sizes))
@@ -162,11 +164,14 @@ def render_subplot(
             scatter_alpha = min_scatter_alpha
         else:
             interp_fraction = best_window / max_window_for_interp
-            scatter_size = np.interp(
-                interp_fraction, [0, 1], [max_scatter_size, min_scatter_size]
+            # Cast result of np.interp to float
+            scatter_size = float(
+                np.interp(interp_fraction, [0, 1], [max_scatter_size, min_scatter_size])
             )
-            scatter_alpha = np.interp(
-                interp_fraction, [0, 1], [max_scatter_alpha, min_scatter_alpha]
+            scatter_alpha = float(
+                np.interp(
+                    interp_fraction, [0, 1], [max_scatter_alpha, min_scatter_alpha]
+                )
             )
 
         # Plot raw data with dynamic size/alpha
@@ -175,7 +180,7 @@ def render_subplot(
             y_data,
             color=color_mpl,
             alpha=scatter_alpha,
-            s=scatter_size,
+            s=scatter_size,  # Pass float size
             label="_nolegend_",
             zorder=2,
         )
@@ -203,32 +208,32 @@ def render_subplot(
 
         # Draw vertical lines by mapping global_step to current x-axis value
         if weight_update_steps and step_info_list:
-            plotted_line_x_values = set()
+            plotted_line_x_values: set[float] = set()  # Store plotted x-values as float
             for update_global_step in weight_update_steps:
                 x_index_for_line = _find_closest_index_for_global_step(
                     update_global_step, step_info_list
                 )
 
                 if x_index_for_line is not None and x_index_for_line < len(x_data):
-                    # --- CHANGED: Determine x-coordinate based on axis type ---
+                    actual_x_value: int | float
                     if x_axis_type == "index":
-                        actual_x_value = x_index_for_line  # Use the index directly
+                        actual_x_value = x_index_for_line  # int
                     else:
-                        actual_x_value = x_data[
-                            x_index_for_line
-                        ]  # Use value from x_data
-                    # --- END CHANGED ---
+                        # Explicitly cast list access to int to satisfy MyPy
+                        actual_x_value = int(x_data[x_index_for_line])  # int
 
-                    if actual_x_value not in plotted_line_x_values:
+                    # Cast to float for axvline and check if already plotted
+                    actual_x_float = float(actual_x_value)
+                    if actual_x_float not in plotted_line_x_values:
                         ax.axvline(
-                            x=actual_x_value,
+                            x=actual_x_float,  # Pass float
                             color="black",
                             linestyle="-",
                             linewidth=0.7,
                             alpha=0.5,
                             zorder=10,
                         )
-                        plotted_line_x_values.add(actual_x_value)
+                        plotted_line_x_values.add(actual_x_float)
                 else:
                     logger.debug(
                         f"Could not map global_step {update_global_step} to an index for plot '{label}'"

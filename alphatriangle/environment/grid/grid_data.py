@@ -5,8 +5,6 @@ import logging
 import numpy as np
 
 from ...config import EnvConfig
-
-# Import NO_COLOR_ID from the structs package directly
 from ...structs import NO_COLOR_ID
 
 logger = logging.getLogger(__name__)
@@ -55,7 +53,6 @@ def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
                 while is_valid_playable(cr, cc - 1):
                     cc -= 1
                 # Trace right from the start
-                # start_col = cc # Removed unused variable
                 while is_valid_playable(cr, cc):
                     if (cr, cc, "h") not in visited_in_line:
                         current_line_h.append((cr, cc))
@@ -80,7 +77,6 @@ def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
                     else:
                         break
                 # Trace forwards
-                # start_r, start_c = cr, cc # Removed unused variables
                 while is_valid_playable(cr, cc):
                     if (cr, cc, "d1") not in visited_in_line:
                         current_line_d1.append((cr, cc))
@@ -106,7 +102,6 @@ def _precompute_lines(config: EnvConfig) -> list[list[tuple[int, int]]]:
                     else:
                         break
                 # Trace forwards
-                # start_r, start_c = cr, cc # Removed unused variables
                 while is_valid_playable(cr, cc):
                     if (cr, cc, "d2") not in visited_in_line:
                         current_line_d2.append((cr, cc))
@@ -185,7 +180,7 @@ class GridData:
                 if not (playable_start_col <= c < playable_end_col):
                     self._death_np[r, c] = True
 
-    def _initialize_lines_and_index(self):
+    def _initialize_lines_and_index(self) -> None:
         """
         Precomputes potential lines (as coordinate sets) and creates a map
         from coordinates to the lines they belong to.

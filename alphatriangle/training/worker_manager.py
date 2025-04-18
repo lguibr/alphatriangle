@@ -6,7 +6,6 @@ import ray
 from pydantic import ValidationError
 
 from ..rl import SelfPlayResult, SelfPlayWorker
-from ..stats.plot_definitions import WEIGHT_UPDATE_METRIC_KEY
 
 if TYPE_CHECKING:
     from .components import TrainingComponents

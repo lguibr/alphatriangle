@@ -9,14 +9,14 @@ This submodule defines the logic for managing placeable shapes within the game e
 -   **Shape Templates:** The [`templates.py`](templates.py) file contains the `PREDEFINED_SHAPE_TEMPLATES` list, which defines the geometry of all possible shapes used in the game. **This list should not be modified.**
 -   **Shape Logic:** The [`logic.py`](logic.py) module (exposed as `ShapeLogic`) contains functions related to shapes:
     -   `generate_random_shape`: Creates a new `Shape` instance by randomly selecting a template from `PREDEFINED_SHAPE_TEMPLATES` and assigning a random color (using `SHAPE_COLORS` from [`alphatriangle.structs`](../../structs/README.md)).
-    -   `refill_shape_slots`: **Refills ALL empty shape slots** in the `GameState` with new random shapes. This function is now typically called only when all shape slots have become empty after pieces are placed.
+    -   `refill_shape_slots`: **Refills ALL empty shape slots** in the `GameState`, but **only if ALL slots are currently empty**. This implements batch refilling.
 
 ## Exposed Interfaces
 
 -   **Modules/Namespaces:**
     -   `logic` (often imported as `ShapeLogic`):
         -   `generate_random_shape(rng: random.Random) -> Shape`
-        -   `refill_shape_slots(game_state: GameState, rng: random.Random)` **(Refills all empty slots)**
+        -   `refill_shape_slots(game_state: GameState, rng: random.Random)` **(Refills all slots only if all are empty)**
 -   **Constants:**
     -   `PREDEFINED_SHAPE_TEMPLATES` (from `templates.py`): The list of shape geometries.
 

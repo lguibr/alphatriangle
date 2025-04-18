@@ -42,7 +42,8 @@ class TrainConfig(BaseModel):
     BATCH_SIZE: int = Field(default=128, ge=1)  # Moderate batch size
     BUFFER_CAPACITY: int = Field(default=200_000, ge=1)  # Larger buffer
     MIN_BUFFER_SIZE_TO_TRAIN: int = Field(
-        default=20_000, ge=1  # Start training after 10% fill
+        default=20_000,
+        ge=1,  # Start training after 10% fill
     )
     WORKER_UPDATE_FREQ_STEPS: int = Field(default=500, ge=1)
 

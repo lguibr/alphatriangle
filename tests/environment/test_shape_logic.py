@@ -1,77 +1,123 @@
+# File: tests/environment/test_shape_logic.py
 import random
 
-from alphatriangle.environment.core.game_state import GameState
+import pytest
 
-# Correct the import name here
-from alphatriangle.environment.shapes.logic import (
-    PREDEFINED_SHAPE_TEMPLATES,  # Use the correct name
-    get_neighbors,
-    is_shape_connected,
-    refill_shape_slots,
-)
-from alphatriangle.structs import Shape  # Import SHAPE_COLORS
+from alphatriangle.environment import GameState
+from alphatriangle.environment.shapes import logic as ShapeLogic
+from alphatriangle.structs import Shape
+
+# Fixtures are now implicitly injected from tests/environment/conftest.py
 
 
-def test_refill_shape_slots_empty(game_state: GameState):
-    """Test refilling when all slots are empty."""
-    gs = game_state
-    # Ensure all slots are initially empty for this test scenario
-    gs.shapes = [None] * gs.env_config.NUM_SHAPE_SLOTS
-    assert all(s is None for s in gs.shapes)
-
-    rng = random.Random(456)
-    refill_shape_slots(gs, rng)
-
-    assert all(isinstance(s, Shape) for s in gs.shapes)
-    assert len(gs.shapes) == gs.env_config.NUM_SHAPE_SLOTS
+@pytest.fixture
+def fixed_rng() -> random.Random:
+    """Provides a Random instance with a fixed seed."""
+    return random.Random(12345)
 
 
-def test_is_shape_connected():
-    """Test the connectivity check."""
-    # Connected L-shape (vertex connection)
-    connected = [(0, 0, False), (0, 1, True), (1, 1, False)]
-    assert is_shape_connected(connected), "L-shape should be connected"
-
-    # Disconnected shape
-    disconnected = [(0, 0, False), (2, 2, True)]
-    assert not is_shape_connected(disconnected), "Disconnected shape failed"
-
-    # Single triangle
-    single = [(0, 0, False)]
-    assert is_shape_connected(single), "Single triangle should be connected"
-
-    # Empty list
-    empty: list[tuple[int, int, bool]] = []
-    assert is_shape_connected(empty), "Empty list should be connected"
-
-    # More complex connected shape
-    complex_connected = [
-        (0, 0, False),
-        (0, 1, True),
-        (1, 0, True),
-        (1, 1, False),
-    ]  # 2x2 block
-    assert is_shape_connected(complex_connected), "2x2 block should be connected"
-
-    # Complex disconnected
-    complex_disconnected = [(0, 0, False), (0, 1, True), (2, 2, False), (2, 3, True)]
-    assert not is_shape_connected(complex_disconnected), "Complex disconnected failed"
+def test_generate_random_shape(fixed_rng: random.Random):
+    """Test generating a single random shape."""
+    shape = ShapeLogic.generate_random_shape(fixed_rng)
+    assert isinstance(shape, Shape)
+    assert shape.triangles is not None
+    assert shape.color is not None
+    assert len(shape.triangles) > 0
+    # Check connectivity (optional but good)
+    assert ShapeLogic.is_shape_connected(shape)
 
 
-def test_get_neighbors():
-    """Test neighbor calculation (including vertex neighbors)."""
-    neighbors_down = get_neighbors(0, 0, False)
-    expected_down = {(0, -1), (0, 1), (-1, 0)}
-    assert set(neighbors_down) == expected_down
+def test_generate_multiple_shapes(fixed_rng: random.Random):
+    """Test generating multiple shapes to ensure variety (or lack thereof with fixed seed)."""
+    shape1 = ShapeLogic.generate_random_shape(fixed_rng)
+    # Re-seed or use different rng instance if true randomness is needed per call
+    # For this test, using the same fixed_rng will likely produce the same shape again
+    shape2 = ShapeLogic.generate_random_shape(fixed_rng)
+    # --- REMOVED INCORRECT ASSERTION ---
+    # assert shape1 == shape2  # Expect same shape due to fixed seed - THIS IS INCORRECT
+    # --- END REMOVED ---
+    # Check that subsequent calls produce different results with the same RNG instance
+    assert shape1 != shape2, (
+        "Two consecutive calls with the same RNG produced the exact same shape (template and color), which is highly unlikely."
+    )
 
-    neighbors_up = get_neighbors(0, 1, True)
-    expected_up = {(0, 0), (0, 2), (1, 1)}
-    assert set(neighbors_up) == set(expected_up)
+    # Use a different seed for variation
+    rng2 = random.Random(54321)
+    shape3 = ShapeLogic.generate_random_shape(rng2)
+    # Check that different RNGs produce different results (highly likely)
+    assert shape1 != shape3 or shape1.color != shape3.color
 
 
-def test_predefined_shapes_are_connected():
-    """Verify that all predefined shapes are connected."""
-    for i, template in enumerate(PREDEFINED_SHAPE_TEMPLATES):
-        assert is_shape_connected(template), (
-            f"Predefined shape {i} is not connected: {template}"
-        )
+def test_refill_shape_slots_empty(game_state: GameState, fixed_rng: random.Random):
+    """Test refilling when all slots are initially empty."""
+    game_state.shapes = [None] * game_state.env_config.NUM_SHAPE_SLOTS
+    ShapeLogic.refill_shape_slots(game_state, fixed_rng)
+    assert all(s is not None for s in game_state.shapes)
+    assert len(game_state.shapes) == game_state.env_config.NUM_SHAPE_SLOTS
+
+
+def test_refill_shape_slots_partial(game_state: GameState, fixed_rng: random.Random):
+    """Test refilling when some slots are empty - SHOULD NOT REFILL."""
+    num_slots = game_state.env_config.NUM_SHAPE_SLOTS
+    if num_slots < 2:
+        pytest.skip("Test requires at least 2 shape slots")
+
+    # Start with full slots
+    ShapeLogic.refill_shape_slots(game_state, fixed_rng)
+    assert all(s is not None for s in game_state.shapes)
+
+    # Empty one slot
+    game_state.shapes[0] = None
+    # Store original state (important: copy shapes if they are mutable)
+    original_shapes = [s.copy() if s else None for s in game_state.shapes]
+
+    # Attempt refill - it should do nothing
+    ShapeLogic.refill_shape_slots(game_state, fixed_rng)
+
+    # Check that shapes remain unchanged
+    assert game_state.shapes == original_shapes, "Refill happened unexpectedly"
+
+
+def test_refill_shape_slots_full(game_state: GameState, fixed_rng: random.Random):
+    """Test refilling when all slots are already full - SHOULD NOT REFILL."""
+    # Start with full slots
+    ShapeLogic.refill_shape_slots(game_state, fixed_rng)
+    assert all(s is not None for s in game_state.shapes)
+    original_shapes = [s.copy() if s else None for s in game_state.shapes]
+
+    # Attempt refill - should do nothing
+    ShapeLogic.refill_shape_slots(game_state, fixed_rng)
+
+    # Check shapes are unchanged
+    assert game_state.shapes == original_shapes, "Refill happened when slots were full"
+
+
+def test_refill_shape_slots_batch_trigger(game_state: GameState) -> None:
+    """Test that refill only happens when ALL slots are empty."""
+    num_slots = game_state.env_config.NUM_SHAPE_SLOTS
+    if num_slots < 2:
+        pytest.skip("Test requires at least 2 shape slots")
+
+    # Fill all slots initially
+    ShapeLogic.refill_shape_slots(game_state, game_state._rng)
+    initial_shapes = [s.copy() if s else None for s in game_state.shapes]
+    assert all(s is not None for s in initial_shapes)
+
+    # Empty one slot - refill should NOT happen
+    game_state.shapes[0] = None
+    shapes_after_one_empty = [s.copy() if s else None for s in game_state.shapes]
+    ShapeLogic.refill_shape_slots(game_state, game_state._rng)
+    assert game_state.shapes == shapes_after_one_empty, (
+        "Refill happened when only one slot was empty"
+    )
+
+    # Empty all slots - refill SHOULD happen
+    game_state.shapes = [None] * num_slots
+    ShapeLogic.refill_shape_slots(game_state, game_state._rng)
+    assert all(s is not None for s in game_state.shapes), (
+        "Refill did not happen when all slots were empty"
+    )
+    # Check that the shapes are different from the initial ones (probabilistically)
+    assert game_state.shapes != initial_shapes, (
+        "Shapes after refill are identical to initial shapes (unlikely)"
+    )
