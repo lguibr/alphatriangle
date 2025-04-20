@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alphatriangle"
-version = "0.7.0" # Incremented version for removing visualization
+version = "1.0.0" # Incremented version for removing visualization
 authors = [{ name="Luis Guilherme P. M.", email="lgpelin92@gmail.com" }]
 description = "AlphaZero implementation for a triangle puzzle game (uses trianglengin)." # Kept description
 readme = "README.md"
