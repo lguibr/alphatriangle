@@ -5,8 +5,6 @@ import ray
 from pydantic import ValidationError
 
 # Import EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
-
 # Keep alphatriangle imports
 from ..rl import SelfPlayResult, SelfPlayWorker
 

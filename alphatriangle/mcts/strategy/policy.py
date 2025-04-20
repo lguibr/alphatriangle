@@ -1,16 +1,17 @@
-# File: alphatriangle/mcts/strategy/policy.py
 import logging
 import random
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 # Import EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
-
 # Keep alphatriangle imports
 from ...utils.types import ActionType
 from ..core.node import Node
 from ..core.types import ActionPolicyMapping
+
+if TYPE_CHECKING:
+    from trianglengin.config import EnvConfig
 
 logger = logging.getLogger(__name__)
 rng = np.random.default_rng()

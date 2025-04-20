@@ -1,14 +1,13 @@
-# File: alphatriangle/mcts/strategy/expansion.py
 import logging
 from typing import TYPE_CHECKING
 
 # Import GameState from trianglengin
-from trianglengin.core.environment import GameState
-
 # Keep alphatriangle utils types for now
-from ...utils.types import ActionType
 from ..core.node import Node
 from ..core.types import ActionPolicyMapping
+
+if TYPE_CHECKING:
+    from ...utils.types import ActionType
 
 logger = logging.getLogger(__name__)
 

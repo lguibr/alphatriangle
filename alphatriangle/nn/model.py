@@ -1,11 +1,14 @@
-# File: alphatriangle/nn/model.py
 import math
 from typing import cast
 
 import torch
 import torch.nn as nn
 
-from ..config import EnvConfig, ModelConfig
+# Import EnvConfig from trianglengin
+from trianglengin.config import EnvConfig
+
+# Keep alphatriangle ModelConfig import
+from ..config import ModelConfig
 
 # --- REMOVED: Incorrect self-import ---
 # from .model import AlphaTriangleNet
@@ -130,7 +133,9 @@ class AlphaTriangleNet(nn.Module):
     Supports Distributional Value Head (C51).
     """
 
-    def __init__(self, model_config: ModelConfig, env_config: EnvConfig):
+    def __init__(
+        self, model_config: ModelConfig, env_config: EnvConfig
+    ):  # Uses trianglengin.EnvConfig
         super().__init__()
         self.model_config = model_config
         self.env_config = env_config

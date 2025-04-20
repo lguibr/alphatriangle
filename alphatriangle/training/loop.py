@@ -1,23 +1,24 @@
-
 import logging
-import queue # Keep queue for type hint check, but remove usage
 import threading
 import time
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
 from ..rl import SelfPlayResult
+
 # REMOVE ProgressBar import
 from .loop_helpers import LoopHelpers
 from .worker_manager import WorkerManager
 
 if TYPE_CHECKING:
+    import numpy as np
+
     from ..utils.types import PERBatchSample
+
     # REMOVE ProgressBar import
     from .components import TrainingComponents
 
 logger = logging.getLogger(__name__)
+
 
 class TrainingLoop:
     """
@@ -53,7 +54,7 @@ class TrainingLoop:
         # Pass None for visual_state_queue
         self.loop_helpers = LoopHelpers(
             components,
-            None, # Pass None for visual_state_queue
+            None,  # Pass None for visual_state_queue
             self._get_loop_state,
         )
 
@@ -182,7 +183,7 @@ class TrainingLoop:
                         f"Failed to update worker networks at step {self.global_step}: {update_err}"
                     )
 
-            if self.global_step % 50 == 0: # Keep periodic logging
+            if self.global_step % 50 == 0:  # Keep periodic logging
                 logger.info(
                     f"Step {self.global_step}: P Loss={loss_info['policy_loss']:.4f}, V Loss={loss_info['value_loss']:.4f}, Ent={loss_info['entropy']:.4f}, TD Err={loss_info['mean_td_error']:.4f}"
                 )
@@ -219,7 +220,7 @@ class TrainingLoop:
                 if self.buffer.is_ready():
                     _ = self._run_training_step()
                 else:
-                    time.sleep(0.01) # Short sleep if not training
+                    time.sleep(0.01)  # Short sleep if not training
 
                 if self.stop_requested.is_set():
                     break
@@ -252,7 +253,7 @@ class TrainingLoop:
 
                 # REMOVE visual queue update
                 # self.loop_helpers.update_visual_queue()
-                self.loop_helpers.log_progress_eta() # Keep ETA logging
+                self.loop_helpers.log_progress_eta()  # Keep ETA logging
                 self.loop_helpers.calculate_and_log_rates()
 
                 if not completed_tasks and not self.buffer.is_ready():

@@ -1,4 +1,3 @@
-# File: alphatriangle/nn/network.py
 import logging
 import sys
 from collections.abc import Mapping
@@ -8,11 +7,12 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-# Import GameState from trianglengin
+# Import GameState and EnvConfig from trianglengin
+from trianglengin.config import EnvConfig
 from trianglengin.core.environment import GameState
 
 # Keep alphatriangle imports
-from ..config import EnvConfig, ModelConfig, TrainConfig
+from ..config import ModelConfig, TrainConfig
 from ..features import extract_state_features
 from ..utils.types import ActionType, PolicyValueOutput, StateType
 from .model import AlphaTriangleNet

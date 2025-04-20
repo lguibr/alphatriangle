@@ -24,14 +24,14 @@ def mock_env_config() -> EnvConfig:
     # Use a smaller, fully playable grid for easier testing
     rows = 3
     cols = 3
-    cols_per_row = [cols] * rows
+    # Define playable range for the 3x3 grid
+    playable_range = [(0, 3), (0, 3), (0, 3)]
     # Instantiate trianglengin.EnvConfig
     return EnvConfig(
         ROWS=rows,
         COLS=cols,
-        COLS_PER_ROW=cols_per_row,
+        PLAYABLE_RANGE_PER_ROW=playable_range,
         NUM_SHAPE_SLOTS=1,
-        MIN_LINE_LENGTH=3,
     )
 
 
@@ -56,7 +56,7 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
         FC_DIMS_SHARED=[8],
         POLICY_HEAD_DIMS=[action_dim_int],
         VALUE_HEAD_DIMS=[1],
-        OTHER_NN_INPUT_FEATURES_DIM=10,
+        OTHER_NN_INPUT_FEATURES_DIM=10,  # Keep this consistent with mock_state_type
         ACTIVATION_FUNCTION="ReLU",
         USE_BATCH_NORM=True,
     )
@@ -120,6 +120,7 @@ def mock_state_type(
         mock_env_config.ROWS,
         mock_env_config.COLS,
     )
+    # Ensure OTHER_NN_INPUT_FEATURES_DIM matches mock_model_config
     other_shape = (mock_model_config.OTHER_NN_INPUT_FEATURES_DIM,)
     return {
         "grid": rng.random(grid_shape, dtype=np.float32),

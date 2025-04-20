@@ -1,18 +1,16 @@
-# File: alphatriangle/config/validation.py
 import logging
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-# Import EnvConfig and VisConfig from trianglengin
-from trianglengin.config import EnvConfig, VisConfig
+# Import EnvConfig from trianglengin
+# REMOVE DisplayConfig import
+from trianglengin.config import EnvConfig
 
 from .mcts_config import MCTSConfig
 from .model_config import ModelConfig
 from .persistence_config import PersistenceConfig
 from .train_config import TrainConfig
-
-# REMOVE from .vis_config import VisConfig
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +27,8 @@ def print_config_info_and_validate(mcts_config_instance: MCTSConfig | None):
         "Environment": EnvConfig,  # Uses trianglengin.EnvConfig
         "Model": ModelConfig,
         "Training": TrainConfig,
-        "Visualization": VisConfig,  # Uses trianglengin.VisConfig
+        # REMOVE DisplayConfig
+        # "Display": DisplayConfig,
         "Persistence": PersistenceConfig,
         "MCTS": MCTSConfig,
     }

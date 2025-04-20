@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING
 
 import ray
@@ -13,6 +14,8 @@ from ..nn import NeuralNetwork
 from ..rl import ExperienceBuffer, Trainer
 from ..stats import StatsCollectorActor
 from .components import TrainingComponents
+
+# REMOVE VisualStateActor import
 
 if TYPE_CHECKING:
     from ..config import PersistenceConfig, TrainConfig
@@ -97,6 +100,10 @@ def setup_training_components(
 
         stats_collector_actor = StatsCollectorActor.remote(max_history=500_000)  # type: ignore
         logger.info("Initialized StatsCollectorActor with max_history=500k.")
+        # REMOVE VisualStateActor instantiation
+        # visual_state_actor = VisualStateActor.remote() # type: ignore
+        # logger.info("Initialized VisualStateActor.")
+
         # Pass trianglengin.EnvConfig to NN and Trainer
         neural_net = NeuralNetwork(model_config, env_config, train_config, device)
         buffer = ExperienceBuffer(train_config)
@@ -109,6 +116,7 @@ def setup_training_components(
             trainer=trainer,
             data_manager=data_manager,
             stats_collector_actor=stats_collector_actor,
+            # REMOVE visual_state_actor
             train_config=train_config,
             env_config=env_config,  # Store trianglengin.EnvConfig
             model_config=model_config,

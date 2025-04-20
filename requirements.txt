@@ -1,5 +1,5 @@
-# File: alphatriangle/requirements.txt
-trianglengin>=0.1.0
+# File: requirements.txt
+trianglengin>=1.0.6
 numpy>=1.20.0
 torch>=2.0.0
 torchvision>=0.11.0

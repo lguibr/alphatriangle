@@ -1,6 +1,7 @@
 # File: alphatriangle/features/extractor.py
+# File: alphatriangle/features/extractor.py
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import numpy as np
 
@@ -11,11 +12,6 @@ from trianglengin.core.environment import GameState
 from ..config import ModelConfig
 from ..utils.types import StateType  # Keep alphatriangle StateType for now
 from . import grid_features
-
-if TYPE_CHECKING:
-    # Keep GameState import here for type checking if needed elsewhere
-    # from trianglengin.core.environment import GameState
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -111,12 +107,10 @@ class GameStateFeatures:
         features[2] = np.max(heights) / rows if rows > 0 else 0
         features[3] = holes / total_playable_cells if total_playable_cells > 0 else 0
         features[4] = (bump / (cols - 1)) / rows if cols > 1 and rows > 0 else 0
-        # Access pieces_placed_this_episode directly (assuming it exists)
-        # If not, this needs adjustment based on trianglengin.GameState attributes
-        # Assuming it exists for now:
+        # Access current_step directly (assuming it exists)
         features[5] = np.clip(
-            getattr(self.gs, "pieces_placed_this_episode", 0) / 100.0, 0, 1
-        )
+            getattr(self.gs, "current_step", 0) / 1000.0, 0, 1
+        )  # Use current_step as proxy for pieces placed
 
         return cast(
             "np.ndarray", np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)

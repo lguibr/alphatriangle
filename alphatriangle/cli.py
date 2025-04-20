@@ -1,4 +1,3 @@
-# File: alphatriangle/cli.py
 import logging
 import sys
 from typing import Annotated
@@ -6,22 +5,18 @@ from typing import Annotated
 import typer
 
 # Import EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
-
 # Import alphatriangle specific configs and runner
-from alphatriangle import config, utils
 from alphatriangle.config import (
-    MCTSConfig,
     PersistenceConfig,
     TrainConfig,
 )
 
-# Import the renamed runner function
+# Import the single runner function
 from alphatriangle.training.runners import run_training
 
 app = typer.Typer(
     name="alphatriangle",
-    help="AlphaZero training pipeline for a triangle puzzle game (uses trianglengin).",  # Updated help
+    help="AlphaZero training pipeline for a triangle puzzle game (uses trianglengin).",
     add_completion=False,
 )
 
@@ -63,9 +58,6 @@ def setup_logging(log_level_str: str):
         force=True,  # Override existing config
     )
     logging.getLogger("ray").setLevel(logging.WARNING)
-    logging.getLogger("matplotlib").setLevel(
-        logging.WARNING
-    )  # Keep even if removed? Maybe for dev deps.
     # Add trianglengin logger control if needed
     logging.getLogger("trianglengin").setLevel(
         logging.INFO
@@ -78,7 +70,7 @@ def setup_logging(log_level_str: str):
 
 @app.command()
 def train(
-    # REMOVE headless option
+    # REMOVE headless option - it's always headless now
     log_level: LogLevelOption = "INFO",
     seed: SeedOption = 42,
 ):

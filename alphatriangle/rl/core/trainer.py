@@ -1,4 +1,3 @@
-# File: alphatriangle/rl/core/trainer.py
 import logging
 from typing import cast
 

@@ -1,5 +1,3 @@
-# File: alphatriangle/config/__init__.py
-# Import EnvConfig from trianglengin
 from trianglengin.config import EnvConfig
 
 from .app_config import APP_NAME
@@ -9,7 +7,7 @@ from .persistence_config import PersistenceConfig
 from .train_config import TrainConfig
 from .validation import print_config_info_and_validate
 
-# REMOVE VisConfig import
+# REMOVE DisplayConfig import
 
 __all__ = [
     "APP_NAME",
@@ -17,7 +15,7 @@ __all__ = [
     "ModelConfig",
     "PersistenceConfig",
     "TrainConfig",
-    # "VisConfig", # REMOVED
+    # "DisplayConfig", # REMOVED
     "MCTSConfig",
     "print_config_info_and_validate",
 ]

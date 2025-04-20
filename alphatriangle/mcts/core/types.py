@@ -1,6 +1,5 @@
-# File: alphatriangle/mcts/core/types.py
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 # Import GameState from trianglengin
 from trianglengin.core.environment import GameState

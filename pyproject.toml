@@ -1,3 +1,4 @@
+# File: pyproject.toml
 # File: alphatriangle/pyproject.toml
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -5,9 +6,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alphatriangle"
-version = "0.5.0" # Incremented version
+version = "0.7.0" # Incremented version for removing visualization
 authors = [{ name="Luis Guilherme P. M.", email="lgpelin92@gmail.com" }]
-description = "AlphaZero implementation for a triangle puzzle game (uses trianglengin)." # Updated description
+description = "AlphaZero implementation for a triangle puzzle game (uses trianglengin)." # Kept description
 readme = "README.md"
 license = { file="LICENSE" }
 requires-python = ">=3.10"
@@ -19,26 +20,23 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Games/Entertainment :: Puzzle Games",
-    "Development Status :: 4 - Beta", # Updated status
+    "Development Status :: 4 - Beta", # Status remains Beta
 ]
 dependencies = [
-    # --- ADDED Dependency ---
-    "trianglengin>=0.1.0", # Add the core engine dependency
-    # --- Keep RL/ML specific dependencies ---
-    # "pygame>=2.1.0", # REMOVED - Only needed for dev now
+    # --- Core Dependency ---
+    "trianglengin>=1.0.6", # Depend on the engine library
+    # --- RL/ML specific dependencies ---
     "numpy>=1.20.0",
     "torch>=2.0.0",
     "torchvision>=0.11.0",
     "cloudpickle>=2.0.0",
     "numba>=0.55.0", # Used in features
     "mlflow>=1.20.0",
-    # "matplotlib>=3.5.0", # REMOVED
     "ray>=2.8.0",
     "pydantic>=2.0.0",
     "typing_extensions>=4.0.0",
     "typer[all]>=0.9.0", # Still needed for the train CLI
-    # --- ADD TensorBoard ---
-    "tensorboard>=2.10.0", # Or appropriate version
+    "tensorboard>=2.10.0",
 ]
 
 [project.urls]
@@ -59,9 +57,9 @@ dev = [
     "build",
     "twine",
     "codecov",
-    # Add pygame/matplotlib here if needed for specific tests/dev tasks
-    "pygame>=2.1.0",
-    "matplotlib>=3.5.0",
+    # REMOVE pygame and matplotlib from dev dependencies
+    # "pygame>=2.1.0",
+    # "matplotlib>=3.5.0",
 ]
 
 
@@ -101,13 +99,15 @@ testpaths = [
 omit = [
     # Keep omissions for CLI, logging, config, types, etc.
     "alphatriangle/cli.py",
-    # REMOVE visualization omission (directory deleted)
+    # REMOVE visualization, interaction, app, structs, environment omissions
     "alphatriangle/training/logging_utils.py",
     "alphatriangle/config/*", # Keep omitting config
     "alphatriangle/data/schemas.py", # Keep omitting schemas
     "alphatriangle/utils/types.py", # Keep omitting utils/types
     "alphatriangle/mcts/core/types.py", # Keep omitting mcts/types
     "alphatriangle/rl/types.py", # Keep omitting rl/types
+    "alphatriangle/stats/collector.py", # StatsCollectorActor is hard to test fully without Ray cluster
+    # REMOVE visual_state_actor omission
     "*/__init__.py",
     "*/README.md",
     "run_*.py", # Keep omitting legacy run scripts (these should be deleted)

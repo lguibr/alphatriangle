@@ -1,3 +1,4 @@
+# File: tests/mcts/test_selection.py
 import math
 
 import pytest
@@ -320,10 +321,13 @@ def test_traverse_to_leaf_deeper(
 
     mock_child0_state: MockGameState = child0.state  # type: ignore [assignment]
     valid_gc_actions = mock_child0_state.valid_actions()
-    if 1 in valid_gc_actions:
+    # Convert set to list before checking/indexing
+    valid_gc_actions_list = list(valid_gc_actions)
+    if 1 in valid_gc_actions_list:
         preferred_gc_action = 1
-    elif valid_gc_actions:
-        preferred_gc_action = valid_gc_actions[0]
+    elif valid_gc_actions_list:
+        # Index the list, not the set
+        preferred_gc_action = valid_gc_actions_list[0]
     else:
         pytest.fail("Fixture error: Child 0 has no valid actions for grandchildren")
 

@@ -1,14 +1,17 @@
-# File: alphatriangle/training/headless_runner.py
+# File: alphatriangle/training/runner.py
 import logging
 import sys
 import traceback
-from collections import deque
 from pathlib import Path
 
 import mlflow
 import ray
 import torch
 
+# --- ADD TensorBoard ---
+from torch.utils.tensorboard import SummaryWriter
+
+# --- END ADD ---
 from ..config import APP_NAME, PersistenceConfig, TrainConfig
 from ..utils.sumtree import SumTree
 from .components import TrainingComponents
@@ -17,7 +20,7 @@ from .logging_utils import (
     log_configs_to_mlflow,
     setup_file_logging,
 )
-from .loop import TrainingLoop  # Import TrainingLoop here
+from .loop import TrainingLoop
 from .setup import count_parameters, setup_training_components
 
 logger = logging.getLogger(__name__)
@@ -50,6 +53,7 @@ def _initialize_mlflow(persist_config: PersistenceConfig, run_name: str) -> bool
 def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoop:
     """Loads initial state using DataManager and applies it to components, returning an initialized TrainingLoop."""
     loaded_state = components.data_manager.load_initial_state()
+    # Pass None for visual queue
     training_loop = TrainingLoop(components)  # Instantiate loop first
 
     if loaded_state.checkpoint_data:
@@ -113,13 +117,16 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
                 components.buffer.tree.add(max_p, exp)
             logger.info(f"PER buffer loaded. Size: {len(components.buffer)}")
         else:
+            from collections import deque  # Import locally if needed
+
             components.buffer.buffer = deque(
                 loaded_state.buffer_data.buffer_list,
                 maxlen=components.buffer.capacity,
             )
             logger.info(f"Uniform buffer loaded. Size: {len(components.buffer)}")
-        if training_loop.buffer_fill_progress:
-            training_loop.buffer_fill_progress.set_current_steps(len(components.buffer))
+        # REMOVED progress bar update
+        # if training_loop.buffer_fill_progress:
+        #     training_loop.buffer_fill_progress.set_current_steps(len(components.buffer))
     else:
         logger.info("No buffer data loaded.")
 
@@ -150,12 +157,12 @@ def _save_final_state(training_loop: TrainingLoop):
         logger.error(f"Failed to save final training state: {e_save}", exc_info=True)
 
 
-def run_training_headless_mode(
+def run_training(
     log_level_str: str,
     train_config_override: TrainConfig,
     persist_config_override: PersistenceConfig,
 ) -> int:
-    """Runs the training pipeline in headless mode."""
+    """Runs the training pipeline (headless)."""
     training_loop: TrainingLoop | None = None
     components: TrainingComponents | None = None
     exit_code = 1
@@ -163,11 +170,15 @@ def run_training_headless_mode(
     file_handler = None
     ray_initialized_by_setup = False
     mlflow_run_active = False
+    tb_writer: SummaryWriter | None = None  # ADDED
+    tb_log_dir: str | None = None  # ADDED
 
     try:
         # --- Setup File Logging ---
         log_file_path = setup_file_logging(
-            persist_config_override, train_config_override.RUN_NAME, "headless"
+            persist_config_override,
+            train_config_override.RUN_NAME,
+            "train",  # Changed suffix
         )
         log_level = logging.getLevelName(log_level_str.upper())
         logger.info(
@@ -194,11 +205,46 @@ def run_training_headless_mode(
             )
             mlflow.log_param("model_total_params", total_params)
             mlflow.log_param("model_trainable_params", trainable_params)
+            # Log log file path
+            if log_file_path:
+                try:
+                    mlflow.log_artifact(log_file_path, artifact_path="logs")
+                except Exception as log_artifact_err:
+                    logger.error(
+                        f"Failed to log log file to MLflow: {log_artifact_err}"
+                    )
         else:
             logger.warning("MLflow initialization failed, proceeding without MLflow.")
 
+        # --- Initialize TensorBoard --- ADDED ---
+        tb_log_dir = components.persist_config.get_tensorboard_log_dir()
+        if tb_log_dir:
+            Path(tb_log_dir).mkdir(parents=True, exist_ok=True)
+            tb_writer = SummaryWriter(log_dir=tb_log_dir)
+            logger.info(f"TensorBoard logging initialized. Log directory: {tb_log_dir}")
+            if mlflow_run_active:
+                try:
+                    # Log TB dir relative path within MLflow run
+                    relative_tb_path = Path(tb_log_dir).relative_to(
+                        Path(components.persist_config.get_run_base_dir()).parent
+                    )
+                    mlflow.log_param("tensorboard_log_dir", str(relative_tb_path))
+                except Exception as tb_param_err:
+                    logger.error(
+                        f"Failed to log TensorBoard path to MLflow: {tb_param_err}"
+                    )
+        else:
+            logger.warning(
+                "Could not determine TensorBoard log directory. Skipping TensorBoard."
+            )
+        # --- END ADDED ---
+
         # --- Load State & Initialize Loop ---
         training_loop = _load_and_apply_initial_state(components)
+        # --- Pass TensorBoard writer to loop helpers --- ADDED ---
+        if tb_writer:
+            training_loop.loop_helpers.set_tensorboard_writer(tb_writer)
+        # --- END ADDED ---
 
         # --- Run Training Loop ---
         training_loop.initialize_workers()
@@ -214,7 +260,7 @@ def run_training_headless_mode(
 
     except Exception as e:
         logger.critical(
-            f"An unhandled error occurred during headless training setup or execution: {e}"
+            f"An unhandled error occurred during training setup or execution: {e}"
         )
         traceback.print_exc()
         # Attempt to log failure status if MLflow run was started
@@ -246,6 +292,36 @@ def run_training_headless_mode(
         else:
             final_status = "SETUP_FAILED"
 
+        # --- Close TensorBoard Writer --- ADDED ---
+        if tb_writer:
+            try:
+                tb_writer.flush()
+                tb_writer.close()
+                logger.info("TensorBoard writer closed.")
+                # Log TB dir as artifact AFTER closing
+                # Check if components is not None before accessing persist_config
+                if (
+                    mlflow_run_active
+                    and tb_log_dir
+                    and Path(tb_log_dir).exists()
+                    and components is not None
+                ):
+                    try:
+                        mlflow.log_artifacts(
+                            tb_log_dir,
+                            artifact_path=components.persist_config.TENSORBOARD_DIR_NAME,
+                        )
+                        logger.info(
+                            f"Logged TensorBoard directory to MLflow artifacts: {components.persist_config.TENSORBOARD_DIR_NAME}"
+                        )
+                    except Exception as tb_artifact_err:
+                        logger.error(
+                            f"Failed to log TensorBoard directory to MLflow: {tb_artifact_err}"
+                        )
+            except Exception as tb_close_err:
+                logger.error(f"Error closing TensorBoard writer: {tb_close_err}")
+        # --- END ADDED ---
+
         # End MLflow run
         if mlflow_run_active:
             try:
@@ -261,7 +337,7 @@ def run_training_headless_mode(
         if ray_initialized_by_setup and ray.is_initialized():
             try:
                 ray.shutdown()
-                logger.info("Ray shut down by headless runner.")
+                logger.info("Ray shut down by runner.")
             except Exception as e:
                 logger.error(f"Error shutting down Ray: {e}", exc_info=True)
 
@@ -279,5 +355,5 @@ def run_training_headless_mode(
             except Exception as e_close:
                 print(f"Error closing log file handler: {e_close}", file=sys.__stderr__)
 
-        logger.info(f"Headless training finished with exit code {exit_code}.")
+        logger.info(f"Training finished with exit code {exit_code}.")
     return exit_code

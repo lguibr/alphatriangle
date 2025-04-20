@@ -1,4 +1,6 @@
 # File: MANIFEST.in
+# File: alphatriangle/MANIFEST.in
+# File: MANIFEST.in
 include README.md
 include LICENSE
 include requirements.txt
@@ -8,3 +10,19 @@ include .python-version
 include pyproject.toml
 global-exclude __pycache__
 global-exclude *.py[co]
+# Remove pruned directories
+prune alphatriangle/visualization
+prune alphatriangle/interaction
+# REMOVE environment and structs pruning (they are part of trianglengin now)
+# prune alphatriangle/environment
+# prune alphatriangle/structs
+# Remove pruned files
+global-exclude alphatriangle/app.py
+# Remove pruned test directories
+prune tests/visualization
+prune tests/interaction
+# REMOVE environment and structs test pruning
+# prune tests/environment
+# prune tests/structs
+# Remove pruned core files
+global-exclude alphatriangle/rl/core/visual_state_actor.py

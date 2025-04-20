@@ -5,10 +5,13 @@ import logging
 from typing import TYPE_CHECKING
 
 # Import GameState from trianglengin
-from trianglengin.core.environment import GameState
 
 # Keep ActionType from alphatriangle utils for now
-from alphatriangle.utils.types import ActionType
+
+if TYPE_CHECKING:
+    from trianglengin.core.environment import GameState
+
+    from alphatriangle.utils.types import ActionType
 
 logger = logging.getLogger(__name__)
 

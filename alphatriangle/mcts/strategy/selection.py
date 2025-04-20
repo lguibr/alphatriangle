@@ -6,7 +6,6 @@ import numpy as np
 
 # Import GameState from trianglengin (only needed for type hint if used)
 # from trianglengin.core.environment import GameState
-
 # Keep alphatriangle imports
 from ...config import MCTSConfig
 from ..core.node import Node

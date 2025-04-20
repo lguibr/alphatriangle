@@ -7,18 +7,18 @@ import ray
 from trianglengin.config import EnvConfig
 
 # Keep alphatriangle imports
-from alphatriangle.config import (
-    MCTSConfig,
-    ModelConfig,
-    PersistenceConfig,
-    TrainConfig,
-)
-from alphatriangle.data import DataManager
-from alphatriangle.nn import NeuralNetwork
-from alphatriangle.rl import ExperienceBuffer, Trainer
-from alphatriangle.stats import StatsCollectorActor  # Keep StatsCollectorActor import
 
 if TYPE_CHECKING:
+    from alphatriangle.config import (
+        MCTSConfig,
+        ModelConfig,
+        PersistenceConfig,
+        TrainConfig,
+    )
+    from alphatriangle.data import DataManager
+    from alphatriangle.nn import NeuralNetwork
+    from alphatriangle.rl import ExperienceBuffer, Trainer
+
     pass  # No changes needed here
 
 
@@ -36,3 +36,4 @@ class TrainingComponents:
     model_config: "ModelConfig"
     mcts_config: "MCTSConfig"
     persist_config: "PersistenceConfig"
+    # REMOVE visual_state_actor field

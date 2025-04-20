@@ -11,12 +11,9 @@ import ray
 from torch.utils.tensorboard import SummaryWriter
 
 # --- END ADD ---
-
 # Import GameState from trianglengin
-from trianglengin.core.environment import GameState
-
 # Keep alphatriangle imports
-from ..stats.plot_definitions import WEIGHT_UPDATE_METRIC_KEY
+# REMOVED WEIGHT_UPDATE_METRIC_KEY import (no longer plotting)
 from ..utils import format_eta
 from ..utils.types import Experience, StatsCollectorData, StepInfo
 
@@ -32,6 +29,7 @@ logger = logging.getLogger(__name__)
 STATS_FETCH_INTERVAL = 0.5
 # REMOVE VIS_STATE_FETCH_TIMEOUT
 RATE_CALCULATION_INTERVAL = 5.0
+WEIGHT_UPDATE_EVENT_KEY = "Events/Weight_Update"  # Define key for logging
 
 
 class LoopHelpers:
@@ -281,7 +279,7 @@ class LoopHelpers:
         Logs training results asynchronously to StatsCollectorActor and TensorBoard.
         """
         current_lr = self.trainer.get_current_lr()
-        loop_state = self.get_loop_state()
+        self.get_loop_state()
         # REMOVE train_progress usage
         buffer = self.components.buffer
 
@@ -346,7 +344,8 @@ class LoopHelpers:
         if self.stats_collector_actor:
             try:
                 step_info: StepInfo = {"global_step": global_step}
-                update_metric = {WEIGHT_UPDATE_METRIC_KEY: (1.0, step_info)}
+                # Use the defined key for the event
+                update_metric = {WEIGHT_UPDATE_EVENT_KEY: (1.0, step_info)}
                 self.stats_collector_actor.log_batch.remote(update_metric)  # type: ignore
                 logger.info(f"Logged worker weight update event at step {global_step}.")
             except Exception as e:
@@ -355,7 +354,7 @@ class LoopHelpers:
         if self.tb_writer:
             try:
                 # Log as a scalar event (value 1 indicates update occurred)
-                self.tb_writer.add_scalar("Events/Weight_Update", 1.0, global_step)
+                self.tb_writer.add_scalar(WEIGHT_UPDATE_EVENT_KEY, 1.0, global_step)
             except Exception as tb_err:
                 logger.error(
                     f"Failed to log weight update event to TensorBoard: {tb_err}"

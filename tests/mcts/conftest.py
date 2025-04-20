@@ -1,3 +1,4 @@
+# File: tests/mcts/conftest.py
 import random
 from collections.abc import Mapping
 
@@ -35,6 +36,7 @@ class MockGameState:
         self._valid_actions = (
             valid_actions if valid_actions is not None else list(range(action_dim_int))
         )
+        self._game_over_reason: str | None = None  # Add reason attribute
 
     def is_over(self) -> bool:
         return self._is_over
@@ -70,6 +72,11 @@ class MockGameState:
         elif self._valid_actions and random.random() < 0.5:
             self._valid_actions.pop(random.randrange(len(self._valid_actions)))
         return 0.0, self._is_over  # Return dummy reward
+
+    def force_game_over(self, reason: str):  # Add method
+        self._is_over = True
+        self._game_over_reason = reason
+        self._valid_actions = []
 
     def __hash__(self):
         return hash(
@@ -158,7 +165,7 @@ def root_node_mock_state(mock_env_config: EnvConfig) -> Node:
     return Node(state=state)  # type: ignore [arg-type]
 
 
-# ... (expanded_node_mock_state, deep_expanded_node_mock_state remain the same, using MockGameState) ...
+# ... (expanded_node_mock_state remains the same, using MockGameState) ...
 @pytest.fixture
 def expanded_node_mock_state(
     root_node_mock_state: Node, mock_evaluator: MockNetworkEvaluator
@@ -235,15 +242,17 @@ def deep_expanded_node_mock_state(
             else {}
         )
 
-    valid_gc_actions = mock_child0_state.valid_actions()
-    if 1 not in valid_gc_actions and valid_gc_actions:
-        preferred_gc_action = valid_gc_actions[0]
-    elif not valid_gc_actions:
-        pytest.skip("Child 0 has no valid actions to create grandchildren")
-    else:
+    # Convert set to list before checking/indexing
+    valid_gc_actions_list = list(mock_child0_state.valid_actions())
+    if 1 in valid_gc_actions_list:
         preferred_gc_action = 1
+    elif valid_gc_actions_list:
+        # If action 1 is not available, pick the first available action
+        preferred_gc_action = valid_gc_actions_list[0]
+    else:
+        pytest.skip("Child 0 has no valid actions to create grandchildren")
 
-    for action_gc in valid_gc_actions:
+    for action_gc in valid_gc_actions_list:
         prior_gc = policy_gc.get(action_gc, 0.0)
         grandchild_state = MockGameState(
             current_step=2, valid_actions=[0], env_config=mock_child0_state.env_config

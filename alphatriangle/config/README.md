@@ -1,9 +1,9 @@
-# File: alphatriangle/config/README.md
+
 # Configuration Module (`alphatriangle.config`)
 
 ## Purpose and Architecture
 
-This module centralizes all configuration parameters for the AlphaTriangle project. It uses separate **Pydantic models** for different aspects of the application (environment, model, training, visualization, persistence) to promote modularity, clarity, and automatic validation.
+This module centralizes all configuration parameters for the AlphaTriangle project. It uses separate **Pydantic models** for different aspects of the application (environment, model, training, persistence, MCTS) to promote modularity, clarity, and automatic validation.
 
 -   **Modularity:** Separating configurations makes it easier to manage parameters for different components.
 -   **Type Safety & Validation:** Using Pydantic models (`BaseModel`) provides strong type hinting, automatic parsing, and validation of configuration values based on defined types and constraints (e.g., `Field(gt=0)`).
@@ -15,10 +15,9 @@ This module centralizes all configuration parameters for the AlphaTriangle proje
 ## Exposed Interfaces
 
 -   **Pydantic Models:**
-    -   [`EnvConfig`](env_config.py): Environment parameters (grid size, shapes).
+    -   [`EnvConfig`](env_config.py): Environment parameters (grid size, shapes) - **Imported from `trianglengin`**.
     -   [`ModelConfig`](model_config.py): Neural network architecture parameters. **Defaults tuned for larger capacity.**
     -   [`TrainConfig`](train_config.py): Training loop hyperparameters (batch size, learning rate, workers, **PER settings**, etc.). **Defaults tuned for longer runs.**
-    -   [`VisConfig`](vis_config.py): Visualization parameters (screen size, FPS, layout).
     -   [`PersistenceConfig`](persistence_config.py): Data saving/loading parameters (directories, filenames).
     -   [`MCTSConfig`](mcts_config.py): MCTS parameters (simulations, exploration constants, temperature).
 -   **Constants:**
@@ -31,6 +30,7 @@ This module centralizes all configuration parameters for the AlphaTriangle proje
 This module primarily defines configurations and relies heavily on **Pydantic**.
 
 -   **`pydantic`**: The core library used for defining models and validation.
+-   **`trianglengin.config`**: Imports `EnvConfig`.
 -   **Standard Libraries:** `typing`, `time`, `os`, `logging`, `pathlib`.
 
 ---

@@ -1,4 +1,3 @@
-# File: tests/stats/test_collector.py
 import logging
 from collections import deque
 
@@ -6,6 +5,8 @@ import cloudpickle
 import pytest
 import ray
 
+# Import GameState from trianglengin
+# Keep alphatriangle imports
 from alphatriangle.stats import StatsCollectorActor
 from alphatriangle.utils.types import StepInfo  # Import StepInfo
 
@@ -253,10 +254,15 @@ def test_get_set_state(stats_actor):
 class MockGameStateForStats:
     def __init__(self, step: int, score: float):
         self.current_step = step
-        self.game_score = score
+        self._game_score = (
+            score  # Use internal attribute name if game_score is a method
+        )
         # Add dummy attributes expected by the check in update_worker_game_state
         self.grid_data = True
         self.shapes = True
+
+    def game_score(self) -> float:  # Add method if needed by tests
+        return self._game_score
 
 
 def test_update_and_get_worker_state(stats_actor):
@@ -273,14 +279,14 @@ def test_update_and_get_worker_state(stats_actor):
     latest_states = ray.get(stats_actor.get_latest_worker_states.remote())
     assert worker_id in latest_states
     assert latest_states[worker_id].current_step == 10
-    assert latest_states[worker_id].game_score == 5.0
+    assert latest_states[worker_id].game_score() == 5.0  # Call method
 
     # Update state again for worker 1
     ray.get(stats_actor.update_worker_game_state.remote(worker_id, state2))
     latest_states = ray.get(stats_actor.get_latest_worker_states.remote())
     assert worker_id in latest_states
     assert latest_states[worker_id].current_step == 11
-    assert latest_states[worker_id].game_score == 6.0
+    assert latest_states[worker_id].game_score() == 6.0  # Call method
 
     # Update state for worker 2
     worker_id_2 = 2

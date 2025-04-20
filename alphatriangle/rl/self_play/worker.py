@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import ray
-import torch
 
 # Import trianglengin components
 from trianglengin.config import EnvConfig
@@ -24,11 +23,11 @@ from ...mcts import (
 )
 from ...nn import NeuralNetwork
 from ...utils import get_device, set_random_seeds
-from ...utils.types import Experience, PolicyTargetMapping, StateType, StepInfo
 from ..types import SelfPlayResult
 
 if TYPE_CHECKING:
     from ...stats import StatsCollectorActor
+    from ...utils.types import Experience, PolicyTargetMapping, StateType, StepInfo
 
 logger = logging.getLogger(__name__)
 

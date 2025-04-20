@@ -1,10 +1,6 @@
-from typing import Any
-
 import pytest
 
 # Import EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
-
 # Keep alphatriangle imports
 from alphatriangle.mcts.core.node import Node
 from alphatriangle.mcts.strategy import expansion

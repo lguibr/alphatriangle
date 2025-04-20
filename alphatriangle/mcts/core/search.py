@@ -1,4 +1,3 @@
-# File: alphatriangle/mcts/core/search.py
 import concurrent.futures
 import logging
 import time
@@ -6,8 +5,6 @@ import time
 import numpy as np
 
 # Import GameState from trianglengin
-from trianglengin.core.environment import GameState
-
 # Keep alphatriangle imports
 from ...config import MCTSConfig
 from ..strategy import backpropagation, expansion, selection
