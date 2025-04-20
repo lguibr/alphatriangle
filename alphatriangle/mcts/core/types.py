@@ -1,19 +1,21 @@
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
-from ...utils.types import PolicyValueOutput
+# Import GameState from trianglengin
+from trianglengin.core.environment import GameState
 
-if TYPE_CHECKING:
-    from ...environment import GameState
-    from ...utils.types import ActionType
+# Keep alphatriangle utils types for now
+from ...utils.types import ActionType, PolicyValueOutput
 
-ActionPolicyMapping = Mapping["ActionType", float]
+ActionPolicyMapping = Mapping[ActionType, float]
 
 
 class ActionPolicyValueEvaluator(Protocol):
     """Defines the interface for evaluating a game state using a neural network."""
 
-    def evaluate(self, state: "GameState") -> PolicyValueOutput:
+    def evaluate(
+        self, state: GameState
+    ) -> PolicyValueOutput:  # Uses trianglengin.GameState
         """
         Evaluates a single game state using the neural network.
 
@@ -28,7 +30,9 @@ class ActionPolicyValueEvaluator(Protocol):
         """
         ...
 
-    def evaluate_batch(self, states: list["GameState"]) -> list[PolicyValueOutput]:
+    def evaluate_batch(
+        self, states: list[GameState]
+    ) -> list[PolicyValueOutput]:  # Uses trianglengin.GameState
         """
         Evaluates a batch of game states using the neural network.
         (Optional but recommended for performance if MCTS supports batch evaluation).

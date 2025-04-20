@@ -1,4 +1,4 @@
-# File: alphatriangle/rl/core/README.md
+
 # RL Core Submodule (`alphatriangle.rl.core`)
 
 ## Purpose and Architecture
@@ -29,7 +29,8 @@ This submodule contains core classes directly involved in the reinforcement lear
 
 ## Dependencies
 
--   **[`alphatriangle.config`](../../config/README.md)**: `TrainConfig`, `EnvConfig`, `ModelConfig`.
+-   **[`alphatriangle.config`](../../config/README.md)**: `TrainConfig`, `ModelConfig`.
+-   **[`trianglengin.config`](../../config/README.md)**: `EnvConfig`.
 -   **[`alphatriangle.nn`](../../nn/README.md)**: `NeuralNetwork`.
 -   **[`alphatriangle.utils`](../../utils/README.md)**: Types (`Experience`, `PERBatchSample`, `StateType`, etc.) and helpers (`SumTree`).
 -   **`torch`**: Used heavily by `Trainer`.

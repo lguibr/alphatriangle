@@ -1,6 +1,5 @@
-# File: alphatriangle/nn/network.py
 import logging
-import sys  # Import sys for platform check
+import sys
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
@@ -8,8 +7,12 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from ..config import EnvConfig, ModelConfig, TrainConfig
-from ..environment import GameState
+# Import GameState and EnvConfig from trianglengin
+from trianglengin.config import EnvConfig
+from trianglengin.core.environment import GameState
+
+# Keep alphatriangle imports
+from ..config import ModelConfig, TrainConfig
 from ..features import extract_state_features
 from ..utils.types import ActionType, PolicyValueOutput, StateType
 from .model import AlphaTriangleNet
@@ -36,14 +39,15 @@ class NeuralNetwork:
     def __init__(
         self,
         model_config: ModelConfig,
-        env_config: EnvConfig,
+        env_config: EnvConfig,  # Uses trianglengin.EnvConfig
         train_config: TrainConfig,
         device: torch.device,
     ):
         self.model_config = model_config
-        self.env_config = env_config
+        self.env_config = env_config  # Store trianglengin.EnvConfig
         self.train_config = train_config
         self.device = device
+        # Pass trianglengin.EnvConfig to model
         self.model = AlphaTriangleNet(model_config, env_config).to(device)
         self.action_dim = env_config.ACTION_DIM
         self.model.eval()
@@ -56,21 +60,14 @@ class NeuralNetwork:
             self.v_min, self.v_max, self.num_atoms, device=self.device
         )
 
-        # --- ADDED: Check for Windows/MPS before attempting compile ---
         if self.train_config.COMPILE_MODEL:
-            # --- ADDED: Skip compilation entirely on Windows due to Triton dependency ---
             if sys.platform == "win32":
                 logger.warning(
-                    "Model compilation requested but running on Windows. "
-                    "Skipping torch.compile() as the default CUDA backend (Inductor) requires Triton, "
-                    "which is not officially supported on Windows. Proceeding with eager execution."
+                    "Model compilation requested but running on Windows. Skipping torch.compile()."
                 )
-            # --- END ADDED ---
             elif self.device.type == "mps":
                 logger.warning(
-                    "Model compilation requested but device is 'mps'. "
-                    "Skipping torch.compile() due to known compatibility issues with this backend. "
-                    "Proceeding with eager execution."
+                    "Model compilation requested but device is 'mps'. Skipping torch.compile()."
                 )
             elif hasattr(torch, "compile"):
                 try:
@@ -83,9 +80,7 @@ class NeuralNetwork:
                     )
                 except Exception as e:
                     logger.warning(
-                        f"torch.compile() failed on device '{self.device}': {e}. "
-                        f"Proceeding without compilation (using eager mode). "
-                        f"Compilation might not be supported for this model/backend combination.",
+                        f"torch.compile() failed on device '{self.device}': {e}. Proceeding without compilation.",
                         exc_info=False,
                     )
             else:
@@ -96,10 +91,9 @@ class NeuralNetwork:
             logger.info(
                 "Model compilation skipped (COMPILE_MODEL=False in TrainConfig)."
             )
-        # --- END ADDED ---
 
     def _state_to_tensors(self, state: GameState) -> tuple[torch.Tensor, torch.Tensor]:
-        """Extracts features from GameState and converts them to tensors."""
+        """Extracts features from trianglengin.GameState and converts them to tensors."""
         state_dict: StateType = extract_state_features(state, self.model_config)
         grid_tensor = torch.from_numpy(state_dict["grid"]).unsqueeze(0).to(self.device)
         other_features_tensor = (
@@ -118,7 +112,7 @@ class NeuralNetwork:
     def _batch_states_to_tensors(
         self, states: list[GameState]
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Extracts features from a batch of GameStates and converts to batched tensors."""
+        """Extracts features from a batch of trianglengin.GameStates and converts to batched tensors."""
         if not states:
             grid_shape = (
                 0,
@@ -154,7 +148,6 @@ class NeuralNetwork:
     def _logits_to_expected_value(self, value_logits: torch.Tensor) -> torch.Tensor:
         """Calculates the expected value from the value distribution logits."""
         value_probs = F.softmax(value_logits, dim=1)
-        # Expand support to match batch size for broadcasting
         support_expanded = self.support.expand_as(value_probs)
         expected_value = torch.sum(value_probs * support_expanded, dim=1, keepdim=True)
         return expected_value
@@ -162,7 +155,7 @@ class NeuralNetwork:
     @torch.inference_mode()
     def evaluate(self, state: GameState) -> PolicyValueOutput:
         """
-        Evaluates a single state.
+        Evaluates a single trianglengin.GameState.
         Returns policy mapping and EXPECTED value from the distribution.
         Raises NetworkEvaluationError on issues.
         """
@@ -201,9 +194,7 @@ class NeuralNetwork:
                 policy_probs /= prob_sum
 
             expected_value_tensor = self._logits_to_expected_value(value_logits)
-            expected_value_scalar = expected_value_tensor.squeeze(
-                0
-            ).item()  # Squeeze batch and atom dim, get scalar
+            expected_value_scalar = expected_value_tensor.squeeze(0).item()
 
             action_policy: Mapping[ActionType, float] = {
                 i: float(p) for i, p in enumerate(policy_probs)
@@ -228,7 +219,7 @@ class NeuralNetwork:
     @torch.inference_mode()
     def evaluate_batch(self, states: list[GameState]) -> list[PolicyValueOutput]:
         """
-        Evaluates a batch of states.
+        Evaluates a batch of trianglengin.GameStates.
         Returns a list of (policy mapping, EXPECTED value).
         Raises NetworkEvaluationError on issues.
         """
@@ -258,9 +249,7 @@ class NeuralNetwork:
 
             policy_probs = policy_probs_tensor.cpu().numpy()
             expected_values_tensor = self._logits_to_expected_value(value_logits)
-            expected_values = (
-                expected_values_tensor.squeeze(1).cpu().numpy()
-            )  # Squeeze the atom dim
+            expected_values = expected_values_tensor.squeeze(1).cpu().numpy()
 
             results: list[PolicyValueOutput] = []
             for batch_idx in range(len(states)):
@@ -279,7 +268,7 @@ class NeuralNetwork:
                 policy_i: Mapping[ActionType, float] = {
                     i: float(p) for i, p in enumerate(probs_i)
                 }
-                value_i = float(expected_values[batch_idx])  # This is now a scalar
+                value_i = float(expected_values[batch_idx])
                 results.append((policy_i, value_i))
 
         except Exception as e:
@@ -291,7 +280,6 @@ class NeuralNetwork:
 
     def get_weights(self) -> dict[str, torch.Tensor]:
         """Returns the model's state dictionary, moved to CPU."""
-        # If model is compiled, access the original model for state_dict
         model_to_save = getattr(self.model, "_orig_mod", self.model)
         return {k: v.cpu() for k, v in model_to_save.state_dict().items()}
 
@@ -299,10 +287,9 @@ class NeuralNetwork:
         """Loads the model's state dictionary from the provided weights."""
         try:
             weights_on_device = {k: v.to(self.device) for k, v in weights.items()}
-            # If model is compiled, load into the original model
             model_to_load = getattr(self.model, "_orig_mod", self.model)
             model_to_load.load_state_dict(weights_on_device)
-            self.model.eval()  # Ensure the main (potentially compiled) model is in eval mode
+            self.model.eval()
             logger.debug("NN weights set successfully.")
         except Exception as e:
             logger.error(f"Error setting weights on NN instance: {e}", exc_info=True)

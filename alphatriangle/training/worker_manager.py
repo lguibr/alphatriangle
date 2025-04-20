@@ -1,10 +1,11 @@
-# File: alphatriangle/training/worker_manager.py
 import logging
 from typing import TYPE_CHECKING
 
 import ray
 from pydantic import ValidationError
 
+# Import EnvConfig from trianglengin
+# Keep alphatriangle imports
 from ..rl import SelfPlayResult, SelfPlayWorker
 
 if TYPE_CHECKING:
@@ -37,9 +38,10 @@ class WorkerManager:
 
         for i in range(self.train_config.NUM_SELF_PLAY_WORKERS):
             try:
+                # Pass trianglengin.EnvConfig to worker
                 worker = SelfPlayWorker.options(num_cpus=1).remote(
                     actor_id=i,
-                    env_config=self.components.env_config,
+                    env_config=self.components.env_config,  # Pass trianglengin.EnvConfig
                     mcts_config=self.components.mcts_config,
                     model_config=self.components.model_config,
                     train_config=self.train_config,
@@ -58,6 +60,7 @@ class WorkerManager:
         )
         del weights_ref
 
+    # ... (submit_initial_tasks, submit_task, get_completed_tasks remain the same) ...
     def submit_initial_tasks(self):
         """Submits the first task for each active worker."""
         logger.info("Submitting initial tasks to workers...")
@@ -149,10 +152,9 @@ class WorkerManager:
 
         return completed_results
 
-    # --- CHANGED: Accept global_step ---
+    # ... (update_worker_networks, get_num_active_workers, get_num_pending_tasks, cleanup_actors remain the same) ...
     def update_worker_networks(self, global_step: int):
         """Sends the latest network weights and current global_step to all active workers."""
-        # --- END CHANGED ---
         active_workers = [
             w
             for i, w in enumerate(self.workers)
@@ -163,7 +165,6 @@ class WorkerManager:
         logger.debug(f"Updating worker networks for step {global_step}...")
         current_weights = self.nn.get_weights()
         weights_ref = ray.put(current_weights)
-        # --- CHANGED: Create separate task lists ---
         set_weights_tasks = [
             worker.set_weights.remote(weights_ref) for worker in active_workers
         ]
@@ -171,24 +172,20 @@ class WorkerManager:
             worker.set_current_trainer_step.remote(global_step)
             for worker in active_workers
         ]
-        # --- END CHANGED ---
 
         all_tasks = set_weights_tasks + set_step_tasks
         if not all_tasks:
             del weights_ref
             return
         try:
-            # Wait for all tasks to complete
             ray.get(all_tasks, timeout=120.0)
             logger.debug(
                 f"Worker networks updated for {len(active_workers)} workers to step {global_step}."
             )
-            # Logging the update event is now handled in TrainingLoop after this call succeeds
         except ray.exceptions.RayActorError as e:
             logger.error(
                 f"A worker actor failed during weight/step update: {e}", exc_info=True
             )
-            # Consider attempting to identify and remove the failed worker
         except ray.exceptions.GetTimeoutError:
             logger.error("Timeout waiting for workers to update weights/step.")
         except Exception as e:
@@ -196,7 +193,7 @@ class WorkerManager:
                 f"Unexpected error updating worker networks/step: {e}", exc_info=True
             )
         finally:
-            del weights_ref  # Ensure ref is deleted
+            del weights_ref
 
     def get_num_active_workers(self) -> int:
         """Returns the number of currently active workers."""

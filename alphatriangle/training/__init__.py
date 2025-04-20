@@ -1,10 +1,3 @@
-# File: alphatriangle/training/__init__.py
-"""
-Training module containing the pipeline, loop, components, and utilities
-for orchestrating the reinforcement learning training process.
-"""
-
-# Core components & classes
 from .components import TrainingComponents
 
 # Utilities
@@ -13,13 +6,10 @@ from .loop import TrainingLoop
 from .loop_helpers import LoopHelpers
 
 # Re-export runner functions
-from .runners import (
-    run_training_headless_mode,
-    run_training_visual_mode,
-)
-from .setup import setup_training_components
+from .runner import run_training  # Import the single runner
 
-# from .pipeline import TrainingPipeline # REMOVED
+# REMOVE visual runner import
+from .setup import setup_training_components
 from .worker_manager import WorkerManager
 
 # Explicitly define __all__
@@ -27,14 +17,12 @@ __all__ = [
     # Core Components
     "TrainingComponents",
     "TrainingLoop",
-    # "TrainingPipeline", # REMOVED
     # Helpers & Managers
     "WorkerManager",
     "LoopHelpers",
     "setup_training_components",
     # Runners (re-exported)
-    "run_training_headless_mode",
-    "run_training_visual_mode",
+    "run_training",  # Export single runner
     # Logging Utilities
     "setup_file_logging",
     "get_root_logger",

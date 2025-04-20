@@ -1,24 +1,19 @@
-# File: tests/nn/test_network.py
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import torch
 
-# Use relative imports for alphatriangle components if running tests from project root
-# or absolute imports if package is installed
-try:
-    # Try absolute imports first (for installed package)
-    from alphatriangle.config import EnvConfig, ModelConfig, TrainConfig
-    from alphatriangle.environment import GameState
-    from alphatriangle.nn import AlphaTriangleNet, NeuralNetwork
-    from alphatriangle.utils.types import StateType
-except ImportError:
-    # Fallback to relative imports (for running tests directly)
-    from alphatriangle.config import EnvConfig, ModelConfig, TrainConfig
-    from alphatriangle.environment import GameState
-    from alphatriangle.nn import AlphaTriangleNet, NeuralNetwork
-    from alphatriangle.utils.types import StateType
+# Import EnvConfig from trianglengin
+from trianglengin.config import EnvConfig
+
+# Import GameState from trianglengin
+from trianglengin.core.environment import GameState
+
+# Keep alphatriangle imports
+from alphatriangle.config import ModelConfig, TrainConfig
+from alphatriangle.nn import AlphaTriangleNet, NeuralNetwork
+from alphatriangle.utils.types import StateType
 
 # Use module-level rng from tests/conftest.py
 from tests.conftest import rng
@@ -69,7 +64,7 @@ def nn_interface(
 @pytest.fixture
 def mock_game_state(env_config: EnvConfig) -> GameState:
     """Provides a real GameState object for testing NN interface."""
-    # Use a real GameState instance
+    # Use a real GameState instance from trianglengin
     return GameState(config=env_config, initial_seed=123)
 
 

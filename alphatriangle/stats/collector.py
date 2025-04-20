@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING, Any, cast  # Added cast
 import numpy as np
 import ray
 
-from ..utils.types import StatsCollectorData, StepInfo
-
+# Correct import path for GameState
 if TYPE_CHECKING:
-    from ..environment import GameState
+    from trianglengin.core.environment import GameState
+
+from ..utils.types import StatsCollectorData, StepInfo
 
 logger = logging.getLogger(__name__)
 

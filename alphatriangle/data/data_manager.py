@@ -1,5 +1,3 @@
-# File: alphatriangle/data/data_manager.py
-# No changes needed, already expects ActorHandle | None
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any

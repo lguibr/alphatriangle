@@ -1,3 +1,4 @@
+# File: alphatriangle/config/persistence_config.py
 from pathlib import Path
 
 from pydantic import BaseModel, Field, computed_field
@@ -12,8 +13,9 @@ class PersistenceConfig(BaseModel):
 
     CHECKPOINT_SAVE_DIR_NAME: str = Field(default="checkpoints")
     BUFFER_SAVE_DIR_NAME: str = Field(default="buffers")
-    GAME_STATE_SAVE_DIR_NAME: str = Field(default="game_states")
+    # REMOVED GAME_STATE_SAVE_DIR_NAME (handled externally now)
     LOG_DIR_NAME: str = Field(default="logs")
+    TENSORBOARD_DIR_NAME: str = Field(default="tensorboard")  # ADDED
 
     LATEST_CHECKPOINT_FILENAME: str = Field(default="latest.pkl")
     BEST_CHECKPOINT_FILENAME: str = Field(default="best.pkl")
@@ -22,11 +24,10 @@ class PersistenceConfig(BaseModel):
 
     RUN_NAME: str = Field(default="default_run")
 
-    SAVE_GAME_STATES: bool = Field(default=False)
-    GAME_STATE_SAVE_FREQ_EPISODES: int = Field(default=5, ge=1)
+    # REMOVED SAVE_GAME_STATES and related freq
 
     SAVE_BUFFER: bool = Field(default=True)
-    BUFFER_SAVE_FREQ_STEPS: int = Field(default=10, ge=1)
+    BUFFER_SAVE_FREQ_STEPS: int = Field(default=1000, ge=1)  # Increased default freq
 
     @computed_field  # type: ignore[misc] # Decorator requires Pydantic v2
     @property
@@ -53,6 +54,13 @@ class PersistenceConfig(BaseModel):
             return ""  # Fallback
         abs_path = Path(self.ROOT_DATA_DIR).joinpath(self.MLFLOW_DIR_NAME).resolve()
         return str(abs_path)
+
+    def get_tensorboard_log_dir(self, run_name: str | None = None) -> str:
+        """Gets the directory for TensorBoard logs for a specific run."""
+        run_base = self.get_run_base_dir(run_name)
+        if not run_base or not hasattr(self, "TENSORBOARD_DIR_NAME"):
+            return ""  # Fallback
+        return str(Path(run_base) / self.TENSORBOARD_DIR_NAME)
 
 
 # Ensure model is rebuilt after changes

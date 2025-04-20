@@ -1,11 +1,17 @@
 import logging
 import random
+from typing import TYPE_CHECKING
 
 import numpy as np
 
+# Import EnvConfig from trianglengin
+# Keep alphatriangle imports
 from ...utils.types import ActionType
 from ..core.node import Node
 from ..core.types import ActionPolicyMapping
+
+if TYPE_CHECKING:
+    from trianglengin.config import EnvConfig
 
 logger = logging.getLogger(__name__)
 rng = np.random.default_rng()
@@ -62,7 +68,6 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
         logger.debug(
             f"[PolicySelect] Greedy selection. Best action indices: {best_action_indices}"
         )
-        # Use standard library random for tie-breaking
         chosen_index = random.choice(best_action_indices)
         selected_action = actions[chosen_index]
         logger.debug(f"[PolicySelect] Greedy action selected: {selected_action}")
@@ -102,12 +107,10 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
         logger.debug(f"  Final Probabilities Sum: {np.sum(probabilities):.6f}")
 
         try:
-            # Use NumPy's default_rng for weighted choice
             selected_action = rng.choice(actions, p=probabilities)
             logger.debug(
                 f"[PolicySelect] Sampled action (temp={temperature:.2f}): {selected_action}"
             )
-            # Ensure return type is ActionType (int)
             return int(selected_action)
         except ValueError as e:
             raise PolicyGenerationError(
@@ -120,7 +123,9 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
     Calculates the policy target distribution based on MCTS visit counts.
     Raises PolicyGenerationError if target cannot be generated.
     """
-    action_dim = int(root_node.state.env_config.ACTION_DIM)  # type: ignore[call-overload]
+    # Access EnvConfig from the node's state
+    env_config: EnvConfig = root_node.state.env_config
+    action_dim = int(env_config.ACTION_DIM)  # type: ignore[call-overload]
     full_target = dict.fromkeys(range(action_dim), 0.0)
 
     if not root_node.children or root_node.visit_count == 0:

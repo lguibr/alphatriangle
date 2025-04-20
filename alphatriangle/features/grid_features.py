@@ -1,3 +1,5 @@
+# File: alphatriangle/features/grid_features.py
+# No changes needed, operates on NumPy arrays.
 import numpy as np
 from numba import njit, prange
 

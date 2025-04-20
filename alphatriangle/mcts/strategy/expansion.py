@@ -1,13 +1,13 @@
 import logging
 from typing import TYPE_CHECKING
 
+# Import GameState from trianglengin
+# Keep alphatriangle utils types for now
+from ..core.node import Node
+from ..core.types import ActionPolicyMapping
+
 if TYPE_CHECKING:
     from ...utils.types import ActionType
-
-from ..core.node import Node
-from ..core.types import (
-    ActionPolicyMapping,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +22,15 @@ def expand_node_with_policy(node: Node, action_policy: ActionPolicyMapping):
     if node.is_expanded:
         logger.debug(f"[Expand] Attempted to expand an already expanded node: {node}")
         return
+    # Use is_over() method from trianglengin.GameState
     if node.state.is_over():
         logger.warning(f"[Expand] Attempted to expand a terminal node: {node}")
         return
 
     logger.debug(f"[Expand] Expanding Node: {node}")
 
-    # Use TYPE_CHECKING import for ActionType type hint
-    valid_actions: list[ActionType] = node.state.valid_actions()
+    # Use valid_actions() method from trianglengin.GameState
+    valid_actions: set[ActionType] = node.state.valid_actions()
     logger.debug(
         f"[Expand] Found {len(valid_actions)} valid actions for state step {node.state.current_step}."
     )
@@ -41,12 +42,8 @@ def expand_node_with_policy(node: Node, action_policy: ActionPolicyMapping):
         logger.warning(
             f"[Expand] Expanding node at step {node.state.current_step} with no valid actions but not terminal? Marking state as game over."
         )
-        if hasattr(node.state, "game_over"):
-            node.state.game_over = True
-        elif hasattr(node.state, "_is_over"):
-            node.state._is_over = True
-        else:
-            logger.error("[Expand] Cannot mark state as game over - attribute missing.")
+        # Use force_game_over method from trianglengin.GameState
+        node.state.force_game_over("Expansion found no valid actions")
         return
 
     children_created = 0
@@ -62,19 +59,20 @@ def expand_node_with_policy(node: Node, action_policy: ActionPolicyMapping):
                 f"[Expand] Valid action {action} received prior=0 from network."
             )
 
+        # Use copy() method from trianglengin.GameState
         next_state_copy = node.state.copy()
         try:
-            # Correctly unpack the (reward, done) tuple returned by step
+            # Use step() method from trianglengin.GameState
             _, done = next_state_copy.step(action)
         except Exception as e:
             logger.error(
                 f"[Expand] Error stepping state for child node expansion (action {action}): {e}",
                 exc_info=True,
             )
-            continue  # Skip creating this child if stepping fails
+            continue
 
         child = Node(
-            state=next_state_copy,
+            state=next_state_copy,  # Already a trianglengin.GameState
             parent=node,
             action_taken=action,
             prior_probability=prior,
