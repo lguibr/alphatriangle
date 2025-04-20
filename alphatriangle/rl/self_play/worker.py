@@ -1,4 +1,3 @@
-# File: alphatriangle/rl/self_play/worker.py
 import logging
 import random
 import time
@@ -7,10 +6,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import ray
-import torch  # Import torch
+import torch
 
+# Import trianglengin components
+from trianglengin.config import EnvConfig
+from trianglengin.core.environment import GameState
+
+# Import alphatriangle components
 from ...config import MCTSConfig, ModelConfig, TrainConfig
-from ...environment import EnvConfig, GameState
 from ...features import extract_state_features
 from ...mcts import (
     MCTSExecutionError,
@@ -21,21 +24,11 @@ from ...mcts import (
 )
 from ...nn import NeuralNetwork
 from ...utils import get_device, set_random_seeds
-
-# --- REMOVED: Type imports moved below ---
-# from ...utils.types import Experience, PolicyTargetMapping, StateType, StepInfo
-# --- END REMOVED ---
+from ...utils.types import Experience, PolicyTargetMapping, StateType, StepInfo
+from ..types import SelfPlayResult
 
 if TYPE_CHECKING:
     from ...stats import StatsCollectorActor
-
-    # --- ADDED: Type imports moved here ---
-    from ...utils.types import Experience, PolicyTargetMapping, StateType, StepInfo
-
-    # --- END ADDED ---
-
-
-from ..types import SelfPlayResult
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +37,13 @@ logger = logging.getLogger(__name__)
 class SelfPlayWorker:
     """
     A Ray actor responsible for running self-play episodes using MCTS and a NN.
-    Implements MCTS tree reuse between steps.
-    Stores extracted features (StateType) and the N-STEP RETURN in the experience buffer.
-    Returns a SelfPlayResult Pydantic model including aggregated stats.
-    Reports current state and step stats asynchronously using StepInfo including game_step and trainer_step.
+    Uses trianglengin.GameState.
     """
 
     def __init__(
         self,
         actor_id: int,
-        env_config: EnvConfig,
+        env_config: EnvConfig,  # Use trianglengin.EnvConfig
         mcts_config: MCTSConfig,
         model_config: ModelConfig,
         train_config: TrainConfig,
@@ -63,7 +53,7 @@ class SelfPlayWorker:
         worker_device_str: str = "cpu",
     ):
         self.actor_id = actor_id
-        self.env_config = env_config
+        self.env_config = env_config  # Store trianglengin.EnvConfig
         self.mcts_config = mcts_config
         self.model_config = model_config
         self.train_config = train_config
@@ -71,14 +61,10 @@ class SelfPlayWorker:
         self.seed = seed if seed is not None else random.randint(0, 1_000_000)
         self.worker_device_str = worker_device_str
 
-        # --- N-Step Config ---
         self.n_step = self.train_config.N_STEP_RETURNS
         self.gamma = self.train_config.GAMMA
-
-        # Store the global step of the current weights
         self.current_trainer_step = 0
 
-        # Configure logging for the worker process
         worker_log_level = logging.INFO
         log_format = (
             f"%(asctime)s [%(levelname)s] [W{self.actor_id}] %(name)s: %(message)s"
@@ -93,32 +79,9 @@ class SelfPlayWorker:
         logging.getLogger("alphatriangle.nn").setLevel(nn_log_level)
 
         set_random_seeds(self.seed)
-
         self.device = get_device(self.worker_device_str)
 
-        if self.device.type == "cuda":
-            try:
-                torch.cuda.set_device(self.device)
-                logger.info(
-                    f"Successfully set default CUDA device for worker {self.actor_id} to {self.device} (Index: {torch.cuda.current_device()})."
-                )
-                count = torch.cuda.device_count()
-                if count != 1:
-                    logger.warning(
-                        f"Worker {self.actor_id} sees {count} CUDA devices, expected 1 after Ray assignment. This might indicate an issue."
-                    )
-                else:
-                    logger.info(
-                        f"Worker {self.actor_id} sees 1 CUDA device as expected."
-                    )
-
-            except Exception as cuda_set_err:
-                logger.error(
-                    f"Failed to set default CUDA device for worker {self.actor_id} to {self.device}: {cuda_set_err}. "
-                    f"Compilation or CUDA operations might fail.",
-                    exc_info=True,
-                )
-
+        # NN uses trianglengin.EnvConfig
         self.nn_evaluator = NeuralNetwork(
             model_config=self.model_config,
             env_config=self.env_config,
@@ -140,7 +103,6 @@ class SelfPlayWorker:
     def set_weights(self, weights: dict):
         """Updates the neural network weights."""
         try:
-            # Removed attempt to get step from weights dict
             self.nn_evaluator.set_weights(weights)
             logger.debug("Weights updated.")
         except Exception as e:
@@ -153,17 +115,19 @@ class SelfPlayWorker:
 
     def _report_current_state(self, game_state: GameState):
         """Asynchronously sends the current game state to the collector."""
-        if self.stats_collector_actor:
-            try:
-                state_copy = game_state.copy()
-                self.stats_collector_actor.update_worker_game_state.remote(  # type: ignore
-                    self.actor_id, state_copy
-                )
-                logger.debug(
-                    f"Reported state step {state_copy.current_step} to collector."
-                )
-            except Exception as e:
-                logger.error(f"Failed to report game state to collector: {e}")
+        # REMOVED - No more visual state reporting
+        pass
+        # if self.stats_collector_actor:
+        #     try:
+        #         state_copy = game_state.copy()
+        #         self.stats_collector_actor.update_worker_game_state.remote( # type: ignore
+        #             self.actor_id, state_copy
+        #         )
+        #         logger.debug(
+        #             f"Reported state step {state_copy.current_step} to collector."
+        #         )
+        #     except Exception as e:
+        #         logger.error(f"Failed to report game state to collector: {e}")
 
     def _log_step_stats_async(
         self,
@@ -178,13 +142,13 @@ class SelfPlayWorker:
         """
         if self.stats_collector_actor:
             try:
-                # Include current_trainer_step
                 step_info: StepInfo = {
                     "game_step_index": game_state.current_step,
-                    "global_step": self.current_trainer_step,  # Add trainer step context
+                    "global_step": self.current_trainer_step,
                 }
                 step_stats: dict[str, tuple[float, StepInfo]] = {
-                    "RL/Current_Score": (game_state.game_score, step_info),
+                    # Use game_score() method from trianglengin.GameState
+                    "RL/Current_Score": (game_state.game_score(), step_info),
                     "MCTS/Step_Visits": (float(mcts_visits), step_info),
                     "MCTS/Step_Depth": (float(mcts_depth), step_info),
                     "RL/Step_Reward": (step_reward, step_info),
@@ -197,15 +161,14 @@ class SelfPlayWorker:
     def run_episode(self) -> SelfPlayResult:
         """
         Runs a single episode of self-play using MCTS and the internal neural network.
-        Implements MCTS tree reuse.
-        Stores extracted features (StateType) and the N-STEP RETURN in the experience buffer.
-        Returns a SelfPlayResult Pydantic model including aggregated stats.
-        Reports current state and step stats asynchronously.
+        Uses trianglengin.GameState.
         """
         self.nn_evaluator.model.eval()
         episode_seed = self.seed + random.randint(0, 1000)
+        # Instantiate trianglengin.GameState
         game = GameState(self.env_config, initial_seed=episode_seed)
 
+        # Use is_over() from trianglengin.GameState
         if game.is_over():
             logger.error(
                 f"Game is over immediately after reset with seed {episode_seed}. Returning empty result."
@@ -230,10 +193,12 @@ class SelfPlayWorker:
         step_simulations: list[int] = []
 
         logger.info(f"Starting episode with seed {episode_seed}")
-        self._report_current_state(game)
+        # REMOVED self._report_current_state(game)
 
+        # Use copy() from trianglengin.GameState
         root_node: Node | None = Node(state=game.copy())
 
+        # Use is_over() from trianglengin.GameState
         while not game.is_over():
             step_start_time = time.monotonic()
             if root_node is None:
@@ -242,6 +207,7 @@ class SelfPlayWorker:
                 )
                 break
 
+            # Use is_over() from trianglengin.GameState
             if root_node.state.is_over():
                 logger.warning(
                     f"MCTS root node state (Step {root_node.state.current_step}) is already terminal before running simulations. Ending episode."
@@ -275,7 +241,7 @@ class SelfPlayWorker:
                 f"Step {game.current_step}: MCTS finished ({mcts_duration:.3f}s). Max Depth: {mcts_max_depth}, Root Visits: {root_node.visit_count}"
             )
 
-            # Log stats *before* taking the step
+            # Log stats *before* taking the step (reward is 0 here)
             self._log_step_stats_async(
                 game, root_node.visit_count, mcts_max_depth, step_reward=0.0
             )
@@ -304,6 +270,7 @@ class SelfPlayWorker:
 
             feature_start_time = time.monotonic()
             try:
+                # Pass trianglengin.GameState to feature extractor
                 state_features: StateType = extract_state_features(
                     game, self.model_config
                 )
@@ -328,6 +295,7 @@ class SelfPlayWorker:
             game_step_start_time = time.monotonic()
             step_reward = 0.0
             try:
+                # Use step() from trianglengin.GameState
                 step_reward, done = game.step(action)
             except Exception as step_err:
                 logger.error(
@@ -351,6 +319,7 @@ class SelfPlayWorker:
                 bootstrap_value = 0.0
                 if not done:
                     try:
+                        # Pass trianglengin.GameState to evaluator
                         _, bootstrap_value = self.nn_evaluator.evaluate(game)
                     except Exception as eval_err:
                         logger.error(
@@ -375,8 +344,8 @@ class SelfPlayWorker:
                     )
                 )
 
-            self._report_current_state(game)
-            # Log stats *after* taking the step
+            # REMOVED self._report_current_state(game)
+            # Log stats *after* taking the step, using the actual step_reward
             self._log_step_stats_async(
                 game,
                 root_node.visit_count if root_node else 0,
@@ -386,7 +355,7 @@ class SelfPlayWorker:
 
             tree_reuse_start_time = time.monotonic()
             if not done:
-                if root_node and action in root_node.children:  # Check root_node exists
+                if root_node and action in root_node.children:
                     root_node = root_node.children[action]
                     root_node.parent = None
                     logger.debug(
@@ -396,6 +365,7 @@ class SelfPlayWorker:
                     logger.error(
                         f"Child node for selected action {action} not found in MCTS tree children: {list(root_node.children.keys()) if root_node else 'No Root'}. Resetting MCTS root to current game state."
                     )
+                    # Use copy() from trianglengin.GameState
                     root_node = Node(state=game.copy())
             else:
                 root_node = None
@@ -413,7 +383,8 @@ class SelfPlayWorker:
             if done:
                 break
 
-        final_score = game.game_score
+        # Use game_score() from trianglengin.GameState
+        final_score = game.game_score()
         logger.info(
             f"Episode finished. Final Score: {final_score:.2f}, Steps: {game.current_step}"
         )

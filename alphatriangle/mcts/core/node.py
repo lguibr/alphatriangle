@@ -1,11 +1,14 @@
+# File: alphatriangle/mcts/core/node.py
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from alphatriangle.environment import GameState
-    from alphatriangle.utils.types import ActionType
+# Import GameState from trianglengin
+from trianglengin.core.environment import GameState
+
+# Keep ActionType from alphatriangle utils for now
+from alphatriangle.utils.types import ActionType
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +18,7 @@ class Node:
 
     def __init__(
         self,
-        state: GameState,
+        state: GameState,  # Use trianglengin.GameState
         parent: Node | None = None,
         action_taken: ActionType | None = None,
         prior_probability: float = 0.0,
@@ -23,9 +26,7 @@ class Node:
         self.state = state
         self.parent = parent
         self.action_taken = action_taken
-
         self.children: dict[ActionType, Node] = {}
-
         self.visit_count: int = 0
         self.total_action_value: float = 0.0
         self.prior_probability: float = prior_probability

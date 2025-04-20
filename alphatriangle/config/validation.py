@@ -1,14 +1,18 @@
+# File: alphatriangle/config/validation.py
 import logging
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from .env_config import EnvConfig
+# Import EnvConfig and VisConfig from trianglengin
+from trianglengin.config import EnvConfig, VisConfig
+
 from .mcts_config import MCTSConfig
 from .model_config import ModelConfig
 from .persistence_config import PersistenceConfig
 from .train_config import TrainConfig
-from .vis_config import VisConfig
+
+# REMOVE from .vis_config import VisConfig
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +26,10 @@ def print_config_info_and_validate(mcts_config_instance: MCTSConfig | None):
     configs_validated: dict[str, Any] = {}
 
     config_classes: dict[str, type[BaseModel]] = {
-        "Environment": EnvConfig,
+        "Environment": EnvConfig,  # Uses trianglengin.EnvConfig
         "Model": ModelConfig,
         "Training": TrainConfig,
-        "Visualization": VisConfig,
+        "Visualization": VisConfig,  # Uses trianglengin.VisConfig
         "Persistence": PersistenceConfig,
         "MCTS": MCTSConfig,
     }
@@ -35,14 +39,17 @@ def print_config_info_and_validate(mcts_config_instance: MCTSConfig | None):
         try:
             if name == "MCTS":
                 if mcts_config_instance is not None:
+                    # Validate the provided instance against the class definition
                     instance = MCTSConfig.model_validate(
                         mcts_config_instance.model_dump()
                     )
                     print(f"[{name}] - Instance provided & validated OK")
                 else:
+                    # Instantiate default if no instance provided
                     instance = ConfigClass()
                     print(f"[{name}] - Validated OK (Instantiated Default)")
             else:
+                # Instantiate default for other configs
                 instance = ConfigClass()
                 print(f"[{name}] - Validated OK")
             configs_validated[name] = instance
@@ -65,8 +72,10 @@ def print_config_info_and_validate(mcts_config_instance: MCTSConfig | None):
     for name, instance in configs_validated.items():
         print(f"--- {name} Config ---")
         if instance:
+            # Use model_dump for Pydantic v2
             dump_data = instance.model_dump()
             for field_name, value in dump_data.items():
+                # Simple representation for long lists/dicts
                 if isinstance(value, list) and len(value) > 5:
                     print(f"  {field_name}: [List with {len(value)} items]")
                 elif isinstance(value, dict) and len(value) > 5:

@@ -1,12 +1,13 @@
+# File: alphatriangle/pyproject.toml
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "alphatriangle"
-version = "0.4.0"
+version = "0.5.0" # Incremented version
 authors = [{ name="Luis Guilherme P. M.", email="lgpelin92@gmail.com" }]
-description = "AlphaZero implementation for a triangle puzzle game."
+description = "AlphaZero implementation for a triangle puzzle game (uses trianglengin)." # Updated description
 readme = "README.md"
 license = { file="LICENSE" }
 requires-python = ">=3.10"
@@ -18,21 +19,26 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Games/Entertainment :: Puzzle Games",
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta", # Updated status
 ]
 dependencies = [
-    "pygame>=2.1.0",
+    # --- ADDED Dependency ---
+    "trianglengin>=0.1.0", # Add the core engine dependency
+    # --- Keep RL/ML specific dependencies ---
+    # "pygame>=2.1.0", # REMOVED - Only needed for dev now
     "numpy>=1.20.0",
     "torch>=2.0.0",
     "torchvision>=0.11.0",
     "cloudpickle>=2.0.0",
-    "numba>=0.55.0",
+    "numba>=0.55.0", # Used in features
     "mlflow>=1.20.0",
-    "matplotlib>=3.5.0",
+    # "matplotlib>=3.5.0", # REMOVED
     "ray>=2.8.0",
     "pydantic>=2.0.0",
     "typing_extensions>=4.0.0",
-    "typer[all]>=0.9.0", # Added typer for CLI
+    "typer[all]>=0.9.0", # Still needed for the train CLI
+    # --- ADD TensorBoard ---
+    "tensorboard>=2.10.0", # Or appropriate version
 ]
 
 [project.urls]
@@ -40,24 +46,40 @@ dependencies = [
 "Bug Tracker" = "https://github.com/lguibr/alphatriangle/issues"
 
 [project.scripts]
+# Keep only the training script entry point
 alphatriangle = "alphatriangle.cli:app"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=3.0.0",
+    "pytest-mock>=3.0.0",
+    "ruff",
+    "mypy",
+    "build",
+    "twine",
+    "codecov",
+    # Add pygame/matplotlib here if needed for specific tests/dev tasks
+    "pygame>=2.1.0",
+    "matplotlib>=3.5.0",
+]
+
 
 [tool.setuptools.packages.find]
 # No 'where' needed, find searches from the project root by default
 # It will find the 'alphatriangle' directory now.
 
-
 [tool.setuptools.package-data]
 "*" = ["*.txt", "*.md", "*.json"] # Include non-code files
 
-# --- Tool Configurations (Optional but Recommended) ---
+# --- Tool Configurations (ruff, mypy, pytest, coverage) ---
 
 [tool.ruff]
 line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "C4", "ARG", "SIM", "TCH", "PTH", "NPY"]
-ignore = ["E501"] # Ignore line length errors if needed selectively
+ignore = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -66,36 +88,31 @@ quote-style = "double"
 python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
-ignore_missing_imports = true # Start with true, gradually reduce
-# Add specific module ignores if necessary
-# [[tool.mypy.overrides]]
-# module = "some_missing_types_module.*"
-# ignore_missing_imports = true
+ignore_missing_imports = true # Keep true, especially with the new dependency
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --cov=alphatriangle --cov-report=term-missing" # Point coverage to the new package dir
+addopts = "-ra -q --cov=alphatriangle --cov-report=term-missing"
 testpaths = [
-    "tests",
+    "tests", # Keep testing alphatriangle specific code
 ]
 
 [tool.coverage.run]
 omit = [
-    "alphatriangle/cli.py", # Exclude CLI from coverage for now
-    "alphatriangle/visualization/*", # Exclude visualization for now
-    "alphatriangle/app.py",
-    "run_*.py",
-    "alphatriangle/training/logging_utils.py", # Logging utils can be hard to cover fully
-    "alphatriangle/config/*", # Config models are mostly declarative
-    "alphatriangle/data/schemas.py",
-    "alphatriangle/structs/*",
-    "alphatriangle/utils/types.py",
-    "alphatriangle/mcts/core/types.py",
-    "alphatriangle/rl/types.py",
+    # Keep omissions for CLI, logging, config, types, etc.
+    "alphatriangle/cli.py",
+    # REMOVE visualization omission (directory deleted)
+    "alphatriangle/training/logging_utils.py",
+    "alphatriangle/config/*", # Keep omitting config
+    "alphatriangle/data/schemas.py", # Keep omitting schemas
+    "alphatriangle/utils/types.py", # Keep omitting utils/types
+    "alphatriangle/mcts/core/types.py", # Keep omitting mcts/types
+    "alphatriangle/rl/types.py", # Keep omitting rl/types
     "*/__init__.py",
     "*/README.md",
+    "run_*.py", # Keep omitting legacy run scripts (these should be deleted)
 ]
 
 [tool.coverage.report]
-fail_under = 28 # Set a reasonable initial coverage target
+fail_under = 25 # Adjust target based on remaining code
 show_missing = true

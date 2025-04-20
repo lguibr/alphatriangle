@@ -1,30 +1,25 @@
-# File: alphatriangle/training/components.py
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-# --- ADDED: Import ActorHandle ---
 import ray
 
-# --- END ADDED ---
+# Import EnvConfig from trianglengin
+from trianglengin.config import EnvConfig
+
+# Keep alphatriangle imports
+from alphatriangle.config import (
+    MCTSConfig,
+    ModelConfig,
+    PersistenceConfig,
+    TrainConfig,
+)
+from alphatriangle.data import DataManager
+from alphatriangle.nn import NeuralNetwork
+from alphatriangle.rl import ExperienceBuffer, Trainer
+from alphatriangle.stats import StatsCollectorActor  # Keep StatsCollectorActor import
 
 if TYPE_CHECKING:
-    # Keep ray import here as well for consistency if needed elsewhere
-    # import ray
-
-    from alphatriangle.config import (
-        EnvConfig,
-        MCTSConfig,
-        ModelConfig,
-        PersistenceConfig,
-        TrainConfig,
-    )
-    from alphatriangle.data import DataManager
-    from alphatriangle.nn import NeuralNetwork
-    from alphatriangle.rl import ExperienceBuffer, Trainer
-
-    # --- REMOVED: Import StatsCollectorActor class ---
-    # from alphatriangle.stats import StatsCollectorActor
-    # --- END REMOVED ---
+    pass  # No changes needed here
 
 
 @dataclass
@@ -35,11 +30,9 @@ class TrainingComponents:
     buffer: "ExperienceBuffer"
     trainer: "Trainer"
     data_manager: "DataManager"
-    # --- CORRECTED: Use ActorHandle type hint ---
-    stats_collector_actor: ray.actor.ActorHandle | None
-    # --- END CORRECTED ---
+    stats_collector_actor: ray.actor.ActorHandle | None  # Keep type hint
     train_config: "TrainConfig"
-    env_config: "EnvConfig"
+    env_config: EnvConfig  # Use trianglengin.EnvConfig
     model_config: "ModelConfig"
     mcts_config: "MCTSConfig"
     persist_config: "PersistenceConfig"

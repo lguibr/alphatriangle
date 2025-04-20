@@ -1,82 +1,63 @@
-# File: alphatriangle/training/loop.py
+
 import logging
-import queue
+import queue # Keep queue for type hint check, but remove usage
 import threading
 import time
 from typing import TYPE_CHECKING, Any
 
-# --- MOVED: numpy import ---
-# import numpy as np
-# --- END MOVED ---
-from ..rl import SelfPlayResult
+import numpy as np
 
-# --- MOVED: ProgressBar import ---
-# from ..visualization.ui import ProgressBar
-# --- END MOVED ---
-# --- MOVED: TrainingComponents import ---
-# from .components import TrainingComponents
-# --- END MOVED ---
+from ..rl import SelfPlayResult
+# REMOVE ProgressBar import
 from .loop_helpers import LoopHelpers
 from .worker_manager import WorkerManager
 
 if TYPE_CHECKING:
-    # --- ADDED: Imports under TYPE_CHECKING ---
-    import numpy as np
-
     from ..utils.types import PERBatchSample
-    from ..visualization.ui import ProgressBar
+    # REMOVE ProgressBar import
     from .components import TrainingComponents
 
-    # --- END ADDED ---
-
-
 logger = logging.getLogger(__name__)
-
 
 class TrainingLoop:
     """
     Manages the core asynchronous training loop logic: coordinating worker tasks,
-    processing results, triggering training steps, and updating visual queue.
-    Receives initialized components via TrainingComponents. Runs indefinitely
-    until stop_requested is set. Uses WorkerManager and LoopHelpers.
+    processing results, triggering training steps. Runs headless.
     """
 
     def __init__(
         self,
         components: "TrainingComponents",
-        visual_state_queue: queue.Queue[dict[int, Any] | None] | None = None,
+        # REMOVE visual_state_queue parameter
     ):
         self.components = components
-        self.visual_state_queue = visual_state_queue
+        # REMOVE self.visual_state_queue = visual_state_queue
         self.train_config = components.train_config
-
-        # Core components
         self.buffer = components.buffer
         self.trainer = components.trainer
 
-        # State variables
         self.global_step = 0
         self.episodes_played = 0
         self.total_simulations_run = 0
-        self.worker_weight_updates_count = 0  # Counter for worker updates
+        self.worker_weight_updates_count = 0
         self.start_time = time.time()
         self.stop_requested = threading.Event()
         self.training_complete = False
         self.training_exception: Exception | None = None
 
-        # Progress Bars (initialized later)
-        self.train_step_progress: ProgressBar | None = None
-        self.buffer_fill_progress: ProgressBar | None = None
+        # REMOVE Progress Bars
+        # self.train_step_progress: ProgressBar | None = None
+        # self.buffer_fill_progress: ProgressBar | None = None
 
-        # Instantiate helpers
         self.worker_manager = WorkerManager(components)
+        # Pass None for visual_state_queue
         self.loop_helpers = LoopHelpers(
             components,
-            self.visual_state_queue,
-            self._get_loop_state,  # Pass method to get current state
+            None, # Pass None for visual_state_queue
+            self._get_loop_state,
         )
 
-        logger.info("TrainingLoop initialized.")
+        logger.info("TrainingLoop initialized (Headless).")
 
     def _get_loop_state(self) -> dict[str, Any]:
         """Provides current loop state to helpers."""
@@ -89,8 +70,9 @@ class TrainingLoop:
             "buffer_capacity": self.buffer.capacity,
             "num_active_workers": self.worker_manager.get_num_active_workers(),
             "num_pending_tasks": self.worker_manager.get_num_pending_tasks(),
-            "train_progress": self.train_step_progress,
-            "buffer_progress": self.buffer_fill_progress,
+            # REMOVE progress bars from state
+            # "train_progress": self.train_step_progress,
+            # "buffer_progress": self.buffer_fill_progress,
             "start_time": self.start_time,
             "num_workers": self.train_config.NUM_SELF_PLAY_WORKERS,
         }
@@ -102,15 +84,15 @@ class TrainingLoop:
         self.global_step = global_step
         self.episodes_played = episodes_played
         self.total_simulations_run = total_simulations
-        # Estimate initial weight updates based on loaded step and frequency
         self.worker_weight_updates_count = (
             global_step // self.train_config.WORKER_UPDATE_FREQ_STEPS
         )
-        self.train_step_progress, self.buffer_fill_progress = (
-            self.loop_helpers.initialize_progress_bars(
-                global_step, len(self.buffer), self.start_time
-            )
-        )
+        # REMOVE progress bar initialization
+        # self.train_step_progress, self.buffer_fill_progress = (
+        #     self.loop_helpers.initialize_progress_bars(
+        #         global_step, len(self.buffer), self.start_time
+        #     )
+        # )
         self.loop_helpers.reset_rate_counters(
             global_step, episodes_played, total_simulations
         )
@@ -153,10 +135,11 @@ class TrainingLoop:
                     f"Error adding batch to buffer from worker {worker_id}: {e}",
                     exc_info=True,
                 )
-                return  # Don't update counters if add failed
+                return
 
-            if self.buffer_fill_progress:
-                self.buffer_fill_progress.set_current_steps(len(self.buffer))
+            # REMOVE progress bar update
+            # if self.buffer_fill_progress:
+            #     self.buffer_fill_progress.set_current_steps(len(self.buffer))
             self.episodes_played += 1
             self.total_simulations_run += result.total_simulations
         else:
@@ -180,29 +163,26 @@ class TrainingLoop:
         if train_result:
             loss_info, td_errors = train_result
             self.global_step += 1
-            if self.train_step_progress:
-                self.train_step_progress.set_current_steps(self.global_step)
+            # REMOVE progress bar update
+            # if self.train_step_progress:
+            #     self.train_step_progress.set_current_steps(self.global_step)
             if self.train_config.USE_PER:
                 self.buffer.update_priorities(per_sample["indices"], td_errors)
             self.loop_helpers.log_training_results_async(
                 loss_info, self.global_step, self.total_simulations_run
             )
 
-            # Check if it's time to update worker networks
             if self.global_step % self.train_config.WORKER_UPDATE_FREQ_STEPS == 0:
                 try:
-                    # --- CHANGED: Pass global_step ---
                     self.worker_manager.update_worker_networks(self.global_step)
-                    # --- END CHANGED ---
-                    self.worker_weight_updates_count += 1  # Increment counter
-                    # Log the update event using the helper
+                    self.worker_weight_updates_count += 1
                     self.loop_helpers.log_weight_update_event(self.global_step)
                 except Exception as update_err:
                     logger.error(
                         f"Failed to update worker networks at step {self.global_step}: {update_err}"
                     )
 
-            if self.global_step % 50 == 0:
+            if self.global_step % 50 == 0: # Keep periodic logging
                 logger.info(
                     f"Step {self.global_step}: P Loss={loss_info['policy_loss']:.4f}, V Loss={loss_info['value_loss']:.4f}, Ent={loss_info['entropy']:.4f}, TD Err={loss_info['mean_td_error']:.4f}"
                 )
@@ -222,11 +202,9 @@ class TrainingLoop:
         self.start_time = time.time()
 
         try:
-            # Initial task submission
             self.worker_manager.submit_initial_tasks()
 
             while not self.stop_requested.is_set():
-                # Check if max steps reached
                 if (
                     self.train_config.MAX_TRAINING_STEPS is not None
                     and self.global_step >= self.train_config.MAX_TRAINING_STEPS
@@ -238,16 +216,14 @@ class TrainingLoop:
                     self.request_stop()
                     break
 
-                # Training Step
                 if self.buffer.is_ready():
-                    _ = self._run_training_step()  # Call training step
+                    _ = self._run_training_step()
                 else:
-                    time.sleep(0.01)
+                    time.sleep(0.01) # Short sleep if not training
 
                 if self.stop_requested.is_set():
                     break
 
-                # Handle Completed Worker Tasks
                 wait_timeout = 0.1 if self.buffer.is_ready() else 0.5
                 completed_tasks = self.worker_manager.get_completed_tasks(wait_timeout)
 
@@ -274,9 +250,9 @@ class TrainingLoop:
                 if self.stop_requested.is_set():
                     break
 
-                # Periodic Tasks (using LoopHelpers)
-                self.loop_helpers.update_visual_queue()
-                self.loop_helpers.log_progress_eta()
+                # REMOVE visual queue update
+                # self.loop_helpers.update_visual_queue()
+                self.loop_helpers.log_progress_eta() # Keep ETA logging
                 self.loop_helpers.calculate_and_log_rates()
 
                 if not completed_tasks and not self.buffer.is_ready():
