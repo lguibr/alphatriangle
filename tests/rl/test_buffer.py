@@ -1,5 +1,4 @@
 from collections import deque
-from typing import cast  # Import cast
 
 import numpy as np
 import pytest
@@ -7,11 +6,7 @@ import pytest
 from alphatriangle.config import TrainConfig
 from alphatriangle.rl import ExperienceBuffer
 from alphatriangle.utils.sumtree import SumTree
-from alphatriangle.utils.types import (
-    Experience,
-    SerializableShapeInfo,  # Import new type
-    StateType,
-)
+from alphatriangle.utils.types import Experience, StateType
 
 # Use module-level rng from tests/conftest.py
 from tests.conftest import rng
@@ -136,19 +131,11 @@ def test_uniform_buffer_add_batch(
     # Create copies for the batch to avoid adding the same object reference multiple times
     batch: list[Experience] = [
         (
-            cast(
-                "StateType",  # Cast the dictionary to StateType
-                {
-                    "grid": mock_experience[0]["grid"].copy(),
-                    "other_features": mock_experience[0]["other_features"].copy(),
-                    "available_shapes_geometry": [
-                        (list(geom), cid) if geom_info else None
-                        for geom_info in mock_experience[0]["available_shapes_geometry"]
-                        if geom_info is not None
-                        for geom, cid in [geom_info]
-                    ],
-                },
-            ),
+            {
+                "grid": mock_experience[0]["grid"].copy(),
+                "other_features": mock_experience[0]["other_features"].copy(),
+                # REMOVED: "available_shapes_geometry": [...]
+            },
             mock_experience[1],
             mock_experience[2],
         )
@@ -164,19 +151,10 @@ def test_uniform_buffer_capacity(
 ):
     for i in range(uniform_buffer.capacity + 10):
         # Create slightly different experiences with deep copies
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                geom, cid = geom_info
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid + i))
-            else:
-                geometry_copy.append(None)
-
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": [...]
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
@@ -196,18 +174,10 @@ def test_uniform_buffer_is_ready(
     assert not uniform_buffer.is_ready()
     for i in range(uniform_buffer.min_size_to_train):
         # Create copies
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                geom, cid = geom_info
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid))
-            else:
-                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy(),
             "other_features": mock_experience[0]["other_features"].copy(),
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": [...]
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
@@ -221,18 +191,10 @@ def test_uniform_buffer_sample(
     # Fill buffer until ready
     for i in range(uniform_buffer.min_size_to_train):
         # Create copies
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                geom, cid = geom_info
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid + i))
-            else:
-                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": [...]
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
@@ -249,7 +211,7 @@ def test_uniform_buffer_sample(
     assert isinstance(sample["batch"][0][0], dict)
     assert "grid" in sample["batch"][0][0]
     assert "other_features" in sample["batch"][0][0]
-    assert "available_shapes_geometry" in sample["batch"][0][0]
+    # REMOVED: assert "available_shapes_geometry" in sample["batch"][0][0]
     assert sample["indices"].shape == (uniform_buffer.config.BATCH_SIZE,)
     assert sample["weights"].shape == (uniform_buffer.config.BATCH_SIZE,)
     assert np.allclose(sample["weights"], 1.0)  # Uniform weights should be 1.0
@@ -301,19 +263,11 @@ def test_per_buffer_add_batch(
     # Create copies for the batch
     batch: list[Experience] = [
         (
-            cast(
-                "StateType",  # Cast the dictionary to StateType
-                {
-                    "grid": mock_experience[0]["grid"].copy(),
-                    "other_features": mock_experience[0]["other_features"].copy(),
-                    "available_shapes_geometry": [
-                        (list(geom), cid) if geom_info else None
-                        for geom_info in mock_experience[0]["available_shapes_geometry"]
-                        if geom_info is not None
-                        for geom, cid in [geom_info]
-                    ],
-                },
-            ),
+            {
+                "grid": mock_experience[0]["grid"].copy(),
+                "other_features": mock_experience[0]["other_features"].copy(),
+                # REMOVED: "available_shapes_geometry": [...]
+            },
             mock_experience[1],
             mock_experience[2],
         )
@@ -327,18 +281,10 @@ def test_per_buffer_add_batch(
 def test_per_buffer_capacity(per_buffer: ExperienceBuffer, mock_experience: Experience):
     for i in range(per_buffer.capacity + 10):
         # Create copies
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                geom, cid = geom_info
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid + i))
-            else:
-                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": [...]
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)  # Adds with current max priority
@@ -350,18 +296,10 @@ def test_per_buffer_is_ready(per_buffer: ExperienceBuffer, mock_experience: Expe
     assert not per_buffer.is_ready()
     for i in range(per_buffer.min_size_to_train):
         # Create copies
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                geom, cid = geom_info
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid))
-            else:
-                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy(),
             "other_features": mock_experience[0]["other_features"].copy(),
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": [...]
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
@@ -373,18 +311,10 @@ def test_per_buffer_sample(per_buffer: ExperienceBuffer, mock_experience: Experi
     # Fill buffer until ready
     for i in range(per_buffer.min_size_to_train):
         # Create copies
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                geom, cid = geom_info
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid + i))
-            else:
-                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": [...]
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
@@ -402,7 +332,7 @@ def test_per_buffer_sample(per_buffer: ExperienceBuffer, mock_experience: Experi
     assert isinstance(sample["batch"][0][0], dict)
     assert "grid" in sample["batch"][0][0]
     assert "other_features" in sample["batch"][0][0]
-    assert "available_shapes_geometry" in sample["batch"][0][0]
+    # REMOVED: assert "available_shapes_geometry" in sample["batch"][0][0]
     assert sample["indices"].shape == (per_buffer.config.BATCH_SIZE,)
     assert sample["weights"].shape == (per_buffer.config.BATCH_SIZE,)
     assert np.all(sample["weights"] >= 0) and np.all(
@@ -417,18 +347,10 @@ def test_per_buffer_sample_requires_step(
     # Fill buffer
     for i in range(per_buffer.min_size_to_train):
         # Create copies
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                geom, cid = geom_info
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid))
-            else:
-                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy(),
             "other_features": mock_experience[0]["other_features"].copy(),
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": [...]
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
@@ -444,18 +366,10 @@ def test_per_buffer_update_priorities(
     num_items = per_buffer.min_size_to_train
     for i in range(num_items):
         # Create copies
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                geom, cid = geom_info
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid + i))
-            else:
-                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": [...]
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)

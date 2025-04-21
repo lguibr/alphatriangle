@@ -1,27 +1,19 @@
+# File: alphatriangle/utils/types.py
 from collections import deque
 from collections.abc import Mapping
 
 import numpy as np
 from typing_extensions import TypedDict
 
-# Define a type alias for the geometric representation of a shape
-# List of triangles, where each triangle is (row, col, is_up)
-ShapeGeometry = list[tuple[int, int, bool]]
-# Store geometry and color ID
-SerializableShapeInfo = tuple[ShapeGeometry, int]
-
 
 class StateType(TypedDict):
     """
-    Represents the processed state features input to the neural network
-    and stored in the replay buffer.
+    Represents the processed state features input to the neural network.
+    Contains numerical arrays derived from the raw GameState.
     """
 
     grid: np.ndarray  # (C, H, W) float32, e.g., occupancy, death cells
     other_features: np.ndarray  # (OtherFeatDim,) float32, e.g., shape info, game stats
-    # ADDED: Store geometry for visualization
-    # List corresponds to slots; stores (triangle_list, color_id) or None if slot empty
-    available_shapes_geometry: list[SerializableShapeInfo | None]
 
 
 # Action representation (integer index)
@@ -42,9 +34,8 @@ class StepInfo(TypedDict, total=False):
 
 Experience = tuple[StateType, PolicyTargetMapping, float]
 # Represents one unit of experience stored in the replay buffer.
-# 1. StateType: The processed features of the state s_t.
-#               Includes 'grid' (occupancy), 'other_features' (numerical),
-#               and 'available_shapes_geometry' (visual info for shapes in slots).
+# 1. StateType: The processed features (grid, other_features) of the state s_t.
+#               NOTE: This is NOT the raw GameState object.
 # 2. PolicyTargetMapping: The MCTS-derived policy target pi(a|s_t) for state s_t.
 # 3. float: The calculated N-step return G_t^n starting from state s_t, used
 #           as the target for the value head during training.

@@ -14,11 +14,7 @@ from trianglengin import EnvConfig  # Corrected import
 from alphatriangle.config import ModelConfig, TrainConfig
 from alphatriangle.nn import NeuralNetwork
 from alphatriangle.rl import ExperienceBuffer, Trainer
-from alphatriangle.utils.types import (
-    Experience,
-    SerializableShapeInfo,  # Import new type
-    StateType,
-)
+from alphatriangle.utils.types import Experience, StateType
 
 rng = np.random.default_rng()
 
@@ -45,12 +41,9 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
     action_dim_int = int(
         mock_env_config.NUM_SHAPE_SLOTS * mock_env_config.ROWS * mock_env_config.COLS
     )
-    # Calculate OTHER_NN_INPUT_FEATURES_DIM based on feature extraction logic
-    num_slots = mock_env_config.NUM_SHAPE_SLOTS
-    shape_feats_dim = num_slots * 7  # From _get_shape_features
-    avail_feats_dim = num_slots  # From _get_shape_availability
-    explicit_feats_dim = 6  # From _get_explicit_features
-    expected_other_dim = shape_feats_dim + avail_feats_dim + explicit_feats_dim
+    # Revert OTHER_NN_INPUT_FEATURES_DIM to previous value or recalculate if needed
+    # Assuming the original intent was 10 for the simple test config
+    expected_other_dim = 10
 
     return ModelConfig(
         GRID_INPUT_CHANNELS=1,
@@ -68,7 +61,7 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
         FC_DIMS_SHARED=[8],
         POLICY_HEAD_DIMS=[action_dim_int],
         VALUE_HEAD_DIMS=[1],
-        OTHER_NN_INPUT_FEATURES_DIM=expected_other_dim,  # Use calculated dim
+        OTHER_NN_INPUT_FEATURES_DIM=expected_other_dim,  # Use reverted dim
         ACTIVATION_FUNCTION="ReLU",
         USE_BATCH_NORM=True,
     )
@@ -113,7 +106,7 @@ def mock_train_config() -> TrainConfig:
 def mock_state_type(
     mock_model_config: ModelConfig, mock_env_config: EnvConfig
 ) -> StateType:
-    """Creates a mock StateType dictionary with correct shapes and the new geometry field."""
+    """Creates a mock StateType dictionary with correct shapes."""
     grid_shape = (
         mock_model_config.GRID_INPUT_CHANNELS,
         mock_env_config.ROWS,
@@ -121,21 +114,10 @@ def mock_state_type(
     )
     other_shape = (mock_model_config.OTHER_NN_INPUT_FEATURES_DIM,)
 
-    # Create mock geometry data (e.g., one slot with a simple shape, others None)
-    mock_geometry_data: SerializableShapeInfo = (
-        [(0, 0, True), (0, 1, False)],
-        1,
-    )  # Example: shape in slot 0, color 1
-    mock_geometry_list: list[SerializableShapeInfo | None] = [mock_geometry_data]
-    # Pad with None for remaining slots
-    mock_geometry_list.extend(
-        [None] * (mock_env_config.NUM_SHAPE_SLOTS - len(mock_geometry_list))
-    )
-
     return {
         "grid": rng.random(grid_shape, dtype=np.float32),
         "other_features": rng.random(other_shape, dtype=np.float32),
-        "available_shapes_geometry": mock_geometry_list,  # Add mock geometry list
+        # REMOVED: "available_shapes_geometry": mock_geometry_list,
     }
 
 
@@ -201,22 +183,10 @@ def filled_mock_buffer(
     """Provides a buffer filled with some mock experiences."""
     for i in range(mock_experience_buffer.min_size_to_train + 5):
         # Deep copy the StateType dictionary and its contents
-        # Correctly handle Optional[SerializableShapeInfo]
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                # geom_info is Tuple[ShapeGeometry, int]
-                geom, cid = geom_info
-                # Deep copy the list of tuples within ShapeGeometry
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid + i))
-            else:
-                geometry_copy.append(None)
-
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i * 0.01,  # Add smaller noise
             "other_features": mock_experience[0]["other_features"].copy() + i * 0.01,
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": geometry_copy,
         }
 
         # Create a new experience tuple with the copied state

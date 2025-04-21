@@ -7,9 +7,9 @@ mirroring trimcts.SearchConfiguration for easy control.
 from pydantic import BaseModel, ConfigDict, Field
 from trimcts import SearchConfiguration  # Import base config for reference
 
-# Restore default simulations to a higher value for better play quality
-DEFAULT_MAX_SIMULATIONS = 1024  # Increased from 64
-DEFAULT_MAX_DEPTH = 32  # Can increase depth slightly too
+# Restore default simulations to a lower value for faster testing/profiling
+DEFAULT_MAX_SIMULATIONS = 512
+DEFAULT_MAX_DEPTH = 32
 DEFAULT_CPUCT = 1.5
 DEFAULT_MCTS_BATCH_SIZE = 64  # Default batch size for network evals within MCTS
 

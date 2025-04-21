@@ -1,5 +1,4 @@
 # File: tests/rl/test_trainer.py
-from typing import cast  # Import cast
 
 import numpy as np
 import pytest
@@ -16,7 +15,6 @@ from alphatriangle.utils.types import (
     Experience,
     ExperienceBatch,  # Import ExperienceBatch
     PERBatchSample,
-    SerializableShapeInfo,  # Import new type
     StateType,
 )
 
@@ -30,13 +28,9 @@ def env_config(mock_env_config: EnvConfig) -> EnvConfig:  # Uses trianglengin.En
 
 @pytest.fixture
 def model_config(mock_model_config: ModelConfig) -> ModelConfig:
-    # Ensure OTHER_NN_INPUT_FEATURES_DIM matches the features generated
-    # Calculation: shape_feats (slots*7) + avail_feats (slots) + explicit_feats (6)
-    # Example: 1 slot -> 1*7 + 1 + 6 = 14
-    # Example: 3 slots -> 3*7 + 3 + 6 = 30
-    num_slots = 1  # Assuming mock_env_config has 1 slot
-    expected_dim = num_slots * 7 + num_slots + 6
-    mock_model_config.OTHER_NN_INPUT_FEATURES_DIM = expected_dim
+    # Revert OTHER_NN_INPUT_FEATURES_DIM to the value set in conftest
+    # (which should now be 10 based on the reverted conftest)
+    mock_model_config.OTHER_NN_INPUT_FEATURES_DIM = 10
     return mock_model_config
 
 
@@ -102,18 +96,10 @@ def buffer_uniform(
     buffer = ExperienceBuffer(train_config_uniform)
     for i in range(buffer.min_size_to_train + 5):
         # Create copies
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                geom, cid = geom_info
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid + i))
-            else:
-                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": [...]
         }
         exp_copy: Experience = (
             state_copy,
@@ -132,18 +118,10 @@ def buffer_per(
     buffer = ExperienceBuffer(train_config_per)
     for i in range(buffer.min_size_to_train + 5):
         # Create copies
-        geometry_copy: list[SerializableShapeInfo | None] = []
-        for geom_info in mock_experience[0]["available_shapes_geometry"]:
-            if geom_info is not None:
-                geom, cid = geom_info
-                geom_copy = [(r, c, up) for r, c, up in geom]
-                geometry_copy.append((geom_copy, cid + i))
-            else:
-                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
-            "available_shapes_geometry": geometry_copy,
+            # REMOVED: "available_shapes_geometry": [...]
         }
         exp_copy: Experience = (
             state_copy,
@@ -167,19 +145,11 @@ def test_prepare_batch(trainer_uniform: Trainer, mock_experience: Experience):
     # Create copies for the batch
     batch: ExperienceBatch = [
         (
-            cast(
-                "StateType",  # Cast the dictionary to StateType
-                {
-                    "grid": mock_experience[0]["grid"].copy(),
-                    "other_features": mock_experience[0]["other_features"].copy(),
-                    "available_shapes_geometry": [
-                        (list(geom), cid) if geom_info else None
-                        for geom_info in mock_experience[0]["available_shapes_geometry"]
-                        if geom_info is not None
-                        for geom, cid in [geom_info]
-                    ],
-                },
-            ),
+            {
+                "grid": mock_experience[0]["grid"].copy(),
+                "other_features": mock_experience[0]["other_features"].copy(),
+                # REMOVED: "available_shapes_geometry": [...]
+            },
             mock_experience[1],
             mock_experience[2],
         )

@@ -36,28 +36,13 @@ class Serializer:
                     isinstance(state_type, dict)
                     and "grid" in state_type
                     and "other_features" in state_type
-                    and "available_shapes_geometry" in state_type  # Check new key
+                    # REMOVED: and "available_shapes_geometry" in state_type
                     and isinstance(state_type["grid"], np.ndarray)
                     and isinstance(state_type["other_features"], np.ndarray)
-                    and isinstance(
-                        state_type["available_shapes_geometry"], list
-                    )  # Check list type
+                    # REMOVED: and isinstance(state_type["available_shapes_geometry"], list)
                     and isinstance(policy_map, dict)
                     and isinstance(value, float | int)
                 ):
-                    # Basic check for geometry structure
-                    for item in state_type["available_shapes_geometry"]:
-                        # Combine nested if using 'and'
-                        if item is not None and not (
-                            isinstance(item, tuple)
-                            and len(item) == 2
-                            and isinstance(item[0], list)
-                            and isinstance(item[1], int)
-                        ):
-                            logger.warning(
-                                f"Invalid geometry item structure {item} in experience {index}."
-                            )
-                            return False
                     return True
                 else:
                     logger.warning(
