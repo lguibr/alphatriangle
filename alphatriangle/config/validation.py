@@ -3,11 +3,13 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-# Import EnvConfig from trianglengin
-# REMOVE DisplayConfig import
-from trianglengin.config import EnvConfig
+# Import EnvConfig from trianglengin's top level
+from trianglengin import EnvConfig  # UPDATED IMPORT
 
-from .mcts_config import MCTSConfig
+# REMOVE trimcts import
+# from trimcts import SearchConfiguration
+# Import the new config
+from .mcts_config import AlphaTriangleMCTSConfig
 from .model_config import ModelConfig
 from .persistence_config import PersistenceConfig
 from .train_config import TrainConfig
@@ -15,7 +17,9 @@ from .train_config import TrainConfig
 logger = logging.getLogger(__name__)
 
 
-def print_config_info_and_validate(mcts_config_instance: MCTSConfig | None):
+def print_config_info_and_validate(
+    mcts_config_instance: AlphaTriangleMCTSConfig | None,
+):
     """Prints configuration summary and performs validation using Pydantic."""
     print("-" * 40)
     print("Configuration Validation & Summary")
@@ -24,13 +28,11 @@ def print_config_info_and_validate(mcts_config_instance: MCTSConfig | None):
     configs_validated: dict[str, Any] = {}
 
     config_classes: dict[str, type[BaseModel]] = {
-        "Environment": EnvConfig,  # Uses trianglengin.EnvConfig
+        "Environment": EnvConfig,
         "Model": ModelConfig,
         "Training": TrainConfig,
-        # REMOVE DisplayConfig
-        # "Display": DisplayConfig,
         "Persistence": PersistenceConfig,
-        "MCTS": MCTSConfig,
+        "MCTS": AlphaTriangleMCTSConfig,  # Validate the new config
     }
 
     for name, ConfigClass in config_classes.items():
@@ -39,7 +41,7 @@ def print_config_info_and_validate(mcts_config_instance: MCTSConfig | None):
             if name == "MCTS":
                 if mcts_config_instance is not None:
                     # Validate the provided instance against the class definition
-                    instance = MCTSConfig.model_validate(
+                    instance = AlphaTriangleMCTSConfig.model_validate(
                         mcts_config_instance.model_dump()
                     )
                     print(f"[{name}] - Instance provided & validated OK")

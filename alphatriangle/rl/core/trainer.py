@@ -1,3 +1,4 @@
+# File: alphatriangle/rl/core/trainer.py
 import logging
 from typing import cast
 
@@ -7,8 +8,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import _LRScheduler
 
-# Import EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
+# Import EnvConfig from trianglengin's top level
+from trianglengin import EnvConfig  # UPDATED IMPORT
 
 # Keep alphatriangle imports
 from ...config import TrainConfig
@@ -112,8 +113,12 @@ class Trainer:
         grids = []
         other_features = []
         n_step_returns = []
-        # Use env_config from trianglengin
-        action_dim_int = int(self.env_config.ACTION_DIM)  # type: ignore[call-overload]
+        # Calculate action_dim manually
+        action_dim_int = int(
+            self.env_config.NUM_SHAPE_SLOTS
+            * self.env_config.ROWS
+            * self.env_config.COLS
+        )
         policy_target_tensor = torch.zeros(
             (batch_size, action_dim_int),
             dtype=torch.float32,

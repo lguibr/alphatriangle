@@ -1,3 +1,4 @@
+# File: alphatriangle/training/worker_manager.py
 import logging
 from typing import TYPE_CHECKING
 
@@ -22,6 +23,8 @@ class WorkerManager:
         self.train_config = components.train_config
         self.nn = components.nn
         self.stats_collector_actor = components.stats_collector_actor
+        # ADDED: Store run_base_dir as a string immediately
+        self.run_base_dir_str = str(components.data_manager.path_manager.run_base_dir)
 
         self.workers: list[ray.actor.ActorHandle | None] = []
         self.worker_tasks: dict[ray.ObjectRef, int] = {}
@@ -36,16 +39,21 @@ class WorkerManager:
         weights_ref = ray.put(initial_weights)
         self.workers = [None] * self.train_config.NUM_SELF_PLAY_WORKERS
 
+        # Use the pre-converted string path
+        run_base_dir_for_worker = self.run_base_dir_str
+
         for i in range(self.train_config.NUM_SELF_PLAY_WORKERS):
             try:
-                # Pass trianglengin.EnvConfig to worker
+                # Pass trianglengin.EnvConfig and trimcts.SearchConfiguration
+                # Also pass the run_base_dir string
                 worker = SelfPlayWorker.options(num_cpus=1).remote(
                     actor_id=i,
-                    env_config=self.components.env_config,  # Pass trianglengin.EnvConfig
-                    mcts_config=self.components.mcts_config,
+                    env_config=self.components.env_config,
+                    mcts_config=self.components.mcts_config,  # Pass trimcts config
                     model_config=self.components.model_config,
                     train_config=self.train_config,
                     stats_collector_actor=self.stats_collector_actor,
+                    run_base_dir=run_base_dir_for_worker,  # Pass the string path
                     initial_weights=weights_ref,
                     seed=self.train_config.RANDOM_SEED + i,
                     worker_device_str=self.train_config.WORKER_DEVICE,
@@ -58,9 +66,8 @@ class WorkerManager:
         logger.info(
             f"Initialized {len(self.active_worker_indices)} active self-play workers."
         )
-        del weights_ref
+        del weights_ref  # Clean up object store reference
 
-    # ... (submit_initial_tasks, submit_task, get_completed_tasks remain the same) ...
     def submit_initial_tasks(self):
         """Submits the first task for each active worker."""
         logger.info("Submitting initial tasks to workers...")
@@ -152,7 +159,6 @@ class WorkerManager:
 
         return completed_results
 
-    # ... (update_worker_networks, get_num_active_workers, get_num_pending_tasks, cleanup_actors remain the same) ...
     def update_worker_networks(self, global_step: int):
         """Sends the latest network weights and current global_step to all active workers."""
         active_workers = [
@@ -175,7 +181,7 @@ class WorkerManager:
 
         all_tasks = set_weights_tasks + set_step_tasks
         if not all_tasks:
-            del weights_ref
+            del weights_ref  # Clean up ref if no tasks submitted
             return
         try:
             ray.get(all_tasks, timeout=120.0)
@@ -193,7 +199,7 @@ class WorkerManager:
                 f"Unexpected error updating worker networks/step: {e}", exc_info=True
             )
         finally:
-            del weights_ref
+            del weights_ref  # Ensure ref is deleted
 
     def get_num_active_workers(self) -> int:
         """Returns the number of currently active workers."""
@@ -208,7 +214,8 @@ class WorkerManager:
         logger.info("Cleaning up WorkerManager actors...")
         for task_ref in list(self.worker_tasks.keys()):
             try:
-                ray.cancel(task_ref, force=True)
+                # force=True is not supported for actor tasks, just cancel normally
+                ray.cancel(task_ref)
             except Exception as cancel_e:
                 logger.warning(f"Error cancelling task {task_ref}: {cancel_e}")
         self.worker_tasks = {}

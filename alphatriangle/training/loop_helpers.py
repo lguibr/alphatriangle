@@ -1,8 +1,9 @@
+# File: alphatriangle/training/loop_helpers.py
 import logging
 import queue  # Keep for type hint check
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any  # Add cast
 
 import numpy as np
 import ray
@@ -21,6 +22,8 @@ from ..utils.types import Experience, StatsCollectorData, StepInfo
 # REMOVE colors import
 
 if TYPE_CHECKING:
+    from collections import deque
+
     from .components import TrainingComponents
 
 logger = logging.getLogger(__name__)
@@ -175,21 +178,35 @@ class LoopHelpers:
         """Logs progress and ETA."""
         loop_state = self.get_loop_state()
         global_step = loop_state["global_step"]
-        # REMOVE train_progress bar usage
 
         if global_step == 0 or global_step % 100 != 0:
             return
 
         elapsed_time = time.time() - loop_state["start_time"]
-        # Calculate steps_since_load based on last_rate_calc_step if needed, or just use global_step
-        steps_since_start = global_step  # Assuming we want overall ETA
+        steps_since_start = global_step
 
         steps_per_sec = 0.0
         self._fetch_latest_stats()
-        rate_dq = self.latest_stats_data.get("Rate/Steps_Per_Sec")
-        if rate_dq:
-            steps_per_sec = rate_dq[-1][1]
-        elif elapsed_time > 1 and steps_since_start > 0:
+        # Safely access latest steps_per_sec from stats
+        rate_dq: deque[tuple[StepInfo, float]] | None = self.latest_stats_data.get(
+            "Rate/Steps_Per_Sec"
+        )
+        if rate_dq and len(rate_dq) > 0:
+            # Ensure the last item is a tuple with expected structure
+            last_item = rate_dq[-1]
+            if (
+                isinstance(last_item, tuple)
+                and len(last_item) == 2
+                and isinstance(last_item[1], float | int)
+            ):
+                steps_per_sec = float(last_item[1])
+            else:
+                logger.warning(
+                    f"Unexpected structure in Rate/Steps_Per_Sec deque: {last_item}"
+                )
+
+        # Fallback if no stats available or invalid
+        if steps_per_sec <= 0 and elapsed_time > 1 and steps_since_start > 0:
             steps_per_sec = steps_since_start / elapsed_time
 
         target_steps = self.train_config.MAX_TRAINING_STEPS
@@ -221,8 +238,6 @@ class LoopHelpers:
             f"Pending Tasks: {num_pending_tasks}, Speed: {steps_per_sec:.2f} steps/sec, ETA: {eta_str}"
         )
 
-    # REMOVE update_visual_queue method
-
     def validate_experiences(
         self, experiences: list[Experience]
     ) -> tuple[list[Experience], int]:
@@ -240,7 +255,7 @@ class LoopHelpers:
                         and "other_features" in state_type
                         and isinstance(state_type["grid"], np.ndarray)
                         and isinstance(state_type["other_features"], np.ndarray)
-                        and isinstance(policy_map, dict)
+                        and isinstance(policy_map, dict)  # Check for dict specifically
                         and isinstance(value, float | int)
                     ):
                         if np.all(np.isfinite(state_type["grid"])) and np.all(
@@ -249,7 +264,7 @@ class LoopHelpers:
                             is_valid = True
                         else:
                             logger.warning(
-                                f"Experience {i} contains non-finite features."
+                                f"Experience {i} contains non-finite features (grid_finite={np.all(np.isfinite(state_type['grid']))}, other_finite={np.all(np.isfinite(state_type['other_features']))})."
                             )
                     else:
                         logger.warning(
@@ -279,26 +294,22 @@ class LoopHelpers:
         Logs training results asynchronously to StatsCollectorActor and TensorBoard.
         """
         current_lr = self.trainer.get_current_lr()
-        self.get_loop_state()
-        # REMOVE train_progress usage
         buffer = self.components.buffer
 
-        # REMOVE train_step_perc calculation based on progress bar
-        per_beta = (
-            buffer._calculate_beta(global_step) if self.train_config.USE_PER else None
-        )
+        per_beta: float | None = None  # Ensure per_beta is typed
+        if self.train_config.USE_PER and hasattr(buffer, "_calculate_beta"):
+            per_beta = buffer._calculate_beta(global_step)
 
         # Log to StatsCollectorActor
         if self.stats_collector_actor:
             step_info: StepInfo = {"global_step": global_step}
             stats_batch: dict[str, tuple[float, StepInfo]] = {
-                "Loss/Total": (loss_info["total_loss"], step_info),
-                "Loss/Policy": (loss_info["policy_loss"], step_info),
-                "Loss/Value": (loss_info["value_loss"], step_info),
-                "Loss/Entropy": (loss_info["entropy"], step_info),
-                "Loss/Mean_TD_Error": (loss_info["mean_td_error"], step_info),
+                "Loss/Total": (loss_info.get("total_loss", 0.0), step_info),
+                "Loss/Policy": (loss_info.get("policy_loss", 0.0), step_info),
+                "Loss/Value": (loss_info.get("value_loss", 0.0), step_info),
+                "Loss/Entropy": (loss_info.get("entropy", 0.0), step_info),
+                "Loss/Mean_TD_Error": (loss_info.get("mean_td_error", 0.0), step_info),
                 "LearningRate": (current_lr, step_info),
-                # REMOVE Progress/Train_Step_Percent
                 "Progress/Total_Simulations": (float(total_simulations), step_info),
             }
             if per_beta is not None:
@@ -315,19 +326,21 @@ class LoopHelpers:
         if self.tb_writer:
             try:
                 self.tb_writer.add_scalar(
-                    "Loss/Total", loss_info["total_loss"], global_step
+                    "Loss/Total", loss_info.get("total_loss", 0.0), global_step
                 )
                 self.tb_writer.add_scalar(
-                    "Loss/Policy", loss_info["policy_loss"], global_step
+                    "Loss/Policy", loss_info.get("policy_loss", 0.0), global_step
                 )
                 self.tb_writer.add_scalar(
-                    "Loss/Value", loss_info["value_loss"], global_step
+                    "Loss/Value", loss_info.get("value_loss", 0.0), global_step
                 )
                 self.tb_writer.add_scalar(
-                    "Loss/Entropy", loss_info["entropy"], global_step
+                    "Loss/Entropy", loss_info.get("entropy", 0.0), global_step
                 )
                 self.tb_writer.add_scalar(
-                    "Loss/Mean_TD_Error", loss_info["mean_td_error"], global_step
+                    "Loss/Mean_TD_Error",
+                    loss_info.get("mean_td_error", 0.0),
+                    global_step,
                 )
                 self.tb_writer.add_scalar("LearningRate", current_lr, global_step)
                 self.tb_writer.add_scalar(

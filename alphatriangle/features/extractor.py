@@ -1,16 +1,16 @@
-# File: alphatriangle/features/extractor.py
-# File: alphatriangle/features/extractor.py
 import logging
 from typing import cast
 
 import numpy as np
 
-# Import GameState from trianglengin
-from trianglengin.core.environment import GameState
+# Import GameState and Shape from trianglengin's top level
+from trianglengin import EnvConfig, GameState, Shape  # UPDATED IMPORT
 
 # Import alphatriangle configs
 from ..config import ModelConfig
-from ..utils.types import StateType  # Keep alphatriangle StateType for now
+from ..utils.types import StateType
+
+# Import grid_features locally
 from . import grid_features
 
 logger = logging.getLogger(__name__)
@@ -21,13 +21,14 @@ class GameStateFeatures:
 
     def __init__(self, game_state: GameState, model_config: ModelConfig):
         self.gs = game_state
-        # Access EnvConfig from trianglengin.GameState
-        self.env_config = game_state.env_config
+        # Access EnvConfig directly from the GameState object
+        self.env_config: EnvConfig = game_state.env_config
         self.model_config = model_config
-        # Access GridData NumPy arrays directly (assuming GridData structure is stable)
-        self.occupied_np = game_state.grid_data._occupied_np
-        self.death_np = game_state.grid_data._death_np
-        # self.color_id_np = game_state.grid_data._color_id_np # Still not used
+        # Access GridData NumPy arrays directly via the GameState wrapper
+        grid_data_np = game_state.get_grid_data_np()
+        self.occupied_np = grid_data_np["occupied"]
+        self.death_np = grid_data_np["death"]
+        self.color_id_np = grid_data_np["color_id"]
 
     def _get_grid_state(self) -> np.ndarray:
         """
@@ -45,20 +46,23 @@ class GameStateFeatures:
         return grid_state
 
     def _get_shape_features(self) -> np.ndarray:
-        """Extracts features for each shape slot."""
+        """Extracts features for each shape slot using the Shape class."""
         num_slots = self.env_config.NUM_SHAPE_SLOTS
-        FEATURES_PER_SHAPE_HERE = 7  # Keep this consistent with ModelConfig
+        # Ensure this matches OTHER_NN_INPUT_FEATURES_DIM calculation
+        FEATURES_PER_SHAPE_HERE = 7
         shape_feature_matrix = np.zeros(
             (num_slots, FEATURES_PER_SHAPE_HERE), dtype=np.float32
         )
 
-        for i, shape in enumerate(
-            self.gs.shapes
-        ):  # Access shapes from trianglengin.GameState
+        # Access shapes via the GameState wrapper method
+        current_shapes: list[Shape | None] = self.gs.get_shapes()
+        for i, shape in enumerate(current_shapes):
+            # Check if shape exists and has triangles
             if shape and shape.triangles:
                 n_tris = len(shape.triangles)
                 ups = sum(1 for _, _, is_up in shape.triangles if is_up)
                 downs = n_tris - ups
+                # Use the bbox method of the Shape class
                 min_r, min_c, max_r, max_c = shape.bbox()
                 height = max_r - min_r + 1
                 width_eff = (max_c - min_c + 1) * 0.75 + 0.25 if n_tris > 0 else 0
@@ -82,35 +86,32 @@ class GameStateFeatures:
 
     def _get_shape_availability(self) -> np.ndarray:
         """Returns a binary vector indicating which shape slots are filled."""
-        return np.array([1.0 if s else 0.0 for s in self.gs.shapes], dtype=np.float32)
+        current_shapes = self.gs.get_shapes()
+        return np.array([1.0 if s else 0.0 for s in current_shapes], dtype=np.float32)
 
     def _get_explicit_features(self) -> np.ndarray:
         """
         Extracts scalar features like score, heights, holes, etc.
         Uses GridData NumPy arrays directly.
         """
-        EXPLICIT_FEATURES_DIM_HERE = 6  # Keep consistent with ModelConfig
+        # Ensure this matches OTHER_NN_INPUT_FEATURES_DIM calculation
+        EXPLICIT_FEATURES_DIM_HERE = 6
         features = np.zeros(EXPLICIT_FEATURES_DIM_HERE, dtype=np.float32)
         occupied = self.occupied_np
         death = self.death_np
         rows, cols = self.env_config.ROWS, self.env_config.COLS
 
-        # Pass NumPy arrays directly to grid_features functions
         heights = grid_features.get_column_heights(occupied, death, rows, cols)
         holes = grid_features.count_holes(occupied, death, heights, rows, cols)
         bump = grid_features.get_bumpiness(heights)
         total_playable_cells = np.sum(~death)
 
-        # Use game_score() method from trianglengin.GameState
         features[0] = np.clip(self.gs.game_score() / 100.0, -5.0, 5.0)
         features[1] = np.mean(heights) / rows if rows > 0 else 0
         features[2] = np.max(heights) / rows if rows > 0 else 0
         features[3] = holes / total_playable_cells if total_playable_cells > 0 else 0
         features[4] = (bump / (cols - 1)) / rows if cols > 1 and rows > 0 else 0
-        # Access current_step directly (assuming it exists)
-        features[5] = np.clip(
-            getattr(self.gs, "current_step", 0) / 1000.0, 0, 1
-        )  # Use current_step as proxy for pieces placed
+        features[5] = np.clip(self.gs.current_step / 1000.0, 0, 1)
 
         return cast(
             "np.ndarray", np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
@@ -128,6 +129,7 @@ class GameStateFeatures:
             logger.error(
                 f"Combined other_features dimension mismatch! Extracted {combined.shape[0]}, but ModelConfig expects {expected_dim}. Padding/truncating."
             )
+            # Adjust size if necessary
             if combined.shape[0] < expected_dim:
                 padding = np.zeros(
                     expected_dim - combined.shape[0], dtype=combined.dtype
@@ -151,7 +153,7 @@ def extract_state_features(
     """
     Extracts and returns the state dictionary {grid, other_features} for NN input.
     Requires ModelConfig to ensure dimensions match the network's expectations.
-    Includes validation for non-finite values. Now reads from trianglengin.GridData NumPy arrays.
+    Includes validation for non-finite values. Now reads from trianglengin.GameState wrapper.
     """
     extractor = GameStateFeatures(game_state, model_config)
     state_dict: StateType = {

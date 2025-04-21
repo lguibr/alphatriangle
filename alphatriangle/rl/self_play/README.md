@@ -1,4 +1,3 @@
-# File: alphatriangle/rl/self_play/README.md
 # RL Self-Play Submodule (`alphatriangle.rl.self_play`)
 
 ## Purpose and Architecture
@@ -11,14 +10,19 @@ This submodule focuses specifically on generating game episodes through self-pla
     -   It receives configuration objects (`EnvConfig`, `MCTSConfig`, `ModelConfig`, `TrainConfig`) during initialization.
     -   It has a `set_weights` method allowing the `TrainingLoop` to periodically update its local neural network with the latest trained weights from the central model. **It also has `set_current_trainer_step` to store the global step associated with the current weights, called by the `WorkerManager`.**
     -   Its main method, `run_episode`, simulates a complete game episode:
-        -   Uses its local `NeuralNetwork` evaluator and `MCTSConfig` to run MCTS ([`alphatriangle.mcts.run_mcts_simulations`](../../mcts/core/search.py)), **reusing the search tree between moves**.
-        -   Selects actions based on MCTS results ([`alphatriangle.mcts.strategy.policy.select_action_based_on_visits`](../../mcts/strategy/policy.py)).
-        -   Generates policy targets ([`alphatriangle.mcts.strategy.policy.get_policy_target`](../../mcts/strategy/policy.py)).
+        -   **Includes detailed logging** to trace execution flow, game state checks, MCTS calls, action selection, and game steps, aiding in debugging issues like premature episode termination or performance bottlenecks (like unexpected `time.sleep` calls).
+        -   Uses its local `NeuralNetwork` evaluator and `MCTSConfig` to run MCTS using `trimcts.run_mcts`. **This now leverages batched network evaluation within the C++ core.**
+        -   Selects actions based on MCTS results ([`mcts_helpers.select_action_from_visits`](mcts_helpers.py)).
+        -   Generates policy targets ([`mcts_helpers.get_policy_target_from_visits`](mcts_helpers.py)).
         -   Stores `(StateType, policy_target, n_step_return)` tuples (using extracted features and calculated n-step returns).
         -   Steps its local game environment (`GameState.step`).
         -   Returns the collected `Experience` list, final score, episode length, and MCTS statistics via a `SelfPlayResult` object.
         -   **Asynchronously logs per-step statistics (score, reward, MCTS visits/depth) to the `StatsCollectorActor`, providing a `StepInfo` dictionary containing the `game_step_index` and the `current_trainer_step` (global step of its current network weights).**
-        -   **Asynchronously reports its current `GameState` to the `StatsCollectorActor` for visualization.**
+-   **[`mcts_helpers.py`](mcts_helpers.py):** Contains helper functions for processing MCTS visit counts into policy targets and selecting actions based on temperature. Includes `PolicyGenerationError` for specific failures.
+
+## Future Optimizations
+
+-   **Subtree Reuse:** A significant potential optimization is to modify `trimcts` and this worker to reuse the MCTS search tree between steps, rather than rebuilding it from scratch. This would involve passing tree state (e.g., a pointer to the new root node) between `run_mcts` calls and managing the consistency between the C++ tree and the Python `GameState`.
 
 ## Exposed Interfaces
 
@@ -30,17 +34,21 @@ This submodule focuses specifically on generating game episodes through self-pla
         -   `set_current_trainer_step(global_step: int)`: Updates the stored trainer step.
 -   **Types:**
     -   `SelfPlayResult`: Pydantic model defined in [`alphatriangle.rl.types`](../types.py).
+-   **Functions (from `mcts_helpers.py`):**
+    -   `select_action_from_visits(...) -> ActionType`
+    -   `get_policy_target_from_visits(...) -> PolicyTargetMapping`
+    -   `PolicyGenerationError` (Exception)
 
 ## Dependencies
 
 -   **[`alphatriangle.config`](../../config/README.md)**:
-    -   `EnvConfig`, `MCTSConfig`, `ModelConfig`, `TrainConfig`.
+    -   `EnvConfig`, `AlphaTriangleMCTSConfig`, `ModelConfig`, `TrainConfig`.
+-   **`trianglengin`**:
+    -   `GameState`, `EnvConfig`.
+-   **`trimcts`**:
+    -   `run_mcts`, `SearchConfiguration`.
 -   **[`alphatriangle.nn`](../../nn/README.md)**:
     -   `NeuralNetwork`: Instantiated locally within the actor.
--   **[`alphatriangle.mcts`](../../mcts/README.md)**:
-    -   Core MCTS functions and types. **MCTS uses batched evaluation.**
--   **[`alphatriangle.environment`](../../environment/README.md)**:
-    -   `GameState`, `EnvConfig`: Used to instantiate and step through the game simulation locally.
 -   **[`alphatriangle.features`](../../features/README.md)**:
     -   `extract_state_features`: Used to generate `StateType` for experiences.
 -   **[`alphatriangle.utils`](../../utils/README.md)**:
@@ -51,12 +59,12 @@ This submodule focuses specifically on generating game episodes through self-pla
 -   **[`alphatriangle.stats`](../../stats/README.md)**:
     -   `StatsCollectorActor`: Handle passed for logging.
 -   **`numpy`**:
-    -   Used by MCTS strategies.
+    -   Used by MCTS strategies and feature extraction.
 -   **`ray`**:
     -   The `@ray.remote` decorator makes this a Ray actor.
 -   **`torch`**:
     -   Used by the local `NeuralNetwork`.
--   **Standard Libraries:** `typing`, `logging`, `random`, `time`, `collections.deque`.
+-   **Standard Libraries:** `typing`, `logging`, `random`, `time`, `collections.deque`, `cProfile`.
 
 ---
 

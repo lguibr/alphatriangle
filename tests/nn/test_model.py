@@ -2,21 +2,17 @@
 import pytest
 import torch
 
-# Use relative imports for alphatriangle components if running tests from project root
-# or absolute imports if package is installed
-try:
-    # Try absolute imports first (for installed package)
-    from alphatriangle.config import EnvConfig, ModelConfig
-    from alphatriangle.nn import AlphaTriangleNet
-except ImportError:
-    # Fallback to relative imports (for running tests directly)
-    from alphatriangle.config import EnvConfig, ModelConfig
-    from alphatriangle.nn import AlphaTriangleNet
+# Import EnvConfig from trianglengin's top level
+from trianglengin import EnvConfig  # UPDATED IMPORT
+
+# Keep alphatriangle imports
+from alphatriangle.config import ModelConfig
+from alphatriangle.nn import AlphaTriangleNet
 
 
 # Use shared fixtures implicitly via pytest injection
 @pytest.fixture
-def env_config(mock_env_config: EnvConfig) -> EnvConfig:
+def env_config(mock_env_config: EnvConfig) -> EnvConfig:  # Uses trianglengin.EnvConfig
     return mock_env_config
 
 
@@ -28,6 +24,7 @@ def model_config(mock_model_config: ModelConfig) -> ModelConfig:
 @pytest.fixture
 def model(model_config: ModelConfig, env_config: EnvConfig) -> AlphaTriangleNet:
     """Provides an instance of the AlphaTriangleNet model."""
+    # Pass trianglengin.EnvConfig
     return AlphaTriangleNet(model_config, env_config)
 
 
@@ -36,9 +33,9 @@ def test_model_initialization(
 ):
     """Test if the model initializes without errors."""
     assert model is not None
-    # Cast ACTION_DIM to int for comparison
-    assert model.action_dim == int(env_config.ACTION_DIM)
-    # Add more checks based on config if needed (e.g., transformer presence)
+    # Calculate action_dim manually for comparison
+    action_dim_int = int(env_config.NUM_SHAPE_SLOTS * env_config.ROWS * env_config.COLS)
+    assert model.action_dim == action_dim_int
     assert model.model_config.USE_TRANSFORMER == model_config.USE_TRANSFORMER
     if model_config.USE_TRANSFORMER:
         assert model.transformer_body is not None
@@ -51,13 +48,12 @@ def test_model_forward_pass(
 ):
     """Test the forward pass with dummy input tensors."""
     batch_size = 4
-    device = torch.device("cpu")  # Test on CPU
+    device = torch.device("cpu")
     model.to(device)
-    model.eval()  # Set to eval mode
-    # Cast ACTION_DIM to int
-    action_dim_int = int(env_config.ACTION_DIM)
+    model.eval()
+    # Calculate action_dim manually
+    action_dim_int = int(env_config.NUM_SHAPE_SLOTS * env_config.ROWS * env_config.COLS)
 
-    # Create dummy input tensors
     grid_shape = (
         batch_size,
         model_config.GRID_INPUT_CHANNELS,
@@ -70,33 +66,19 @@ def test_model_forward_pass(
     dummy_other = torch.randn(other_shape, device=device)
 
     with torch.no_grad():
-        # --- CHANGED: Expect value_logits ---
         policy_logits, value_logits = model(dummy_grid, dummy_other)
-        # --- END CHANGED ---
 
-    # Check output shapes
     assert policy_logits.shape == (
         batch_size,
         action_dim_int,
     ), f"Policy logits shape mismatch: {policy_logits.shape}"
-    # --- CHANGED: Check value logits shape ---
     assert value_logits.shape == (
         batch_size,
         model_config.NUM_VALUE_ATOMS,
     ), f"Value logits shape mismatch: {value_logits.shape}"
-    # --- END CHANGED ---
 
-    # Check output types
     assert policy_logits.dtype == torch.float32
-    # --- CHANGED: Check value logits type ---
     assert value_logits.dtype == torch.float32
-    # --- END CHANGED ---
-
-    # --- REMOVED: Value range check (output is logits) ---
-    # assert torch.all(value >= -1.0) and torch.all(value <= 1.0), (
-    #     f"Value out of range [-1, 1]: {value}"
-    # )
-    # --- END REMOVED ---
 
 
 @pytest.mark.parametrize(
@@ -104,13 +86,11 @@ def test_model_forward_pass(
 )
 def test_model_forward_transformer_toggle(use_transformer: bool, env_config: EnvConfig):
     """Test forward pass with transformer enabled/disabled."""
-    # Cast ACTION_DIM to int
-    action_dim_int = int(env_config.ACTION_DIM)
-    # Create a specific model config for this test, providing all required fields
-    # --- CHANGED: Use default distributional params from ModelConfig ---
+    # Calculate action_dim manually
+    action_dim_int = int(env_config.NUM_SHAPE_SLOTS * env_config.ROWS * env_config.COLS)
     model_config_test = ModelConfig(
         GRID_INPUT_CHANNELS=1,
-        CONV_FILTERS=[4, 8],  # Simple CNN
+        CONV_FILTERS=[4, 8],
         CONV_KERNEL_SIZES=[3, 3],
         CONV_STRIDES=[1, 1],
         CONV_PADDING=[1, 1],
@@ -122,16 +102,12 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
         TRANSFORMER_LAYERS=1,
         TRANSFORMER_FC_DIM=32,
         FC_DIMS_SHARED=[16],
-        POLICY_HEAD_DIMS=[action_dim_int],  # Use casted int
-        # VALUE_HEAD_DIMS=[1], # Use default from ModelConfig
+        POLICY_HEAD_DIMS=[action_dim_int],  # Use calculated int
         OTHER_NN_INPUT_FEATURES_DIM=10,
         ACTIVATION_FUNCTION="ReLU",
         USE_BATCH_NORM=True,
-        # NUM_VALUE_ATOMS=51, # Use default
-        # VALUE_MIN=-10.0, # Use default
-        # VALUE_MAX=10.0, # Use default
     )
-    # --- END CHANGED ---
+    # Pass trianglengin.EnvConfig
     model = AlphaTriangleNet(model_config_test, env_config)
     batch_size = 2
     device = torch.device("cpu")
@@ -149,11 +125,7 @@ def test_model_forward_transformer_toggle(use_transformer: bool, env_config: Env
     dummy_other = torch.randn(other_shape, device=device)
 
     with torch.no_grad():
-        # --- CHANGED: Expect value_logits ---
         policy_logits, value_logits = model(dummy_grid, dummy_other)
-        # --- END CHANGED ---
 
     assert policy_logits.shape == (batch_size, action_dim_int)
-    # --- CHANGED: Check value logits shape ---
     assert value_logits.shape == (batch_size, model_config_test.NUM_VALUE_ATOMS)
-    # --- END CHANGED ---

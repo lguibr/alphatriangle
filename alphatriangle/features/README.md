@@ -1,14 +1,14 @@
-# File: alphatriangle/features/README.md
+
 # Feature Extraction Module (`alphatriangle.features`)
 
 ## Purpose and Architecture
 
-This module is solely responsible for converting raw [`GameState`](../environment/core/game_state.py) objects from the [`alphatriangle.environment`](../environment/README.md) module into numerical representations (features) suitable for input into the neural network ([`alphatriangle.nn`](../nn/README.md)). It acts as a bridge between the game's internal state and the requirements of the machine learning model.
+This module is solely responsible for converting raw [`GameState`](../../trianglengin/game_interface.py) objects from the `trianglengin` library into numerical representations (features) suitable for input into the neural network ([`alphatriangle.nn`](../nn/README.md)). It acts as a bridge between the game's internal state and the requirements of the machine learning model.
 
--   **Decoupling:** This module completely decouples feature engineering from the core game environment logic. The `environment` module focuses only on game rules and state transitions, while this module handles the transformation for the NN.
+-   **Decoupling:** This module completely decouples feature engineering from the core game engine logic. The `trianglengin` library focuses only on game rules and state transitions (now largely in C++), while this module handles the transformation for the NN.
 -   **Feature Engineering:**
-    -   [`extractor.py`](extractor.py): Contains the `GameStateFeatures` class and the main `extract_state_features` function. This orchestrates the extraction process, calling helper functions to generate different feature types. It uses `Triangle` and `Shape` from [`alphatriangle.structs`](../structs/README.md).
-    -   [`grid_features.py`](grid_features.py): Contains low-level, potentially performance-optimized (e.g., using Numba) functions for calculating specific scalar metrics derived from the grid state (like column heights, holes, bumpiness). **This module now operates directly on NumPy arrays passed from `GameStateFeatures`.**
+    -   [`extractor.py`](extractor.py): Contains the `GameStateFeatures` class and the main `extract_state_features` function. This orchestrates the extraction process, calling helper functions to generate different feature types. It uses the `Shape` class from `trianglengin.game_interface`.
+    -   [`grid_features.py`](grid_features.py): Contains low-level, potentially performance-optimized (e.g., using Numba) functions for calculating specific scalar metrics derived from the grid state (like column heights, holes, bumpiness). This module operates directly on NumPy arrays obtained from the `GameState` wrapper.
 -   **Output Format:** The `extract_state_features` function returns a `StateType` (a `TypedDict` defined in [`alphatriangle.utils.types`](../utils/types.py) containing `grid` and `other_features` numpy arrays), which is the standard input format expected by the `NeuralNetwork` interface.
 -   **Configuration Dependency:** The extractor requires [`ModelConfig`](../config/model_config.py) to ensure the dimensions of the extracted features match the expectations of the neural network architecture.
 
@@ -22,14 +22,12 @@ This module is solely responsible for converting raw [`GameState`](../environmen
 
 ## Dependencies
 
--   **[`alphatriangle.environment`](../environment/README.md)**:
+-   **`trianglengin`**:
     -   `GameState`: The input object for feature extraction.
-    -   `GridData`: Accessed via `GameState` to get grid information (NumPy arrays).
--   **[`alphatriangle.config`](../config/README.md)**:
     -   `EnvConfig`: Accessed via `GameState` for environment dimensions.
+    -   `Shape`: Used for processing shape features.
+-   **[`alphatriangle.config`](../config/README.md)**:
     -   `ModelConfig`: Required by `extract_state_features` to ensure output dimensions match the NN input layer.
--   **[`alphatriangle.structs`](../structs/README.md)**:
-    -   Uses `Triangle`, `Shape`.
 -   **[`alphatriangle.utils`](../utils/README.md)**:
     -   `StateType`: The return type dictionary format.
 -   **`numpy`**:

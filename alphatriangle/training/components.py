@@ -3,14 +3,15 @@ from typing import TYPE_CHECKING
 
 import ray
 
-# Import EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
+# Import EnvConfig from trianglengin's top level
+from trianglengin import EnvConfig  # UPDATED IMPORT
+from trimcts import SearchConfiguration
 
 # Keep alphatriangle imports
 
 if TYPE_CHECKING:
+    # Keep AlphaTriangleMCTSConfig for potential future use if needed
     from alphatriangle.config import (
-        MCTSConfig,
         ModelConfig,
         PersistenceConfig,
         TrainConfig,
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
     from alphatriangle.nn import NeuralNetwork
     from alphatriangle.rl import ExperienceBuffer, Trainer
 
-    pass  # No changes needed here
+    pass
 
 
 @dataclass
@@ -30,10 +31,9 @@ class TrainingComponents:
     buffer: "ExperienceBuffer"
     trainer: "Trainer"
     data_manager: "DataManager"
-    stats_collector_actor: ray.actor.ActorHandle | None  # Keep type hint
+    stats_collector_actor: ray.actor.ActorHandle | None
     train_config: "TrainConfig"
-    env_config: EnvConfig  # Use trianglengin.EnvConfig
+    env_config: EnvConfig  # Uses trianglengin.EnvConfig
     model_config: "ModelConfig"
-    mcts_config: "MCTSConfig"
+    mcts_config: SearchConfiguration  # Use the trimcts config type here
     persist_config: "PersistenceConfig"
-    # REMOVE visual_state_actor field

@@ -1,13 +1,14 @@
 
+
 # RL Core Submodule (`alphatriangle.rl.core`)
 
 ## Purpose and Architecture
 
-This submodule contains core classes directly involved in the reinforcement learning update process and data storage. **The orchestration logic previously found here (`TrainingOrchestrator`) has been moved to the [`alphatriangle.training`](../../training/README.md) module.**
+This submodule contains core classes directly involved in the reinforcement learning update process and data storage. **The orchestration logic resides in the [`alphatriangle.training`](../../training/README.md) module.**
 
 -   **[`Trainer`](trainer.py):** This class encapsulates the logic for updating the neural network's weights.
     -   It holds the main `NeuralNetwork` interface, optimizer, and scheduler.
-    -   Its `train_step` method takes a batch of experiences (potentially with PER indices and weights), performs forward/backward passes, calculates losses (policy cross-entropy, **distributional value cross-entropy**, optional entropy bonus), applies importance sampling weights if using PER, updates weights, and returns calculated TD errors for PER priority updates.
+    -   Its `train_step` method takes a batch of experiences (potentially with PER indices and weights), performs forward/backward passes, calculates losses (policy cross-entropy, **distributional value cross-entropy**, optional entropy bonus), applies importance sampling weights if using PER, updates weights, and returns calculated TD errors for PER priority updates. **Uses `trianglengin.EnvConfig`.**
 -   **[`ExperienceBuffer`](buffer.py):** This class implements a replay buffer storing `Experience` tuples (`(StateType, policy_target, n_step_return)`). It supports Prioritized Experience Replay (PER) via a SumTree, including prioritized sampling and priority updates, based on configuration.
 
 ## Exposed Interfaces
@@ -30,7 +31,7 @@ This submodule contains core classes directly involved in the reinforcement lear
 ## Dependencies
 
 -   **[`alphatriangle.config`](../../config/README.md)**: `TrainConfig`, `ModelConfig`.
--   **[`trianglengin.config`](../../config/README.md)**: `EnvConfig`.
+-   **`trianglengin`**: `EnvConfig`.
 -   **[`alphatriangle.nn`](../../nn/README.md)**: `NeuralNetwork`.
 -   **[`alphatriangle.utils`](../../utils/README.md)**: Types (`Experience`, `PERBatchSample`, `StateType`, etc.) and helpers (`SumTree`).
 -   **`torch`**: Used heavily by `Trainer`.

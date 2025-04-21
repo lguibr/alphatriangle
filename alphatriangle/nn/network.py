@@ -1,24 +1,24 @@
+# File: alphatriangle/nn/network.py
 import logging
 import sys
-from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
-# Import GameState and EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
-from trianglengin.core.environment import GameState
+# Import GameState and EnvConfig from trianglengin's top level
+from trianglengin import EnvConfig, GameState  # UPDATED IMPORT
 
 # Keep alphatriangle imports
 from ..config import ModelConfig, TrainConfig
 from ..features import extract_state_features
-from ..utils.types import ActionType, PolicyValueOutput, StateType
+
+# Import ActionType for explicit type usage
 from .model import AlphaTriangleNet
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from ..utils.types import ActionType, StateType
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class NeuralNetwork:
     Wrapper for the PyTorch model providing evaluation and state management.
     Handles distributional value head (C51) by calculating expected value for MCTS.
     Optionally compiles the model using torch.compile().
+    Conforms to trimcts.AlphaZeroNetworkInterface.
     """
 
     def __init__(
@@ -49,7 +50,10 @@ class NeuralNetwork:
         self.device = device
         # Pass trianglengin.EnvConfig to model
         self.model = AlphaTriangleNet(model_config, env_config).to(device)
-        self.action_dim = env_config.ACTION_DIM
+        # Calculate action_dim manually
+        self.action_dim = int(
+            env_config.NUM_SHAPE_SLOTS * env_config.ROWS * env_config.COLS
+        )
         self.model.eval()
 
         self.num_atoms = model_config.NUM_VALUE_ATOMS
@@ -153,10 +157,11 @@ class NeuralNetwork:
         return expected_value
 
     @torch.inference_mode()
-    def evaluate(self, state: GameState) -> PolicyValueOutput:
+    def evaluate_state(self, state: GameState) -> tuple[dict[int, float], float]:
         """
         Evaluates a single trianglengin.GameState.
-        Returns policy mapping and EXPECTED value from the distribution.
+        Returns policy mapping (dict) and EXPECTED value from the distribution.
+        Conforms to trimcts.AlphaZeroNetworkInterface.evaluate_state.
         Raises NetworkEvaluationError on issues.
         """
         self.model.eval()
@@ -188,15 +193,28 @@ class NeuralNetwork:
                     f"Evaluate: Policy probabilities sum to {prob_sum:.6f} (not 1.0) for state {state.current_step}. Re-normalizing."
                 )
                 if prob_sum <= 1e-9:
-                    raise NetworkEvaluationError(
-                        f"Policy probability sum is near zero ({prob_sum}) for state {state.current_step}. Cannot normalize."
-                    )
-                policy_probs /= prob_sum
+                    valid_actions = state.valid_actions()
+                    if valid_actions:
+                        num_valid = len(valid_actions)
+                        policy_probs = np.zeros_like(policy_probs)
+                        uniform_prob = 1.0 / num_valid
+                        for action_idx in valid_actions:
+                            if 0 <= action_idx < len(policy_probs):
+                                policy_probs[action_idx] = uniform_prob
+                        logger.warning(
+                            "Policy sum was zero, returning uniform over valid actions."
+                        )
+                    else:
+                        raise NetworkEvaluationError(
+                            f"Policy probability sum is near zero ({prob_sum}) for state {state.current_step} with no valid actions. Cannot normalize."
+                        )
+                else:
+                    policy_probs /= prob_sum
 
             expected_value_tensor = self._logits_to_expected_value(value_logits)
             expected_value_scalar = expected_value_tensor.squeeze(0).item()
 
-            action_policy: Mapping[ActionType, float] = {
+            action_policy: dict[ActionType, float] = {
                 i: float(p) for i, p in enumerate(policy_probs)
             }
 
@@ -217,10 +235,13 @@ class NeuralNetwork:
             ) from e
 
     @torch.inference_mode()
-    def evaluate_batch(self, states: list[GameState]) -> list[PolicyValueOutput]:
+    def evaluate_batch(
+        self, states: list[GameState]
+    ) -> list[tuple[dict[int, float], float]]:
         """
         Evaluates a batch of trianglengin.GameStates.
-        Returns a list of (policy mapping, EXPECTED value).
+        Returns a list of (policy mapping (dict), EXPECTED value).
+        Conforms to trimcts.AlphaZeroNetworkInterface.evaluate_batch.
         Raises NetworkEvaluationError on issues.
         """
         if not states:
@@ -251,7 +272,7 @@ class NeuralNetwork:
             expected_values_tensor = self._logits_to_expected_value(value_logits)
             expected_values = expected_values_tensor.squeeze(1).cpu().numpy()
 
-            results: list[PolicyValueOutput] = []
+            results: list[tuple[dict[int, float], float]] = []
             for batch_idx in range(len(states)):
                 probs_i = np.maximum(policy_probs[batch_idx], 0)
                 prob_sum_i = np.sum(probs_i)
@@ -260,12 +281,25 @@ class NeuralNetwork:
                         f"EvaluateBatch: Policy probabilities sum to {prob_sum_i:.6f} (not 1.0) for sample {batch_idx}. Re-normalizing."
                     )
                     if prob_sum_i <= 1e-9:
-                        raise NetworkEvaluationError(
-                            f"Policy probability sum is near zero ({prob_sum_i}) for batch sample {batch_idx}. Cannot normalize."
-                        )
-                    probs_i /= prob_sum_i
+                        valid_actions = states[batch_idx].valid_actions()
+                        if valid_actions:
+                            num_valid = len(valid_actions)
+                            probs_i = np.zeros_like(probs_i)
+                            uniform_prob = 1.0 / num_valid
+                            for action_idx in valid_actions:
+                                if 0 <= action_idx < len(probs_i):
+                                    probs_i[action_idx] = uniform_prob
+                            logger.warning(
+                                f"Batch sample {batch_idx} policy sum was zero, returning uniform."
+                            )
+                        else:
+                            raise NetworkEvaluationError(
+                                f"Policy probability sum is near zero ({prob_sum_i}) for batch sample {batch_idx} with no valid actions. Cannot normalize."
+                            )
+                    else:
+                        probs_i /= prob_sum_i
 
-                policy_i: Mapping[ActionType, float] = {
+                policy_i: dict[ActionType, float] = {
                     i: float(p) for i, p in enumerate(probs_i)
                 }
                 value_i = float(expected_values[batch_idx])

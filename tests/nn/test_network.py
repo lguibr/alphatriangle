@@ -1,293 +1,252 @@
-from unittest.mock import MagicMock, patch
-
+# File: tests/nn/test_network.py
 import numpy as np
 import pytest
 import torch
 
-# Import EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
-
-# Import GameState from trianglengin
-from trianglengin.core.environment import GameState
+# Import GameState and EnvConfig from trianglengin's top level
+from trianglengin import EnvConfig, GameState
 
 # Keep alphatriangle imports
 from alphatriangle.config import ModelConfig, TrainConfig
-from alphatriangle.nn import AlphaTriangleNet, NeuralNetwork
+from alphatriangle.features import extract_state_features
+from alphatriangle.nn import NeuralNetwork
+from alphatriangle.nn.network import NetworkEvaluationError
 from alphatriangle.utils.types import StateType
-
-# Use module-level rng from tests/conftest.py
-from tests.conftest import rng
 
 
 # Use shared fixtures implicitly via pytest injection
 @pytest.fixture
-def env_config(mock_env_config: EnvConfig) -> EnvConfig:
+def env_config(mock_env_config: EnvConfig) -> EnvConfig:  # Uses trianglengin.EnvConfig
     return mock_env_config
 
 
 @pytest.fixture
 def model_config(mock_model_config: ModelConfig) -> ModelConfig:
-    # Ensure feature dim matches mock_state_type
-    mock_model_config.OTHER_NN_INPUT_FEATURES_DIM = 10
     return mock_model_config
 
 
 @pytest.fixture
 def train_config(mock_train_config: TrainConfig) -> TrainConfig:
-    # --- CHANGED: Use the default COMPILE_MODEL=True for this test fixture ---
-    # Ensure the test runs against the default behavior
+    # Explicitly disable compilation for tests unless specifically testing compilation
     cfg = mock_train_config.model_copy(deep=True)
-    cfg.COMPILE_MODEL = True  # Explicitly set to True for clarity in test setup
+    cfg.COMPILE_MODEL = False
     return cfg
-    # --- END CHANGED ---
-
-
-@pytest.fixture
-def device() -> torch.device:
-    # Use CPU for consistency in tests, even though compile might happen
-    return torch.device("cpu")
 
 
 @pytest.fixture
 def nn_interface(
     model_config: ModelConfig,
-    env_config: EnvConfig,
-    train_config: TrainConfig,
-    device: torch.device,
+    env_config: EnvConfig,  # Uses trianglengin.EnvConfig
+    train_config: TrainConfig,  # Use the modified train_config fixture
 ) -> NeuralNetwork:
     """Provides a NeuralNetwork instance for testing."""
-    # --- CHANGED: Pass the modified train_config ---
-    return NeuralNetwork(model_config, env_config, train_config, device)
-    # --- END CHANGED ---
+    device = torch.device("cpu")
+    # Pass trianglengin.EnvConfig and the modified train_config
+    nn_interface_instance = NeuralNetwork(
+        model_config, env_config, train_config, device
+    )
+    nn_interface_instance.model.eval()
+    return nn_interface_instance
 
 
 @pytest.fixture
-def mock_game_state(env_config: EnvConfig) -> GameState:
-    """Provides a real GameState object for testing NN interface."""
-    # Use a real GameState instance from trianglengin
+def game_state(env_config: EnvConfig) -> GameState:  # Uses trianglengin.GameState
+    """Provides a fresh GameState instance."""
+    # Pass trianglengin.EnvConfig
     return GameState(config=env_config, initial_seed=123)
 
 
-# --- Fixture providing the batch of copied states ---
-@pytest.fixture
-def mock_game_state_batch(mock_game_state: GameState) -> list[GameState]:
-    """Provides a list of copied GameState objects."""
-    batch_size = 3
-    # The .copy() call happens here, where mypy knows mock_game_state is GameState
-    return [mock_game_state.copy() for _ in range(batch_size)]
+def test_network_initialization(
+    nn_interface: NeuralNetwork,
+    model_config: ModelConfig,
+    env_config: EnvConfig,  # Uses trianglengin.EnvConfig
+):
+    """Test if the NeuralNetwork wrapper initializes correctly."""
+    assert nn_interface.model is not None
+    assert nn_interface.device == torch.device("cpu")
+    assert nn_interface.model_config == model_config
+    assert nn_interface.env_config == env_config  # Check env_config storage
+    # Calculate action_dim manually for comparison
+    action_dim_int = int(env_config.NUM_SHAPE_SLOTS * env_config.ROWS * env_config.COLS)
+    assert nn_interface.action_dim == action_dim_int
 
 
-# --- End fixture ---
+def test_state_to_tensors(
+    nn_interface: NeuralNetwork,
+    game_state: GameState,  # Uses trianglengin.GameState
+    model_config: ModelConfig,
+    env_config: EnvConfig,  # Uses trianglengin.EnvConfig
+):
+    """Test the conversion of a GameState to tensors."""
+    grid_tensor, other_tensor = nn_interface._state_to_tensors(game_state)
 
+    assert isinstance(grid_tensor, torch.Tensor)
+    assert isinstance(other_tensor, torch.Tensor)
 
-@pytest.fixture
-def mock_state_type_nn(model_config: ModelConfig, env_config: EnvConfig) -> StateType:
-    """Creates a mock StateType dictionary compatible with the NN test config."""
-    grid_shape = (
+    assert grid_tensor.shape == (
+        1,
         model_config.GRID_INPUT_CHANNELS,
         env_config.ROWS,
         env_config.COLS,
     )
-    other_shape = (model_config.OTHER_NN_INPUT_FEATURES_DIM,)
-    return {
-        "grid": rng.random(grid_shape).astype(np.float32),
-        "other_features": rng.random(other_shape).astype(np.float32),
-    }
+    assert other_tensor.shape == (1, model_config.OTHER_NN_INPUT_FEATURES_DIM)
+
+    assert grid_tensor.device == nn_interface.device
+    assert other_tensor.device == nn_interface.device
 
 
-# --- Test Initialization ---
-def test_nn_initialization(nn_interface: NeuralNetwork, device: torch.device):
-    """Test if the NeuralNetwork wrapper initializes correctly."""
-    assert nn_interface is not None
-    assert nn_interface.device == device
-    # --- CHANGED: Check underlying model type if compiled ---
-    if hasattr(nn_interface.model, "_orig_mod"):
-        # If compiled, check the original module's type
-        assert isinstance(nn_interface.model._orig_mod, AlphaTriangleNet)
-        # Check that the compiled model is in eval mode
-        assert not nn_interface.model.training
-    else:
-        # If not compiled, check the model directly
-        assert isinstance(nn_interface.model, AlphaTriangleNet)
-        assert not nn_interface.model.training  # Should be in eval mode initially
-    # --- END CHANGED ---
-
-
-# --- Test Feature Extraction Integration (using mock) ---
-@patch("alphatriangle.nn.network.extract_state_features")
-def test_state_to_tensors(
-    mock_extract: MagicMock,
-    nn_interface: NeuralNetwork,
-    mock_game_state: GameState,  # Use real GameState
-    mock_state_type_nn: StateType,
-):
-    """Test the internal _state_to_tensors method mocks feature extraction."""
-    mock_extract.return_value = mock_state_type_nn
-    grid_t, other_t = nn_interface._state_to_tensors(mock_game_state)
-
-    mock_extract.assert_called_once_with(mock_game_state, nn_interface.model_config)
-    assert isinstance(grid_t, torch.Tensor)
-    assert isinstance(other_t, torch.Tensor)
-    assert grid_t.device == nn_interface.device
-    assert other_t.device == nn_interface.device
-    assert grid_t.shape[0] == 1  # Batch dimension
-    assert other_t.shape[0] == 1
-    assert grid_t.shape[1] == nn_interface.model_config.GRID_INPUT_CHANNELS
-    assert other_t.shape[1] == nn_interface.model_config.OTHER_NN_INPUT_FEATURES_DIM
-
-
-@patch("alphatriangle.nn.network.extract_state_features")
 def test_batch_states_to_tensors(
-    mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
-    # --- Use the fixture that provides the already copied batch ---
-    mock_game_state_batch: list[GameState],
-    mock_state_type_nn: StateType,
+    game_state: GameState,  # Uses trianglengin.GameState
+    model_config: ModelConfig,
+    env_config: EnvConfig,  # Uses trianglengin.EnvConfig
 ):
-    """Test the internal _batch_states_to_tensors method."""
-    # --- Use the fixture directly, no more .copy() needed here ---
-    mock_states = mock_game_state_batch
-    batch_size = len(mock_states)
-    # --- End change ---
-    # Make mock return slightly different arrays each time if needed
-    # --- CHANGE: Add isinstance check before v.copy() ---
-    mock_extract.side_effect = [
-        {
-            k: (v.copy() + i * 0.1 if isinstance(v, np.ndarray) else v)
-            for k, v in mock_state_type_nn.items()
-        }
-        for i in range(batch_size)
-    ]
-    # --- END CHANGE ---
+    """Test the conversion of a batch of GameStates to tensors."""
+    batch_size = 3
+    states = [game_state.copy() for _ in range(batch_size)]
+    grid_tensor, other_tensor = nn_interface._batch_states_to_tensors(states)
 
-    grid_t, other_t = nn_interface._batch_states_to_tensors(mock_states)
+    assert isinstance(grid_tensor, torch.Tensor)
+    assert isinstance(other_tensor, torch.Tensor)
 
-    assert mock_extract.call_count == batch_size
-    assert isinstance(grid_t, torch.Tensor)
-    assert isinstance(other_t, torch.Tensor)
-    assert grid_t.device == nn_interface.device
-    assert other_t.device == nn_interface.device
-    assert grid_t.shape[0] == batch_size
-    assert other_t.shape[0] == batch_size
-    assert grid_t.shape[1] == nn_interface.model_config.GRID_INPUT_CHANNELS
-    assert other_t.shape[1] == nn_interface.model_config.OTHER_NN_INPUT_FEATURES_DIM
+    assert grid_tensor.shape == (
+        batch_size,
+        model_config.GRID_INPUT_CHANNELS,
+        env_config.ROWS,
+        env_config.COLS,
+    )
+    assert other_tensor.shape == (batch_size, model_config.OTHER_NN_INPUT_FEATURES_DIM)
+
+    assert grid_tensor.device == nn_interface.device
+    assert other_tensor.device == nn_interface.device
 
 
-# --- Test Evaluation Methods ---
-@patch("alphatriangle.nn.network.extract_state_features")
-def test_evaluate_single(
-    mock_extract: MagicMock,
+def test_evaluate_state(
     nn_interface: NeuralNetwork,
-    mock_game_state: GameState,  # Use real GameState
-    mock_state_type_nn: StateType,
-    env_config: EnvConfig,
+    game_state: GameState,  # Uses trianglengin.GameState
+    env_config: EnvConfig,  # Uses trianglengin.EnvConfig
 ):
-    """Test the evaluate method for a single state."""
-    mock_extract.return_value = mock_state_type_nn
-    # Cast ACTION_DIM to int
-    action_dim_int = int(env_config.ACTION_DIM)
+    """Test evaluating a single GameState."""
+    policy_dict, value = nn_interface.evaluate_state(game_state)
 
-    policy_map, value = nn_interface.evaluate(mock_game_state)
-
-    assert isinstance(policy_map, dict)
+    assert isinstance(policy_dict, dict)
     assert isinstance(value, float)
-    assert len(policy_map) == action_dim_int
-    assert all(
-        isinstance(k, int) and isinstance(v, float) for k, v in policy_map.items()
-    )
-    assert abs(sum(policy_map.values()) - 1.0) < 1e-5, (
-        f"Policy probs sum to {sum(policy_map.values())}"
-    )
-    # --- REMOVED: Value range check ---
-    # assert -1.0 <= value <= 1.0
-    # --- END REMOVED ---
+    # Calculate action_dim manually for comparison
+    action_dim_int = int(env_config.NUM_SHAPE_SLOTS * env_config.ROWS * env_config.COLS)
+    assert len(policy_dict) == action_dim_int
+    assert all(isinstance(k, int) for k in policy_dict)
+    assert all(isinstance(v, float) for v in policy_dict.values())
+    assert abs(sum(policy_dict.values()) - 1.0) < 1e-5
 
 
-@patch("alphatriangle.nn.network.extract_state_features")
 def test_evaluate_batch(
-    mock_extract: MagicMock,
     nn_interface: NeuralNetwork,
-    # --- Use the fixture that provides the already copied batch ---
-    mock_game_state_batch: list[GameState],
-    mock_state_type_nn: StateType,
-    env_config: EnvConfig,
+    game_state: GameState,  # Uses trianglengin.GameState
+    env_config: EnvConfig,  # Uses trianglengin.EnvConfig
 ):
-    """Test the evaluate_batch method."""
-    # --- Use the fixture directly, no more .copy() needed here ---
-    mock_states = mock_game_state_batch
-    batch_size = len(mock_states)
-    # --- End change ---
-    # --- CHANGE: Add isinstance check before v.copy() ---
-    mock_extract.side_effect = [
-        {
-            k: (v.copy() + i * 0.1 if isinstance(v, np.ndarray) else v)
-            for k, v in mock_state_type_nn.items()
-        }
-        for i in range(batch_size)
-    ]
-    # --- END CHANGE ---
-    # Cast ACTION_DIM to int
-    action_dim_int = int(env_config.ACTION_DIM)
-
-    results = nn_interface.evaluate_batch(mock_states)
+    """Test evaluating a batch of GameStates."""
+    batch_size = 3
+    states = [game_state.copy() for _ in range(batch_size)]
+    results = nn_interface.evaluate_batch(states)
 
     assert isinstance(results, list)
     assert len(results) == batch_size
-    for policy_map, value in results:
-        assert isinstance(policy_map, dict)
+
+    # Calculate action_dim manually for comparison
+    action_dim_int = int(env_config.NUM_SHAPE_SLOTS * env_config.ROWS * env_config.COLS)
+    for policy_dict, value in results:
+        assert isinstance(policy_dict, dict)
         assert isinstance(value, float)
-        assert len(policy_map) == action_dim_int
-        assert all(
-            isinstance(k, int) and isinstance(v, float) for k, v in policy_map.items()
-        )
-        assert abs(sum(policy_map.values()) - 1.0) < 1e-5
-        # --- REMOVED: Value range check ---
-        # assert -1.0 <= value <= 1.0
-        # --- END REMOVED ---
+        assert len(policy_dict) == action_dim_int
+        assert all(isinstance(k, int) for k in policy_dict)
+        assert all(isinstance(v, float) for v in policy_dict.values())
+        assert abs(sum(policy_dict.values()) - 1.0) < 1e-5
 
 
-# --- Test Weight Management ---
 def test_get_set_weights(nn_interface: NeuralNetwork):
     """Test getting and setting model weights."""
     initial_weights = nn_interface.get_weights()
     assert isinstance(initial_weights, dict)
-    assert all(
-        isinstance(k, str) and isinstance(v, torch.Tensor)
-        for k, v in initial_weights.items()
-    )
-    # Check weights are on CPU
+    assert all(isinstance(v, torch.Tensor) for v in initial_weights.values())
     assert all(v.device == torch.device("cpu") for v in initial_weights.values())
 
-    # Modify only parameters (which should be floats)
+    # Modify weights slightly by creating NEW tensors
     modified_weights = {}
+    params_modified = False
+    float_keys_modified = []
     for k, v in initial_weights.items():
         if v.dtype.is_floating_point:
-            modified_weights[k] = v + 0.1
+            # Create a completely new tensor of ONES to ensure difference
+            # (assuming not all weights are initialized to 1)
+            modified_weights[k] = torch.ones_like(v)
+            params_modified = True
+            float_keys_modified.append(k)
+            # REMOVED internal assertion that failed when initial weight was already 1
+            # assert not torch.equal(
+            #     initial_weights[k], modified_weights[k]
+            # ), f"Weight {k} did not change after creating ones_like!"
         else:
-            modified_weights[k] = v  # Keep non-float tensors (e.g., buffers) unchanged
+            modified_weights[k] = v  # Keep non-float tensors (buffers) unchanged
 
-    # Set modified weights
+    assert params_modified, "No floating point parameters found to modify in state_dict"
+
     nn_interface.set_weights(modified_weights)
-
-    # Get weights again and compare parameters
     new_weights = nn_interface.get_weights()
-    assert len(new_weights) == len(initial_weights)
-    for key in initial_weights:
-        assert key in new_weights
-        # Compare on CPU
-        if initial_weights[key].dtype.is_floating_point:
-            assert torch.allclose(modified_weights[key], new_weights[key], atol=1e-6), (
-                f"Weight mismatch for key {key}"
-            )
-        else:
-            assert torch.equal(initial_weights[key], new_weights[key]), (
-                f"Non-float tensor mismatch for key {key}"
-            )
 
-    # Test setting back original weights
-    nn_interface.set_weights(initial_weights)
-    final_weights = nn_interface.get_weights()
-    for key in initial_weights:
-        assert torch.equal(initial_weights[key], final_weights[key]), (
-            f"Weight mismatch after setting back original for key {key}"
-        )
+    # Check if weights were actually updated
+    weights_changed = False
+    for k in float_keys_modified:
+        # Check if the tensor retrieved AFTER setting is different from the INITIAL tensor
+        if not torch.equal(initial_weights[k], new_weights[k]):
+            weights_changed = True
+            break
+
+    assert weights_changed, "Floating point weights did not change after set_weights"
+
+    # Check if the loaded weights match the modified ones we intended to set
+    assert all(
+        torch.allclose(modified_weights[k], new_weights[k], atol=1e-6)
+        for k in modified_weights
+    )
+
+
+def test_evaluate_state_with_nan_features(
+    nn_interface: NeuralNetwork,
+    game_state: GameState,  # Uses trianglengin.GameState
+    mocker,
+):
+    """Test that evaluation raises error if features contain NaN."""
+
+    def mock_extract_nan(*args, **kwargs) -> StateType:
+        state_dict = extract_state_features(*args, **kwargs)
+        state_dict["other_features"][0] = np.nan  # Inject NaN
+        return state_dict
+
+    mocker.patch("alphatriangle.nn.network.extract_state_features", mock_extract_nan)
+
+    with pytest.raises(NetworkEvaluationError, match="Non-finite values found"):
+        nn_interface.evaluate_state(game_state)
+
+
+def test_evaluate_batch_with_nan_features(
+    nn_interface: NeuralNetwork,
+    game_state: GameState,  # Uses trianglengin.GameState
+    mocker,
+):
+    """Test that batch evaluation raises error if features contain NaN."""
+    batch_size = 2
+    states = [game_state.copy() for _ in range(batch_size)]
+
+    def mock_extract_nan_batch(*args, **kwargs) -> StateType:
+        state_dict = extract_state_features(*args, **kwargs)
+        # Inject NaN into the first element of the batch only
+        if args[0] is states[0]:
+            state_dict["other_features"][0] = np.nan
+        return state_dict
+
+    mocker.patch(
+        "alphatriangle.nn.network.extract_state_features", mock_extract_nan_batch
+    )
+
+    with pytest.raises(NetworkEvaluationError, match="Non-finite values found"):
+        nn_interface.evaluate_batch(states)

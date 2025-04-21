@@ -1,9 +1,10 @@
+# File: tests/rl/test_trainer.py
 import numpy as np
 import pytest
 import torch
 
-# Import EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
+# Import EnvConfig from trianglengin's top level
+from trianglengin import EnvConfig  # UPDATED IMPORT
 
 # Keep alphatriangle imports
 from alphatriangle.config import ModelConfig, TrainConfig
@@ -12,7 +13,7 @@ from alphatriangle.rl import ExperienceBuffer, Trainer
 from alphatriangle.utils.types import Experience, PERBatchSample, StateType
 
 
-# ... (fixtures remain mostly the same, but ensure EnvConfig is from trianglengin) ...
+# Use shared fixtures implicitly via pytest injection
 @pytest.fixture
 def env_config(mock_env_config: EnvConfig) -> EnvConfig:  # Uses trianglengin.EnvConfig
     return mock_env_config
@@ -118,7 +119,6 @@ def buffer_per(
     return buffer
 
 
-# ... (tests remain the same, using updated fixtures) ...
 def test_trainer_initialization(trainer_uniform: Trainer):
     assert trainer_uniform.nn is not None
     assert trainer_uniform.model is not None
@@ -144,7 +144,13 @@ def test_prepare_batch(trainer_uniform: Trainer, mock_experience: Experience):
         batch_size,
         trainer_uniform.model_config.OTHER_NN_INPUT_FEATURES_DIM,
     )
-    assert policy_target_t.shape == (batch_size, trainer_uniform.env_config.ACTION_DIM)
+    # Calculate action_dim manually for comparison
+    action_dim_int = int(
+        trainer_uniform.env_config.NUM_SHAPE_SLOTS
+        * trainer_uniform.env_config.ROWS
+        * trainer_uniform.env_config.COLS
+    )
+    assert policy_target_t.shape == (batch_size, action_dim_int)
     assert n_step_return_t.shape == (batch_size,)
 
     assert grid_t.device == trainer_uniform.device

@@ -1,18 +1,15 @@
+# File: alphatriangle/nn/model.py
 import math
 from typing import cast
 
 import torch
 import torch.nn as nn
 
-# Import EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
+# Import EnvConfig from trianglengin's top level
+from trianglengin import EnvConfig  # UPDATED IMPORT
 
 # Keep alphatriangle ModelConfig import
 from ..config import ModelConfig
-
-# --- REMOVED: Incorrect self-import ---
-# from .model import AlphaTriangleNet
-# --- END REMOVED ---
 
 
 def conv_block(
@@ -73,37 +70,22 @@ class PositionalEncoding(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
         position = torch.arange(max_len).unsqueeze(1)  # Shape: [max_len, 1]
-        # --- CHANGE: Simplified calculation based on tutorial ---
         div_term = torch.exp(
             torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)
         )  # Shape: [d_model / 2]
         pe = torch.zeros(max_len, d_model)  # Shape: [max_len, d_model]
 
-        # Apply sin to even indices
         pe[:, 0::2] = torch.sin(position * div_term)
-
-        # Apply cos to odd indices (if they exist)
-        # Note: div_term is already the correct size for broadcasting with pe[:, 1::2]
-        # because its length is ceil(d_model / 2). If d_model is odd,
-        # the last element of div_term won't be used for the cos calculation anyway.
         if d_model > 1:
             pe[:, 1::2] = torch.cos(position * div_term)
 
-        # Add the batch dimension (1) expected by register_buffer and forward pass
-        # Shape becomes [max_len, 1, d_model]
         pe = pe.unsqueeze(1)
-        # --- END CHANGE ---
-
         self.register_buffer("pe", pe)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
             x: Tensor, shape [seq_len, batch_size, embedding_dim]
-                (Note: AlphaTriangleNet might pass [batch_size, embedding_dim, seq_len (H*W)])
-                It needs to be permuted before applying positional encoding if that's the case.
-                Here, we assume the input is already [seq_len, batch_size, embedding_dim].
-
         Returns:
             Tensor with added positional encoding.
         """
@@ -120,8 +102,6 @@ class PositionalEncoding(nn.Module):
                 f"Input embedding dimension {x.shape[2]} does not match PositionalEncoding dimension {pe_buffer.shape[2]}"
             )
 
-        # Add positional encoding
-        # Slicing pe_buffer[:x.size(0)] handles variable sequence lengths
         x = x + pe_buffer[: x.size(0)]
         return cast("torch.Tensor", self.dropout(x))
 
@@ -139,8 +119,10 @@ class AlphaTriangleNet(nn.Module):
         super().__init__()
         self.model_config = model_config
         self.env_config = env_config
-        # Cast ACTION_DIM to int
-        self.action_dim = int(env_config.ACTION_DIM)  # type: ignore[call-overload]
+        # Calculate action_dim manually
+        self.action_dim = int(
+            env_config.NUM_SHAPE_SLOTS * env_config.ROWS * env_config.COLS
+        )
 
         activation_cls: type[nn.Module] = getattr(nn, model_config.ACTIVATION_FUNCTION)
 
@@ -167,7 +149,6 @@ class AlphaTriangleNet(nn.Module):
         if model_config.NUM_RESIDUAL_BLOCKS > 0:
             res_channels = model_config.RESIDUAL_BLOCK_FILTERS
             if in_channels != res_channels:
-                # Add projection layer if channels don't match
                 res_layers.append(
                     conv_block(
                         in_channels,
@@ -187,7 +168,7 @@ class AlphaTriangleNet(nn.Module):
                     )
                 )
         self.res_body = nn.Sequential(*res_layers)
-        self.cnn_output_channels = in_channels  # Channels after CNN/Res blocks
+        self.cnn_output_channels = in_channels
 
         # --- Transformer Body (Optional) ---
         self.transformer_body = None
@@ -210,7 +191,7 @@ class AlphaTriangleNet(nn.Module):
                 nhead=model_config.TRANSFORMER_HEADS,
                 dim_feedforward=model_config.TRANSFORMER_FC_DIM,
                 activation=model_config.ACTIVATION_FUNCTION.lower(),
-                batch_first=False,  # Expects (Seq, Batch, Dim)
+                batch_first=False,
                 norm_first=True,
             )
             transformer_norm = nn.LayerNorm(transformer_input_dim)
@@ -220,7 +201,6 @@ class AlphaTriangleNet(nn.Module):
                 norm=transformer_norm,
             )
 
-            # Calculate transformer output size using a dummy forward pass
             dummy_input_grid = torch.zeros(
                 1, model_config.GRID_INPUT_CHANNELS, env_config.ROWS, env_config.COLS
             )
@@ -229,10 +209,8 @@ class AlphaTriangleNet(nn.Module):
                 res_out = self.res_body(cnn_out)
                 proj_out = self.input_proj(res_out)
                 b, d, h, w = proj_out.shape
-                # Size after flattening H*W dimensions
                 self.transformer_output_size = h * w * d
         else:
-            # Calculate flattened size after conv/res blocks if no transformer
             dummy_input_grid = torch.zeros(
                 1, model_config.GRID_INPUT_CHANNELS, env_config.ROWS, env_config.COLS
             )
@@ -251,12 +229,11 @@ class AlphaTriangleNet(nn.Module):
                 self.flattened_cnn_size + model_config.OTHER_NN_INPUT_FEATURES_DIM
             )
 
-        shared_fc_layers: list[nn.Module] = []  # Explicitly type the list
+        shared_fc_layers: list[nn.Module] = []
         in_features = combined_input_size
         for hidden_dim in model_config.FC_DIMS_SHARED:
             shared_fc_layers.append(nn.Linear(in_features, hidden_dim))
             if model_config.USE_BATCH_NORM:
-                # Use BatchNorm1d for FC layers
                 shared_fc_layers.append(nn.BatchNorm1d(hidden_dim))
             shared_fc_layers.append(activation_cls())
             in_features = hidden_dim
@@ -265,36 +242,28 @@ class AlphaTriangleNet(nn.Module):
         # --- Policy Head ---
         policy_head_layers: list[nn.Module] = []
         policy_in_features = in_features
-        # Iterate through hidden dims if any
         for hidden_dim in model_config.POLICY_HEAD_DIMS:
             policy_head_layers.append(nn.Linear(policy_in_features, hidden_dim))
             if model_config.USE_BATCH_NORM:
                 policy_head_layers.append(nn.BatchNorm1d(hidden_dim))
             policy_head_layers.append(activation_cls())
             policy_in_features = hidden_dim
-        # Final layer to output action dimension logits
-        # Use self.action_dim which is already cast to int
         policy_head_layers.append(nn.Linear(policy_in_features, self.action_dim))
         self.policy_head = nn.Sequential(*policy_head_layers)
 
-        # --- Value Head (Distributional) --- CHANGED
+        # --- Value Head (Distributional) ---
         value_head_layers: list[nn.Module] = []
         value_in_features = in_features
-        # Iterate through hidden dims if any
         for hidden_dim in model_config.VALUE_HEAD_DIMS:
             value_head_layers.append(nn.Linear(value_in_features, hidden_dim))
             if model_config.USE_BATCH_NORM:
                 value_head_layers.append(nn.BatchNorm1d(hidden_dim))
             value_head_layers.append(activation_cls())
             value_in_features = hidden_dim
-        # Final layer to output logits for each value atom
         value_head_layers.append(
             nn.Linear(value_in_features, model_config.NUM_VALUE_ATOMS)
         )
-        # REMOVED: Tanh activation - we need logits for cross-entropy loss
-        # value_head_layers.append(nn.Tanh())
         self.value_head = nn.Sequential(*value_head_layers)
-        # --- END CHANGED ---
 
     def forward(
         self, grid_state: torch.Tensor, other_features: torch.Tensor
@@ -306,35 +275,23 @@ class AlphaTriangleNet(nn.Module):
         conv_out = self.conv_body(grid_state)
         res_out = self.res_body(conv_out)
 
-        # Optional Transformer Body
         if (
             self.model_config.USE_TRANSFORMER
             and self.transformer_body is not None
             and self.pos_encoder is not None
         ):
-            proj_out = self.input_proj(res_out)  # Shape: (B, D, H, W)
+            proj_out = self.input_proj(res_out)
             b, d, h, w = proj_out.shape
-            # Reshape for transformer: (Seq, Batch, Dim) -> (H*W, B, D)
             transformer_input = proj_out.flatten(2).permute(2, 0, 1)
-            # Add positional encoding
             transformer_input = self.pos_encoder(transformer_input)
-            # Pass through transformer encoder
-            transformer_output = self.transformer_body(
-                transformer_input
-            )  # Shape: (Seq, Batch, Dim)
-            # Flatten transformer output: (Seq, Batch, Dim) -> (Batch, Seq*Dim)
+            transformer_output = self.transformer_body(transformer_input)
             flattened_features = transformer_output.permute(1, 0, 2).flatten(1)
         else:
-            # Flatten CNN output if no transformer
             flattened_features = res_out.view(res_out.size(0), -1)
 
-        # Combine with other features
         combined_features = torch.cat([flattened_features, other_features], dim=1)
 
-        # Shared FC Layers and Heads
         shared_out = self.shared_fc(combined_features)
         policy_logits = self.policy_head(shared_out)
-        # --- CHANGED: Return value logits ---
         value_logits = self.value_head(shared_out)
         return policy_logits, value_logits
-        # --- END CHANGED ---

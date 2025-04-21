@@ -1,3 +1,4 @@
+# File: tests/conftest.py
 import random
 from typing import cast
 
@@ -6,11 +7,11 @@ import pytest
 import torch
 import torch.optim as optim
 
-# Import EnvConfig from trianglengin
-from trianglengin.config import EnvConfig
+# Import from trianglengin's top level
+from trianglengin import EnvConfig  # Corrected import
 
 # Keep alphatriangle imports
-from alphatriangle.config import MCTSConfig, ModelConfig, TrainConfig
+from alphatriangle.config import ModelConfig, TrainConfig
 from alphatriangle.nn import NeuralNetwork
 from alphatriangle.rl import ExperienceBuffer, Trainer
 from alphatriangle.utils.types import Experience, StateType
@@ -21,12 +22,10 @@ rng = np.random.default_rng()
 @pytest.fixture(scope="session")
 def mock_env_config() -> EnvConfig:
     """Provides a default, *valid* trianglengin.EnvConfig for tests."""
-    # Use a smaller, fully playable grid for easier testing
     rows = 3
     cols = 3
-    # Define playable range for the 3x3 grid
     playable_range = [(0, 3), (0, 3), (0, 3)]
-    # Instantiate trianglengin.EnvConfig
+    # Use EnvConfig from trianglengin
     return EnvConfig(
         ROWS=rows,
         COLS=cols,
@@ -35,11 +34,13 @@ def mock_env_config() -> EnvConfig:
     )
 
 
-# ... (mock_model_config, mock_train_config, mock_mcts_config remain the same) ...
 @pytest.fixture(scope="session")
 def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
     """Provides a default ModelConfig compatible with mock_env_config (session-scoped)."""
-    action_dim_int = int(mock_env_config.ACTION_DIM)
+    # Calculate action_dim manually
+    action_dim_int = int(
+        mock_env_config.NUM_SHAPE_SLOTS * mock_env_config.ROWS * mock_env_config.COLS
+    )
     return ModelConfig(
         GRID_INPUT_CHANNELS=1,
         CONV_FILTERS=[4],
@@ -56,7 +57,7 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
         FC_DIMS_SHARED=[8],
         POLICY_HEAD_DIMS=[action_dim_int],
         VALUE_HEAD_DIMS=[1],
-        OTHER_NN_INPUT_FEATURES_DIM=10,  # Keep this consistent with mock_state_type
+        OTHER_NN_INPUT_FEATURES_DIM=10,
         ACTIVATION_FUNCTION="ReLU",
         USE_BATCH_NORM=True,
     )
@@ -96,21 +97,6 @@ def mock_train_config() -> TrainConfig:
 
 
 @pytest.fixture(scope="session")
-def mock_mcts_config() -> MCTSConfig:
-    """Provides a default MCTSConfig for tests (session-scoped)."""
-    return MCTSConfig(
-        num_simulations=10,
-        puct_coefficient=1.5,
-        temperature_initial=1.0,
-        temperature_final=0.1,
-        temperature_anneal_steps=5,
-        dirichlet_alpha=0.3,
-        dirichlet_epsilon=0.25,
-        max_search_depth=10,
-    )
-
-
-@pytest.fixture(scope="session")
 def mock_state_type(
     mock_model_config: ModelConfig, mock_env_config: EnvConfig
 ) -> StateType:
@@ -120,7 +106,6 @@ def mock_state_type(
         mock_env_config.ROWS,
         mock_env_config.COLS,
     )
-    # Ensure OTHER_NN_INPUT_FEATURES_DIM matches mock_model_config
     other_shape = (mock_model_config.OTHER_NN_INPUT_FEATURES_DIM,)
     return {
         "grid": rng.random(grid_shape, dtype=np.float32),
@@ -133,7 +118,10 @@ def mock_experience(
     mock_state_type: StateType, mock_env_config: EnvConfig
 ) -> Experience:
     """Creates a mock Experience tuple."""
-    action_dim = int(mock_env_config.ACTION_DIM)
+    # Calculate action_dim manually
+    action_dim = int(
+        mock_env_config.NUM_SHAPE_SLOTS * mock_env_config.ROWS * mock_env_config.COLS
+    )
     policy_target = (
         dict.fromkeys(range(action_dim), 1.0 / action_dim)
         if action_dim > 0
@@ -146,12 +134,11 @@ def mock_experience(
 @pytest.fixture(scope="session")
 def mock_nn_interface(
     mock_model_config: ModelConfig,
-    mock_env_config: EnvConfig,  # Uses trianglengin.EnvConfig
+    mock_env_config: EnvConfig,
     mock_train_config: TrainConfig,
 ) -> NeuralNetwork:
     """Provides a NeuralNetwork instance with a mock model for testing."""
     device = torch.device("cpu")
-    # Pass trianglengin.EnvConfig here
     nn_interface = NeuralNetwork(
         mock_model_config, mock_env_config, mock_train_config, device
     )
@@ -162,10 +149,9 @@ def mock_nn_interface(
 def mock_trainer(
     mock_nn_interface: NeuralNetwork,
     mock_train_config: TrainConfig,
-    mock_env_config: EnvConfig,  # Uses trianglengin.EnvConfig
+    mock_env_config: EnvConfig,
 ) -> Trainer:
     """Provides a Trainer instance."""
-    # Pass trianglengin.EnvConfig here
     return Trainer(mock_nn_interface, mock_train_config, mock_env_config)
 
 

@@ -1,57 +1,45 @@
+# File: alphatriangle/rl/self_play/mcts_helpers.py
 import logging
 import random
-from typing import TYPE_CHECKING
 
 import numpy as np
 
-# Import EnvConfig from trianglengin
-# Keep alphatriangle imports
-from ...utils.types import ActionType
-from ..core.node import Node
-from ..core.types import ActionPolicyMapping
-
-if TYPE_CHECKING:
-    from trianglengin.config import EnvConfig
+from ...utils.types import ActionType, PolicyTargetMapping
 
 logger = logging.getLogger(__name__)
 rng = np.random.default_rng()
 
 
 class PolicyGenerationError(Exception):
-    """Custom exception for errors during policy generation or action selection."""
+    """Custom exception for errors during policy generation or action selection from visit counts."""
 
     pass
 
 
-def select_action_based_on_visits(root_node: Node, temperature: float) -> ActionType:
+def select_action_from_visits(
+    visit_counts: dict[ActionType, int], temperature: float
+) -> ActionType:
     """
-    Selects an action from the root node based on visit counts and temperature.
+    Selects an action based on visit counts and temperature.
+    Operates on the dictionary returned by trimcts.run_mcts.
     Raises PolicyGenerationError if selection is not possible.
     """
-    if not root_node.children:
+    if not visit_counts:
         raise PolicyGenerationError(
-            f"Cannot select action: Root node (Step {root_node.state.current_step}) has no children."
+            "Cannot select action: Visit counts dictionary is empty."
         )
 
-    actions = list(root_node.children.keys())
-    visit_counts = np.array(
-        [root_node.children[action].visit_count for action in actions],
-        dtype=np.float64,
-    )
+    actions = list(visit_counts.keys())
+    counts = np.array(list(visit_counts.values()), dtype=np.float64)
 
-    if len(actions) == 0:
-        raise PolicyGenerationError(
-            f"Cannot select action: No actions available in children for root node (Step {root_node.state.current_step})."
-        )
-
-    total_visits = np.sum(visit_counts)
+    total_visits = np.sum(counts)
     logger.debug(
-        f"[PolicySelect] Selecting action for node step {root_node.state.current_step}. Total child visits: {total_visits}. Num children: {len(actions)}"
+        f"[PolicySelect] Selecting action from visits. Total visits: {total_visits}. Num actions: {len(actions)}"
     )
 
     if total_visits == 0:
         logger.warning(
-            f"[PolicySelect] Total visit count for children is zero at root node (Step {root_node.state.current_step}). MCTS might have failed. Selecting uniformly."
+            "[PolicySelect] Total visit count is zero. Selecting uniformly from available actions."
         )
         selected_action = random.choice(actions)
         logger.debug(
@@ -60,34 +48,30 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
         return selected_action
 
     if temperature == 0.0:
-        max_visits = np.max(visit_counts)
+        max_visits = np.max(counts)
         logger.debug(
             f"[PolicySelect] Greedy selection (temp=0). Max visits: {max_visits}"
         )
-        best_action_indices = np.where(visit_counts == max_visits)[0]
-        logger.debug(
-            f"[PolicySelect] Greedy selection. Best action indices: {best_action_indices}"
-        )
+        best_action_indices = np.where(counts == max_visits)[0]
+        # Removed redundant log: logger.debug(f"[PolicySelect] Greedy selection. Best action indices: {best_action_indices}")
         chosen_index = random.choice(best_action_indices)
         selected_action = actions[chosen_index]
         logger.debug(f"[PolicySelect] Greedy action selected: {selected_action}")
         return selected_action
-
     else:
         logger.debug(f"[PolicySelect] Probabilistic selection: Temp={temperature:.4f}")
-        logger.debug(f"  Visit Counts: {visit_counts}")
-        log_visits = np.log(np.maximum(visit_counts, 1e-9))
-        scaled_log_visits = log_visits / temperature
-        scaled_log_visits -= np.max(scaled_log_visits)
-        probabilities = np.exp(scaled_log_visits)
-        sum_probs = np.sum(probabilities)
+        # Removed print: logger.debug(f"  Visit Counts: {counts}")
+        # Use counts directly, avoid log for stability if counts can be zero
+        # Ensure counts are positive before raising to power
+        powered_counts = np.maximum(counts, 1e-9) ** (1.0 / temperature)
+        sum_powered_counts = np.sum(powered_counts)
 
-        if sum_probs < 1e-9 or not np.isfinite(sum_probs):
+        if sum_powered_counts < 1e-9 or not np.isfinite(sum_powered_counts):
             raise PolicyGenerationError(
-                f"Could not normalize visit probabilities (sum={sum_probs}). Visits: {visit_counts}"
+                f"Could not normalize visit probabilities (sum={sum_powered_counts}). Visits: {counts}"
             )
         else:
-            probabilities /= sum_probs
+            probabilities = powered_counts / sum_powered_counts
 
         if not np.all(np.isfinite(probabilities)) or np.any(probabilities < 0):
             raise PolicyGenerationError(
@@ -103,8 +87,8 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
                     f"Probabilities still do not sum to 1 after re-normalization: {probabilities}, Sum: {np.sum(probabilities)}"
                 )
 
-        logger.debug(f"  Final Probabilities (normalized): {probabilities}")
-        logger.debug(f"  Final Probabilities Sum: {np.sum(probabilities):.6f}")
+        # Removed print: logger.debug(f"  Final Probabilities (normalized): {probabilities}")
+        # Removed print: logger.debug(f"  Final Probabilities Sum: {np.sum(probabilities):.6f}")
 
         try:
             selected_action = rng.choice(actions, p=probabilities)
@@ -118,44 +102,41 @@ def select_action_based_on_visits(root_node: Node, temperature: float) -> Action
             ) from e
 
 
-def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicyMapping:
+def get_policy_target_from_visits(
+    visit_counts: dict[ActionType, int], action_dim: int, temperature: float = 1.0
+) -> PolicyTargetMapping:
     """
     Calculates the policy target distribution based on MCTS visit counts.
+    Operates on the dictionary returned by trimcts.run_mcts.
     Raises PolicyGenerationError if target cannot be generated.
     """
-    # Access EnvConfig from the node's state
-    env_config: EnvConfig = root_node.state.env_config
-    action_dim = int(env_config.ACTION_DIM)  # type: ignore[call-overload]
     full_target = dict.fromkeys(range(action_dim), 0.0)
 
-    if not root_node.children or root_node.visit_count == 0:
+    if not visit_counts:
         logger.warning(
-            f"[PolicyTarget] Cannot compute policy target: Root node (Step {root_node.state.current_step}) has no children or zero visits. Returning zero target."
+            "[PolicyTarget] Cannot compute policy target: Visit counts dictionary is empty."
         )
         return full_target
 
-    child_visits = {
-        action: child.visit_count for action, child in root_node.children.items()
-    }
-    actions = list(child_visits.keys())
-    visits = np.array(list(child_visits.values()), dtype=np.float64)
-    total_visits = np.sum(visits)
+    actions = list(visit_counts.keys())
+    counts = np.array(list(visit_counts.values()), dtype=np.float64)
+    total_visits = np.sum(counts)
 
-    if not actions:
+    if total_visits == 0:
         logger.warning(
-            "[PolicyTarget] Cannot compute policy target: No actions found in children."
+            "[PolicyTarget] Cannot compute policy target: Total visits is zero."
         )
         return full_target
 
     if temperature == 0.0:
-        max_visits = np.max(visits)
+        max_visits = np.max(counts)
         if max_visits == 0:
             logger.warning(
                 "[PolicyTarget] Temperature is 0 but max visits is 0. Returning zero target."
             )
             return full_target
 
-        best_actions = [actions[i] for i, v in enumerate(visits) if v == max_visits]
+        best_actions = [actions[i] for i, v in enumerate(counts) if v == max_visits]
         prob = 1.0 / len(best_actions)
         for a in best_actions:
             if 0 <= a < action_dim:
@@ -164,17 +145,17 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
                 logger.warning(
                     f"[PolicyTarget] Best action {a} is out of bounds ({action_dim}). Skipping."
                 )
-
     else:
-        visit_probs = visits ** (1.0 / temperature)
-        sum_probs = np.sum(visit_probs)
+        # Use counts directly, avoid potential issues with log(0)
+        powered_counts = np.maximum(counts, 1e-9) ** (1.0 / temperature)
+        sum_powered_counts = np.sum(powered_counts)
 
-        if sum_probs < 1e-9 or not np.isfinite(sum_probs):
+        if sum_powered_counts < 1e-9 or not np.isfinite(sum_powered_counts):
             raise PolicyGenerationError(
-                f"Could not normalize policy target probabilities (sum={sum_probs}). Visits: {visits}"
+                f"Could not normalize policy target probabilities (sum={sum_powered_counts}). Visits: {counts}"
             )
 
-        probabilities = visit_probs / sum_probs
+        probabilities = powered_counts / sum_powered_counts
         if not np.all(np.isfinite(probabilities)) or np.any(probabilities < 0):
             raise PolicyGenerationError(
                 f"Invalid probabilities generated for policy target: {probabilities}"
@@ -195,11 +176,12 @@ def get_policy_target(root_node: Node, temperature: float = 1.0) -> ActionPolicy
                 full_target[action] = prob
             else:
                 logger.warning(
-                    f"[PolicyTarget] Action {action} from MCTS children is out of bounds ({action_dim}). Skipping."
+                    f"[PolicyTarget] Action {action} from MCTS is out of bounds ({action_dim}). Skipping."
                 )
 
     final_sum = sum(full_target.values())
-    if abs(final_sum - 1.0) > 1e-5 and total_visits > 0:
+    if abs(final_sum - 1.0) > 1e-5:
+        # Keep this error log as it indicates a potential problem
         logger.error(
             f"[PolicyTarget] Final policy target does not sum to 1 ({final_sum:.6f}). Target: {full_target}"
         )

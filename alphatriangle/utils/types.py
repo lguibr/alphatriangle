@@ -1,4 +1,5 @@
 # File: alphatriangle/utils/types.py
+# File: alphatriangle/utils/types.py
 from collections import deque
 from collections.abc import Mapping
 
@@ -49,7 +50,9 @@ ExperienceBatch = list[Experience]
 # Kept as Tuple for performance.
 # The second element (float) is the EXPECTED value calculated from the
 # predicted value distribution (used for MCTS). The Trainer uses the raw logits.
-PolicyValueOutput = tuple[Mapping[ActionType, float], float]
+# --- CHANGED: Use dict instead of Mapping for protocol compatibility ---
+PolicyValueOutput = tuple[dict[ActionType, float], float]
+# --- END CHANGED ---
 
 
 # Type alias for the data structure holding collected statistics

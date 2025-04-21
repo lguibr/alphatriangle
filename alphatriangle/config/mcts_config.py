@@ -1,32 +1,56 @@
 # File: alphatriangle/config/mcts_config.py
-from pydantic import BaseModel, Field, field_validator
+"""
+Configuration for MCTS parameters specific to AlphaTriangle,
+mirroring trimcts.SearchConfiguration for easy control.
+"""
+
+from pydantic import BaseModel, ConfigDict, Field
+
+# Temporarily reduce simulations for faster profiling
+DEFAULT_MAX_SIMULATIONS = 64  # CHANGED TEMPORARILY
+DEFAULT_MAX_DEPTH = 16  # Keep depth lower for faster profiling too
+DEFAULT_CPUCT = 1.5
 
 
-class MCTSConfig(BaseModel):
-    """
-    Configuration for Monte Carlo Tree Search (Pydantic model).
-    --- TUNED FOR INCREASED EXPLORATION & DEPTH ---
-    """
+class AlphaTriangleMCTSConfig(BaseModel):
+    """MCTS Search Configuration managed within AlphaTriangle."""
 
-    num_simulations: int = Field(default=2048, ge=1)
-    puct_coefficient: float = Field(default=2.0, gt=0)
-    temperature_initial: float = Field(default=1.0, ge=0)
-    temperature_final: float = Field(default=0.1, ge=0)
-    temperature_anneal_steps: int = Field(default=100, ge=0)
-    dirichlet_alpha: float = Field(default=0.3, gt=0)
-    dirichlet_epsilon: float = Field(default=0.25, ge=0, le=1.0)
-    max_search_depth: int = Field(default=64, ge=1)
+    # Core Search Parameters
+    max_simulations: int = Field(
+        default=DEFAULT_MAX_SIMULATIONS,
+        description="Maximum number of MCTS simulations per move.",
+        gt=0,
+    )
+    max_depth: int = Field(
+        default=DEFAULT_MAX_DEPTH,
+        description="Maximum depth for tree traversal during simulation.",
+        gt=0,
+    )
 
-    @field_validator("temperature_final")
-    @classmethod
-    def check_temp_final_le_initial(cls, v: float, info) -> float:
-        data = info.data if info.data else info.values
-        initial_temp = data.get("temperature_initial")
-        if initial_temp is not None and v > initial_temp:
-            raise ValueError(
-                "temperature_final cannot be greater than temperature_initial"
-            )
-        return v
+    # UCT Parameters (AlphaZero style)
+    cpuct: float = Field(
+        default=DEFAULT_CPUCT,
+        description="Constant determining the level of exploration (PUCT).",
+    )
 
+    # Dirichlet Noise (for root node exploration)
+    dirichlet_alpha: float = Field(
+        default=0.3, description="Alpha parameter for Dirichlet noise.", ge=0
+    )
+    dirichlet_epsilon: float = Field(
+        default=0.25,
+        description="Weight of Dirichlet noise in root prior probabilities.",
+        ge=0,
+        le=1.0,
+    )
 
-MCTSConfig.model_rebuild(force=True)
+    # Discount Factor (Primarily for MuZero/Value Propagation)
+    discount: float = Field(
+        default=1.0,
+        description="Discount factor (gamma) for future rewards/values.",
+        ge=0.0,
+        le=1.0,
+    )
+
+    # Use ConfigDict for Pydantic V2
+    model_config = ConfigDict(validate_assignment=True)
