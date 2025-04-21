@@ -12,9 +12,9 @@ AlphaTriangle is a project implementing an artificial intelligence agent based o
 **Key Features:**
 
 *   **Core Game Logic:** Uses the [`trianglengin>=2.0.1`](https://github.com/lguibr/trianglengin) library for the triangle puzzle game rules and state management, featuring a high-performance C++ core.
-*   **High-Performance MCTS:** Integrates the [`trimcts`](https://github.com/lguibr/trimcts) library, providing a **C++ implementation of MCTS** for efficient search, callable from Python. MCTS parameters are configurable via `alphatriangle/config/mcts_config.py` (defaulting to 64 simulations for faster testing/profiling, adjust as needed).
+*   **High-Performance MCTS:** Integrates the [`trimcts`](https://github.com/lguibr/trimcts) library, providing a **C++ implementation of MCTS** for efficient search, callable from Python. MCTS parameters are configurable via `alphatriangle/config/mcts_config.py` (defaulting to 1024 simulations).
 *   **Deep Learning Model:** Features a PyTorch neural network with policy and distributional value heads, convolutional layers, and **optional Transformer Encoder layers**.
-*   **Parallel Self-Play:** Leverages **Ray** for distributed self-play data generation across multiple CPU cores.
+*   **Parallel Self-Play:** Leverages **Ray** for distributed self-play data generation across multiple CPU cores. **The number of workers automatically adjusts based on detected CPU cores (reserving some for stability), capped by the `NUM_SELF_PLAY_WORKERS` setting in `TrainConfig`.**
 *   **Experiment Tracking:** Uses **MLflow** and **TensorBoard** for logging parameters, metrics, and artifacts, enabling web-based monitoring.
 *   **Headless Training:** Focuses on a command-line interface for running the training pipeline without visual output.
 *   **Unit Tests:** Includes tests for RL components.
@@ -34,7 +34,7 @@ This project trains an agent to play the game defined by the `trianglengin` libr
 *   **trimcts>=0.1.0:** High-performance C++ MCTS implementation with Python bindings.
 *   **PyTorch:** For the deep learning model (CNNs, **optional Transformers**, Distributional Value Head) and training, with CUDA/MPS support.
 *   **NumPy:** For numerical operations, especially state representation (used by `trianglengin` and features).
-*   **Ray:** For parallelizing self-play data generation and statistics collection across multiple CPU cores/processes.
+*   **Ray:** For parallelizing self-play data generation and statistics collection across multiple CPU cores/processes. **Dynamically scales worker count based on available cores.**
 *   **Numba:** (Optional, used in `features.grid_features`) For performance optimization of specific grid calculations.
 *   **Cloudpickle:** For serializing the experience replay buffer and training checkpoints.
 *   **MLflow:** For logging parameters, metrics, and artifacts (checkpoints, buffers) during training runs. **Provides the primary web UI dashboard for experiment management.**
@@ -54,7 +54,7 @@ This project trains an agent to play the game defined by the `trianglengin` libr
 │   └── runs/               # Local artifacts per run (checkpoints, buffers, TB logs, configs)
 │       └── <run_name>/
 │           ├── checkpoints/ # Saved model weights & optimizer states
-│           ├── buffers/     # Saved experience replay buffers
+│           ├── buffers/     # Saved experience replay buffers (containing StateType features + available shape geometry)
 │           ├── logs/        # Plain text log files for the run
 │           ├── tensorboard/ # TensorBoard log files (scalars, etc.)
 │           └── configs.json # Copy of run configuration
@@ -96,7 +96,7 @@ This project trains an agent to play the game defined by the `trianglengin` libr
 
 *   **`cli`:** Defines the command-line interface using Typer (**only `train` command, headless**). ([`alphatriangle/cli.py`](alphatriangle/cli.py))
 *   **`config`:** Centralized Pydantic configuration classes (Model, Train, Persistence, **MCTS**). ([`alphatriangle/config/README.md`](alphatriangle/config/README.md))
-*   **`features`:** Contains logic to convert `trianglengin.GameState` objects into numerical features (`StateType`). ([`alphatriangle/features/README.md`](alphatriangle/features/README.md))
+*   **`features`:** Contains logic to convert `trianglengin.GameState` objects into numerical features (`StateType`), **including geometry for available shapes**. ([`alphatriangle/features/README.md`](alphatriangle/features/README.md))
 *   **`nn`:** Contains the PyTorch `nn.Module` definition (`AlphaTriangleNet`) and a wrapper class (`NeuralNetwork`). **The `NeuralNetwork` class implicitly conforms to the `trimcts.AlphaZeroNetworkInterface` protocol.** ([`alphatriangle/nn/README.md`](alphatriangle/nn/README.md))
 *   **`rl`:** Contains RL components: `Trainer` (network updates), `ExperienceBuffer` (data storage, **supports PER**), and `SelfPlayWorker` (Ray actor for parallel self-play **using `trimcts.run_mcts`**). ([`alphatriangle/rl/README.md`](alphatriangle/rl/README.md))
 *   **`training`:** Orchestrates the **headless** training process using `TrainingLoop`, managing workers, data flow, logging (to console, file, MLflow, TensorBoard), and checkpoints. Includes `runner.py` for the callable training function. ([`alphatriangle/training/README.md`](alphatriangle/training/README.md))
@@ -198,6 +198,11 @@ All major parameters for the AlphaZero agent (Model, Training, Persistence, **MC
 All persistent data is stored within the `.alphatriangle_data/` directory in the project root.
 *   **`.alphatriangle_data/mlruns/`**: Managed by **MLflow**. Contains MLflow's internal tracking data (parameters, metrics) and its own copy of logged artifacts. This is the source for the MLflow UI.
 *   **`.alphatriangle_data/runs/`**: Managed by **DataManager**. Contains locally saved artifacts for each run (checkpoints, buffers, TensorBoard logs, configs) before/during logging to MLflow. This directory is used for auto-resuming and direct access to TensorBoard logs during a run.
+    *   **Replay Buffer Content:** The saved buffer file (`buffer.pkl`) contains `Experience` tuples: `(StateType, PolicyTargetMapping, n_step_return)`. The `StateType` includes:
+        *   `grid`: Numerical features representing grid occupancy.
+        *   `other_features`: Numerical features derived from game state and available shapes.
+        *   `available_shapes_geometry`: Geometric data (triangle lists, color IDs) for shapes in the slots at that time step.
+    *   **Visualization:** This stored data allows offline analysis and visualization of grid occupancy and the available shapes for each recorded step. It does **not** contain the full sequence of actions or raw `GameState` objects needed for a complete, interactive game replay.
 
 ## Maintainability
 

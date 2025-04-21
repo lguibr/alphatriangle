@@ -1,11 +1,10 @@
-
 # Training Module (`alphatriangle.training`)
 
 ## Purpose and Architecture
 
 This module encapsulates the logic for setting up, running, and managing the **headless** reinforcement learning training pipeline. It aims to provide a cleaner separation of concerns compared to embedding all logic within the run scripts or a single orchestrator class.
 
--   **`setup.py`:** Contains `setup_training_components` which initializes Ray, detects resources, adjusts worker counts, loads configurations (including `trianglengin.EnvConfig` and `AlphaTriangleMCTSConfig`), creates the `trimcts.SearchConfiguration`, and bundles the core components (`TrainingComponents`).
+-   **`setup.py`:** Contains `setup_training_components` which initializes Ray, detects resources, **adjusts the requested worker count based on available CPU cores (reserving some for stability),** loads configurations (including `trianglengin.EnvConfig` and `AlphaTriangleMCTSConfig`), creates the `trimcts.SearchConfiguration`, and bundles the core components (`TrainingComponents`).
 -   **`components.py`:** Defines the `TrainingComponents` dataclass, a simple container to bundle all the necessary initialized objects (NN, Buffer, Trainer, DataManager, StatsCollector, Configs including `trimcts.SearchConfiguration`) required by the `TrainingLoop`.
 -   **`loop.py`:** Defines the `TrainingLoop` class. This class contains the core asynchronous logic of the training loop itself:
     -   Managing the pool of `SelfPlayWorker` actors via `WorkerManager`.

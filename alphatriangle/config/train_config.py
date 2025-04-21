@@ -1,5 +1,4 @@
 # File: alphatriangle/config/train_config.py
-# File: alphatriangle/config/train_config.py
 import logging
 import time
 from typing import Literal
@@ -40,13 +39,15 @@ class TrainConfig(BaseModel):
     # --- WORKER_DEVICE: Defaults to 'cpu' for self-play workers ---
     # Workers run MCTS and NN eval; CPU is often sufficient and avoids GPU contention.
     WORKER_DEVICE: Literal["auto", "cuda", "cpu", "mps"] = Field(default="cpu")
-    BATCH_SIZE: int = Field(default=128, ge=1)  # Moderate batch size
-    BUFFER_CAPACITY: int = Field(default=200_000, ge=1)  # Larger buffer
+    BATCH_SIZE: int = Field(default=256, ge=1)  # Increased training batch size
+    BUFFER_CAPACITY: int = Field(default=250_000, ge=1)  # Slightly larger buffer
     MIN_BUFFER_SIZE_TO_TRAIN: int = Field(
-        default=20_000,
-        ge=1,  # Start training after 10% fill
+        default=25_000,  # Increased min size (~10% of capacity)
+        ge=1,
     )
-    WORKER_UPDATE_FREQ_STEPS: int = Field(default=500, ge=1)
+    WORKER_UPDATE_FREQ_STEPS: int = Field(
+        default=500, ge=1
+    )  # Keep relatively frequent updates
 
     # --- N-Step Returns ---
     N_STEP_RETURNS: int = Field(default=5, ge=1)  # 5-step returns
@@ -54,7 +55,7 @@ class TrainConfig(BaseModel):
 
     # --- Optimizer ---
     OPTIMIZER_TYPE: Literal["Adam", "AdamW", "SGD"] = Field(default="AdamW")
-    LEARNING_RATE: float = Field(default=2e-4, gt=0)
+    LEARNING_RATE: float = Field(default=2e-4, gt=0)  # Keep LR, scheduler will adjust
     WEIGHT_DECAY: float = Field(default=1e-4, ge=0)
     GRADIENT_CLIP_VALUE: float | None = Field(default=1.0)
 
@@ -85,7 +86,7 @@ class TrainConfig(BaseModel):
 
     # --- Model Compilation ---
     COMPILE_MODEL: bool = Field(
-        default=True,
+        default=True,  # Keep compilation enabled
         description=(
             "Enable torch.compile() for potential speedup (Trainer only). Requires PyTorch 2.0+. "
             "May have initial overhead or compatibility issues on some setups/GPUs "

@@ -3,7 +3,7 @@ import json
 import logging
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any  # Import types
 
 import cloudpickle
 import numpy as np
@@ -17,12 +17,63 @@ if TYPE_CHECKING:
     from torch.optim import Optimizer
 
     from ..rl.core.buffer import ExperienceBuffer
+    from ..utils.types import StateType
 
 logger = logging.getLogger(__name__)
 
 
 class Serializer:
     """Handles serialization and deserialization of training data."""
+
+    def _validate_experience_structure(self, exp: Any, index: int) -> bool:
+        """Validates the structure of a single experience tuple."""
+        try:
+            if isinstance(exp, tuple) and len(exp) == 3:
+                state_type: StateType = exp[0]
+                policy_map = exp[1]
+                value = exp[2]
+                if (
+                    isinstance(state_type, dict)
+                    and "grid" in state_type
+                    and "other_features" in state_type
+                    and "available_shapes_geometry" in state_type  # Check new key
+                    and isinstance(state_type["grid"], np.ndarray)
+                    and isinstance(state_type["other_features"], np.ndarray)
+                    and isinstance(
+                        state_type["available_shapes_geometry"], list
+                    )  # Check list type
+                    and isinstance(policy_map, dict)
+                    and isinstance(value, float | int)
+                ):
+                    # Basic check for geometry structure
+                    for item in state_type["available_shapes_geometry"]:
+                        # Combine nested if using 'and'
+                        if item is not None and not (
+                            isinstance(item, tuple)
+                            and len(item) == 2
+                            and isinstance(item[0], list)
+                            and isinstance(item[1], int)
+                        ):
+                            logger.warning(
+                                f"Invalid geometry item structure {item} in experience {index}."
+                            )
+                            return False
+                    return True
+                else:
+                    logger.warning(
+                        f"Invalid types or missing keys in experience {index}: state_keys={list(state_type.keys()) if isinstance(state_type, dict) else type(state_type)}"
+                    )
+                    return False
+            else:
+                logger.warning(
+                    f"Experience {index} is not a tuple of length 3: type={type(exp)}"
+                )
+                return False
+        except Exception as e:
+            logger.error(
+                f"Unexpected error validating experience {index}: {e}", exc_info=True
+            )
+            return False
 
     def load_checkpoint(self, path: Path) -> CheckpointData | None:
         """Loads and validates checkpoint data from a file."""
@@ -71,30 +122,18 @@ class Serializer:
             with path.open("rb") as f:
                 loaded_data = cloudpickle.load(f)
             if isinstance(loaded_data, BufferData):
-                # Perform basic validation on loaded experiences
+                # Perform validation on loaded experiences
                 valid_experiences = []
                 invalid_count = 0
                 for i, exp in enumerate(loaded_data.buffer_list):
-                    if (
-                        isinstance(exp, tuple)
-                        and len(exp) == 3
-                        and isinstance(exp[0], dict)
-                        and "grid" in exp[0]
-                        and "other_features" in exp[0]
-                        and isinstance(exp[0]["grid"], np.ndarray)
-                        and isinstance(exp[0]["other_features"], np.ndarray)
-                        and isinstance(exp[1], dict)
-                        and isinstance(exp[2], float | int)
-                    ):
+                    if self._validate_experience_structure(exp, i):
                         valid_experiences.append(exp)
                     else:
                         invalid_count += 1
-                        logger.warning(
-                            f"Skipping invalid experience structure at index {i} in loaded buffer: {type(exp)}"
-                        )
+                        # Warning already logged in _validate_experience_structure
                 if invalid_count > 0:
                     logger.warning(
-                        f"Found {invalid_count} invalid experience structures in loaded buffer."
+                        f"Found {invalid_count} invalid experience structures in loaded buffer {path}."
                     )
                 loaded_data.buffer_list = valid_experiences
                 return loaded_data
@@ -157,6 +196,7 @@ class Serializer:
         try:
             if buffer.use_per:
                 if hasattr(buffer, "tree") and isinstance(buffer.tree, SumTree):
+                    # Extract data, filtering out potential placeholders (like 0)
                     buffer_list = [
                         buffer.tree.data[i]
                         for i in range(buffer.tree.n_entries)
@@ -172,23 +212,12 @@ class Serializer:
             valid_experiences = []
             invalid_count = 0
             for i, exp in enumerate(buffer_list):
-                if (
-                    isinstance(exp, tuple)
-                    and len(exp) == 3
-                    and isinstance(exp[0], dict)
-                    and "grid" in exp[0]
-                    and "other_features" in exp[0]
-                    and isinstance(exp[0]["grid"], np.ndarray)
-                    and isinstance(exp[0]["other_features"], np.ndarray)
-                    and isinstance(exp[1], dict)
-                    and isinstance(exp[2], float | int)
-                ):
+                if self._validate_experience_structure(exp, i):
                     valid_experiences.append(exp)
                 else:
                     invalid_count += 1
-                    logger.warning(
-                        f"Skipping invalid experience structure at index {i} during save prep: {type(exp)}"
-                    )
+                    # Warning logged in validation function
+
             if invalid_count > 0:
                 logger.warning(
                     f"Found {invalid_count} invalid experience structures before saving buffer."
@@ -210,7 +239,12 @@ class Serializer:
                         return "<tensor/array>"
                     if isinstance(obj, deque):
                         return list(obj)
+                    # Handle Path objects
+                    if isinstance(obj, Path):
+                        return str(obj)
                     try:
+                        # Attempt standard JSON serialization first
+                        # Fallback to dict or str representation
                         return obj.__dict__ if hasattr(obj, "__dict__") else str(obj)
                     except TypeError:
                         return f"<object of type {type(obj).__name__}>"

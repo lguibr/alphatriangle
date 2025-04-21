@@ -4,7 +4,7 @@ import logging
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..utils.types import Experience
+from ..utils.types import Experience, StateType  # Import StateType
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class SelfPlayResult(BaseModel):
 
     @model_validator(mode="after")
     def check_experience_structure(self) -> "SelfPlayResult":
-        """Basic structural validation for experiences."""
+        """Basic structural validation for experiences, including StateType."""
         invalid_count = 0
         valid_experiences = []
         # Rename unused loop variable 'i' to '_i'
@@ -35,14 +35,20 @@ class SelfPlayResult(BaseModel):
             reason = "Unknown structure"
             try:
                 if isinstance(exp, tuple) and len(exp) == 3:
-                    state_type, policy_map, value = exp
+                    state_type: StateType = exp[0]
+                    policy_map = exp[1]
+                    value = exp[2]
                     # Combine nested if statements
                     if (
                         isinstance(state_type, dict)
                         and "grid" in state_type
                         and "other_features" in state_type
+                        and "available_shapes_geometry" in state_type  # Check new key
                         and isinstance(state_type["grid"], np.ndarray)
                         and isinstance(state_type["other_features"], np.ndarray)
+                        and isinstance(
+                            state_type["available_shapes_geometry"], list
+                        )  # Check list type
                         and isinstance(policy_map, dict)
                         # Use isinstance with | for multiple types
                         and isinstance(value, float | int)
@@ -51,11 +57,30 @@ class SelfPlayResult(BaseModel):
                         if np.all(np.isfinite(state_type["grid"])) and np.all(
                             np.isfinite(state_type["other_features"])
                         ):
-                            is_valid = True
+                            # Basic check for geometry structure (list of Optional[Tuple[List, int]])
+                            geom_valid = True
+                            for item in state_type["available_shapes_geometry"]:
+                                # Combine nested if using 'and'
+                                if item is not None and not (
+                                    isinstance(item, tuple)
+                                    and len(item) == 2
+                                    and isinstance(item[0], list)
+                                    and isinstance(item[1], int)
+                                ):
+                                    geom_valid = False
+                                    reason = "Invalid geometry item structure"
+                                    break
+                            if geom_valid:
+                                is_valid = True
+                            else:
+                                reason = (
+                                    reason
+                                    or "Invalid available_shapes_geometry structure"
+                                )
                         else:
                             reason = "Non-finite features"
                     else:
-                        reason = f"Incorrect types: state={type(state_type)}, policy={type(policy_map)}, value={type(value)}"
+                        reason = f"Incorrect types or missing keys: state_keys={list(state_type.keys()) if isinstance(state_type, dict) else type(state_type)}, policy={type(policy_map)}, value={type(value)}"
                 else:
                     reason = f"Not a tuple of length 3: type={type(exp)}, len={len(exp) if isinstance(exp, tuple) else 'N/A'}"
             except Exception as e:

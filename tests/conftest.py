@@ -1,6 +1,6 @@
 # File: tests/conftest.py
 import random
-from typing import cast
+from typing import cast  # Import List, Optional, Tuple
 
 import numpy as np
 import pytest
@@ -14,7 +14,11 @@ from trianglengin import EnvConfig  # Corrected import
 from alphatriangle.config import ModelConfig, TrainConfig
 from alphatriangle.nn import NeuralNetwork
 from alphatriangle.rl import ExperienceBuffer, Trainer
-from alphatriangle.utils.types import Experience, StateType
+from alphatriangle.utils.types import (
+    Experience,
+    SerializableShapeInfo,  # Import new type
+    StateType,
+)
 
 rng = np.random.default_rng()
 
@@ -41,6 +45,13 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
     action_dim_int = int(
         mock_env_config.NUM_SHAPE_SLOTS * mock_env_config.ROWS * mock_env_config.COLS
     )
+    # Calculate OTHER_NN_INPUT_FEATURES_DIM based on feature extraction logic
+    num_slots = mock_env_config.NUM_SHAPE_SLOTS
+    shape_feats_dim = num_slots * 7  # From _get_shape_features
+    avail_feats_dim = num_slots  # From _get_shape_availability
+    explicit_feats_dim = 6  # From _get_explicit_features
+    expected_other_dim = shape_feats_dim + avail_feats_dim + explicit_feats_dim
+
     return ModelConfig(
         GRID_INPUT_CHANNELS=1,
         CONV_FILTERS=[4],
@@ -57,7 +68,7 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
         FC_DIMS_SHARED=[8],
         POLICY_HEAD_DIMS=[action_dim_int],
         VALUE_HEAD_DIMS=[1],
-        OTHER_NN_INPUT_FEATURES_DIM=10,
+        OTHER_NN_INPUT_FEATURES_DIM=expected_other_dim,  # Use calculated dim
         ACTIVATION_FUNCTION="ReLU",
         USE_BATCH_NORM=True,
     )
@@ -93,6 +104,8 @@ def mock_train_config() -> TrainConfig:
         PER_BETA_ANNEAL_STEPS=100,
         PER_EPSILON=1e-5,
         MAX_TRAINING_STEPS=200,
+        N_STEP_RETURNS=3,  # Add default for n-step
+        GAMMA=0.99,  # Add default for gamma
     )
 
 
@@ -100,16 +113,29 @@ def mock_train_config() -> TrainConfig:
 def mock_state_type(
     mock_model_config: ModelConfig, mock_env_config: EnvConfig
 ) -> StateType:
-    """Creates a mock StateType dictionary with correct shapes."""
+    """Creates a mock StateType dictionary with correct shapes and the new geometry field."""
     grid_shape = (
         mock_model_config.GRID_INPUT_CHANNELS,
         mock_env_config.ROWS,
         mock_env_config.COLS,
     )
     other_shape = (mock_model_config.OTHER_NN_INPUT_FEATURES_DIM,)
+
+    # Create mock geometry data (e.g., one slot with a simple shape, others None)
+    mock_geometry_data: SerializableShapeInfo = (
+        [(0, 0, True), (0, 1, False)],
+        1,
+    )  # Example: shape in slot 0, color 1
+    mock_geometry_list: list[SerializableShapeInfo | None] = [mock_geometry_data]
+    # Pad with None for remaining slots
+    mock_geometry_list.extend(
+        [None] * (mock_env_config.NUM_SHAPE_SLOTS - len(mock_geometry_list))
+    )
+
     return {
         "grid": rng.random(grid_shape, dtype=np.float32),
         "other_features": rng.random(other_shape, dtype=np.float32),
+        "available_shapes_geometry": mock_geometry_list,  # Add mock geometry list
     }
 
 
@@ -128,6 +154,7 @@ def mock_experience(
         else {0: 1.0}
     )
     value_target = random.uniform(-1, 1)
+    # Ensure the mock_state_type is included correctly
     return (mock_state_type, policy_target, value_target)
 
 
@@ -172,14 +199,27 @@ def filled_mock_buffer(
     mock_experience_buffer: ExperienceBuffer, mock_experience: Experience
 ) -> ExperienceBuffer:
     """Provides a buffer filled with some mock experiences."""
-    for _ in range(mock_experience_buffer.min_size_to_train + 5):
+    for i in range(mock_experience_buffer.min_size_to_train + 5):
+        # Deep copy the StateType dictionary and its contents
+        # Correctly handle Optional[SerializableShapeInfo]
+        geometry_copy: list[SerializableShapeInfo | None] = []
+        for geom_info in mock_experience[0]["available_shapes_geometry"]:
+            if geom_info is not None:
+                # geom_info is Tuple[ShapeGeometry, int]
+                geom, cid = geom_info
+                # Deep copy the list of tuples within ShapeGeometry
+                geom_copy = [(r, c, up) for r, c, up in geom]
+                geometry_copy.append((geom_copy, cid + i))
+            else:
+                geometry_copy.append(None)
+
         state_copy: StateType = {
-            "grid": mock_experience[0]["grid"].copy(),
-            "other_features": mock_experience[0]["other_features"].copy(),
+            "grid": mock_experience[0]["grid"].copy() + i * 0.01,  # Add smaller noise
+            "other_features": mock_experience[0]["other_features"].copy() + i * 0.01,
+            "available_shapes_geometry": geometry_copy,
         }
-        state_copy["grid"] += (
-            rng.standard_normal(state_copy["grid"].shape, dtype=np.float32) * 0.1
-        )
+
+        # Create a new experience tuple with the copied state
         exp_copy: Experience = (state_copy, mock_experience[1], random.uniform(-1, 1))
         mock_experience_buffer.add(exp_copy)
     return mock_experience_buffer

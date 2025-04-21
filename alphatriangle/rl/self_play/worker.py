@@ -1,3 +1,4 @@
+# File: alphatriangle/rl/self_play/worker.py
 import cProfile
 import logging
 import random
@@ -9,7 +10,7 @@ from typing import TYPE_CHECKING, Any  # Added Any
 import ray
 
 # Import trianglengin components from top level
-from trianglengin import EnvConfig, GameState  # UPDATED IMPORT
+from trianglengin import EnvConfig, GameState
 
 # Ensure SearchConfiguration is imported from trimcts
 from trimcts import SearchConfiguration, run_mcts
@@ -428,8 +429,13 @@ class SelfPlayWorker:
                 )
                 n_step_return = discounted_reward_sum
                 state_features_t, policy_target_t = n_step_state_policy_buffer[k]
-                exp: Experience = (state_features_t, policy_target_t, n_step_return)
-                episode_experiences.append(exp)
+                # Rename variable here to avoid mypy error
+                final_exp: Experience = (
+                    state_features_t,
+                    policy_target_t,
+                    n_step_return,
+                )
+                episode_experiences.append(final_exp)
                 logger.debug(
                     f"Stored final experience for step {final_step - remaining_steps + k + 1}. N-Step Return: {n_step_return:.4f}"
                 )

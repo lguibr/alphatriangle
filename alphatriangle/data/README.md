@@ -1,5 +1,4 @@
-# File: alphatriangle/data/README.md
-# Data Management Module (`alphatriangle.data`)
+
 
 ## Purpose and Architecture
 
@@ -21,6 +20,7 @@ The core component is the [`DataManager`](data_manager.py) class, which centrali
 -   **State Loading:** `DataManager.load_initial_state` determines the correct files, deserializes them, validates the structure, and returns a `LoadedTrainingState` object.
 -   **State Saving:** `DataManager.save_training_state` assembles data into Pydantic models, serializes them, and saves to files.
 -   **MLflow Integration:** Logs saved artifacts (checkpoints, buffers, configs) to MLflow after successful local saving.
+-   **Buffer Content:** The saved buffer file (`buffer.pkl`) contains `Experience` tuples `(StateType, PolicyTargetMapping, n_step_return)`. The `StateType` contains processed numerical features (`grid`, `other_features`) **and the geometry of available shapes (`available_shapes_geometry`)**, allowing for offline visualization of grid occupancy and available shapes. It does **not** contain raw `GameState` objects or action sequences for full interactive replay.
 
 ## Exposed Interfaces
 
@@ -44,7 +44,7 @@ The core component is the [`DataManager`](data_manager.py) class, which centrali
 -   **[`alphatriangle.nn`](../nn/README.md)**: `NeuralNetwork`.
 -   **[`alphatriangle.rl`](../rl/README.md)**: `ExperienceBuffer`.
 -   **[`alphatriangle.stats`](../stats/README.md)**: `StatsCollectorActor`.
--   **[`alphatriangle.utils`](../utils/README.md)**: `Experience`.
+-   **[`alphatriangle.utils`](../utils/README.md)**: `Experience`, `StateType`.
 -   **`torch.optim`**: `Optimizer`.
 -   **Standard Libraries:** `os`, `shutil`, `logging`, `glob`, `re`, `json`, `collections.deque`, `pathlib`, `datetime`.
 -   **Third-Party:** `pydantic`, `cloudpickle`, `torch`, `ray`, `mlflow`, `numpy`.
@@ -52,3 +52,4 @@ The core component is the [`DataManager`](data_manager.py) class, which centrali
 ---
 
 **Note:** Please keep this README updated when changing the Pydantic schemas, the types of artifacts managed, the saving/loading mechanisms, or the responsibilities of the `DataManager`, `PathManager`, or `Serializer`.
+pyt

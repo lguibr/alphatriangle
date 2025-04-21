@@ -6,7 +6,6 @@ import torch
 
 # Import EnvConfig from trianglengin's top level
 from trianglengin import EnvConfig  # UPDATED IMPORT
-from trimcts import SearchConfiguration
 
 # Keep alphatriangle imports
 from .. import config, utils
@@ -87,16 +86,11 @@ def setup_training_components(
         config.print_config_info_and_validate(alphatriangle_mcts_config)
 
         # --- Create trimcts SearchConfiguration ---
-        trimcts_mcts_config = SearchConfiguration(
-            max_simulations=alphatriangle_mcts_config.max_simulations,
-            max_depth=alphatriangle_mcts_config.max_depth,
-            cpuct=alphatriangle_mcts_config.cpuct,
-            dirichlet_alpha=alphatriangle_mcts_config.dirichlet_alpha,
-            dirichlet_epsilon=alphatriangle_mcts_config.dirichlet_epsilon,
-            discount=alphatriangle_mcts_config.discount,
-        )
+        # Use the conversion method or directly access fields
+        trimcts_mcts_config = alphatriangle_mcts_config.to_trimcts_config()
         logger.info(
-            f"Created trimcts.SearchConfiguration with max_simulations={trimcts_mcts_config.max_simulations}"
+            f"Created trimcts.SearchConfiguration with max_simulations={trimcts_mcts_config.max_simulations}, "
+            f"mcts_batch_size={trimcts_mcts_config.mcts_batch_size}"
         )
 
         # --- Setup Devices and Seeds ---
@@ -129,7 +123,7 @@ def setup_training_components(
             train_config=train_config,
             env_config=env_config,  # Pass trianglengin.EnvConfig
             model_config=model_config,
-            mcts_config=trimcts_mcts_config,
+            mcts_config=trimcts_mcts_config,  # Pass the trimcts config object
             persist_config=persist_config,
         )
 

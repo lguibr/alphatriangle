@@ -1,4 +1,5 @@
 from collections import deque
+from typing import cast  # Import cast
 
 import numpy as np
 import pytest
@@ -6,7 +7,11 @@ import pytest
 from alphatriangle.config import TrainConfig
 from alphatriangle.rl import ExperienceBuffer
 from alphatriangle.utils.sumtree import SumTree
-from alphatriangle.utils.types import Experience, StateType
+from alphatriangle.utils.types import (
+    Experience,
+    SerializableShapeInfo,  # Import new type
+    StateType,
+)
 
 # Use module-level rng from tests/conftest.py
 from tests.conftest import rng
@@ -45,6 +50,8 @@ def uniform_train_config() -> TrainConfig:
         PER_BETA_ANNEAL_STEPS=100,
         PER_EPSILON=1e-5,
         MAX_TRAINING_STEPS=200,  # Set a finite value for tests
+        N_STEP_RETURNS=3,
+        GAMMA=0.99,
     )
 
 
@@ -79,6 +86,8 @@ def per_train_config() -> TrainConfig:
         ENTROPY_BONUS_WEIGHT=0.0,
         CHECKPOINT_SAVE_FREQ_STEPS=50,
         MAX_TRAINING_STEPS=200,  # Set a finite value for tests
+        N_STEP_RETURNS=3,
+        GAMMA=0.99,
     )
 
 
@@ -95,9 +104,6 @@ def per_buffer(per_train_config: TrainConfig) -> ExperienceBuffer:
 
 
 # Use shared mock_experience fixture implicitly from tests/conftest.py
-# REMOVED: @pytest.fixture
-# REMOVED: def experience(mock_experience: Experience) -> Experience:
-# REMOVED:    return mock_experience
 
 
 # --- Uniform Buffer Tests ---
@@ -118,6 +124,8 @@ def test_uniform_buffer_add(
     assert len(uniform_buffer) == 0
     uniform_buffer.add(mock_experience)
     assert len(uniform_buffer) == 1
+    # Check if the added experience is the same object (or equal)
+    # Note: Deep comparison might be needed if copies are made internally
     assert uniform_buffer.buffer[0] == mock_experience
 
 
@@ -125,7 +133,27 @@ def test_uniform_buffer_add(
 def test_uniform_buffer_add_batch(
     uniform_buffer: ExperienceBuffer, mock_experience: Experience
 ):
-    batch = [mock_experience] * 5
+    # Create copies for the batch to avoid adding the same object reference multiple times
+    batch: list[Experience] = [
+        (
+            cast(
+                "StateType",  # Cast the dictionary to StateType
+                {
+                    "grid": mock_experience[0]["grid"].copy(),
+                    "other_features": mock_experience[0]["other_features"].copy(),
+                    "available_shapes_geometry": [
+                        (list(geom), cid) if geom_info else None
+                        for geom_info in mock_experience[0]["available_shapes_geometry"]
+                        if geom_info is not None
+                        for geom, cid in [geom_info]
+                    ],
+                },
+            ),
+            mock_experience[1],
+            mock_experience[2],
+        )
+        for _ in range(5)
+    ]
     uniform_buffer.add_batch(batch)
     assert len(uniform_buffer) == 5
 
@@ -135,19 +163,28 @@ def test_uniform_buffer_capacity(
     uniform_buffer: ExperienceBuffer, mock_experience: Experience
 ):
     for i in range(uniform_buffer.capacity + 10):
-        # Create slightly different experiences
-        # Correctly copy StateType dict and its NumPy arrays
+        # Create slightly different experiences with deep copies
+        geometry_copy: list[SerializableShapeInfo | None] = []
+        for geom_info in mock_experience[0]["available_shapes_geometry"]:
+            if geom_info is not None:
+                geom, cid = geom_info
+                geom_copy = [(r, c, up) for r, c, up in geom]
+                geometry_copy.append((geom_copy, cid + i))
+            else:
+                geometry_copy.append(None)
+
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
+            "available_shapes_geometry": geometry_copy,
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
     assert len(uniform_buffer) == uniform_buffer.capacity
-    # Check if the first added element is gone
+    # Check if the first added element is gone (check based on value)
     first_added_val = mock_experience[2] + 0
     assert not any(exp[2] == first_added_val for exp in uniform_buffer.buffer)
-    # Check if the last added element is present
+    # Check if the last added element is present (check based on value)
     last_added_val = mock_experience[2] + uniform_buffer.capacity + 9
     assert any(exp[2] == last_added_val for exp in uniform_buffer.buffer)
 
@@ -157,8 +194,23 @@ def test_uniform_buffer_is_ready(
     uniform_buffer: ExperienceBuffer, mock_experience: Experience
 ):
     assert not uniform_buffer.is_ready()
-    for _ in range(uniform_buffer.min_size_to_train):
-        uniform_buffer.add(mock_experience)
+    for i in range(uniform_buffer.min_size_to_train):
+        # Create copies
+        geometry_copy: list[SerializableShapeInfo | None] = []
+        for geom_info in mock_experience[0]["available_shapes_geometry"]:
+            if geom_info is not None:
+                geom, cid = geom_info
+                geom_copy = [(r, c, up) for r, c, up in geom]
+                geometry_copy.append((geom_copy, cid))
+            else:
+                geometry_copy.append(None)
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy(),
+            "other_features": mock_experience[0]["other_features"].copy(),
+            "available_shapes_geometry": geometry_copy,
+        }
+        exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
+        uniform_buffer.add(exp_copy)
     assert uniform_buffer.is_ready()
 
 
@@ -168,10 +220,19 @@ def test_uniform_buffer_sample(
 ):
     # Fill buffer until ready
     for i in range(uniform_buffer.min_size_to_train):
-        # Correctly copy StateType dict and its NumPy arrays
+        # Create copies
+        geometry_copy: list[SerializableShapeInfo | None] = []
+        for geom_info in mock_experience[0]["available_shapes_geometry"]:
+            if geom_info is not None:
+                geom, cid = geom_info
+                geom_copy = [(r, c, up) for r, c, up in geom]
+                geometry_copy.append((geom_copy, cid + i))
+            else:
+                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
+            "available_shapes_geometry": geometry_copy,
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         uniform_buffer.add(exp_copy)
@@ -184,6 +245,11 @@ def test_uniform_buffer_sample(
     assert "weights" in sample
     assert len(sample["batch"]) == uniform_buffer.config.BATCH_SIZE
     assert isinstance(sample["batch"][0], tuple)  # Check if it's an Experience tuple
+    # Check structure of the first element's StateType
+    assert isinstance(sample["batch"][0][0], dict)
+    assert "grid" in sample["batch"][0][0]
+    assert "other_features" in sample["batch"][0][0]
+    assert "available_shapes_geometry" in sample["batch"][0][0]
     assert sample["indices"].shape == (uniform_buffer.config.BATCH_SIZE,)
     assert sample["weights"].shape == (uniform_buffer.config.BATCH_SIZE,)
     assert np.allclose(sample["weights"], 1.0)  # Uniform weights should be 1.0
@@ -220,8 +286,6 @@ def test_per_buffer_add(per_buffer: ExperienceBuffer, mock_experience: Experienc
     per_buffer.add(mock_experience)
     assert len(per_buffer) == 1
     # Check if added with initial max priority
-    # Find the tree index corresponding to the added data
-    # data_pointer points to the *next* available slot, so the last added is at data_pointer - 1
     data_idx = (
         per_buffer.tree.data_pointer - 1 + per_buffer.capacity
     ) % per_buffer.capacity
@@ -234,7 +298,27 @@ def test_per_buffer_add(per_buffer: ExperienceBuffer, mock_experience: Experienc
 def test_per_buffer_add_batch(
     per_buffer: ExperienceBuffer, mock_experience: Experience
 ):
-    batch = [mock_experience] * 5
+    # Create copies for the batch
+    batch: list[Experience] = [
+        (
+            cast(
+                "StateType",  # Cast the dictionary to StateType
+                {
+                    "grid": mock_experience[0]["grid"].copy(),
+                    "other_features": mock_experience[0]["other_features"].copy(),
+                    "available_shapes_geometry": [
+                        (list(geom), cid) if geom_info else None
+                        for geom_info in mock_experience[0]["available_shapes_geometry"]
+                        if geom_info is not None
+                        for geom, cid in [geom_info]
+                    ],
+                },
+            ),
+            mock_experience[1],
+            mock_experience[2],
+        )
+        for _ in range(5)
+    ]
     per_buffer.add_batch(batch)
     assert len(per_buffer) == 5
 
@@ -242,22 +326,45 @@ def test_per_buffer_add_batch(
 # Use mock_experience directly injected by pytest
 def test_per_buffer_capacity(per_buffer: ExperienceBuffer, mock_experience: Experience):
     for i in range(per_buffer.capacity + 10):
-        # Correctly copy StateType dict and its NumPy arrays
+        # Create copies
+        geometry_copy: list[SerializableShapeInfo | None] = []
+        for geom_info in mock_experience[0]["available_shapes_geometry"]:
+            if geom_info is not None:
+                geom, cid = geom_info
+                geom_copy = [(r, c, up) for r, c, up in geom]
+                geometry_copy.append((geom_copy, cid + i))
+            else:
+                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
+            "available_shapes_geometry": geometry_copy,
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)  # Adds with current max priority
     assert len(per_buffer) == per_buffer.capacity
-    # Cannot easily check which element was overwritten without tracking indices
 
 
 # Use mock_experience directly injected by pytest
 def test_per_buffer_is_ready(per_buffer: ExperienceBuffer, mock_experience: Experience):
     assert not per_buffer.is_ready()
-    for _ in range(per_buffer.min_size_to_train):
-        per_buffer.add(mock_experience)
+    for i in range(per_buffer.min_size_to_train):
+        # Create copies
+        geometry_copy: list[SerializableShapeInfo | None] = []
+        for geom_info in mock_experience[0]["available_shapes_geometry"]:
+            if geom_info is not None:
+                geom, cid = geom_info
+                geom_copy = [(r, c, up) for r, c, up in geom]
+                geometry_copy.append((geom_copy, cid))
+            else:
+                geometry_copy.append(None)
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy(),
+            "other_features": mock_experience[0]["other_features"].copy(),
+            "available_shapes_geometry": geometry_copy,
+        }
+        exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
+        per_buffer.add(exp_copy)
     assert per_buffer.is_ready()
 
 
@@ -265,10 +372,19 @@ def test_per_buffer_is_ready(per_buffer: ExperienceBuffer, mock_experience: Expe
 def test_per_buffer_sample(per_buffer: ExperienceBuffer, mock_experience: Experience):
     # Fill buffer until ready
     for i in range(per_buffer.min_size_to_train):
-        # Correctly copy StateType dict and its NumPy arrays
+        # Create copies
+        geometry_copy: list[SerializableShapeInfo | None] = []
+        for geom_info in mock_experience[0]["available_shapes_geometry"]:
+            if geom_info is not None:
+                geom, cid = geom_info
+                geom_copy = [(r, c, up) for r, c, up in geom]
+                geometry_copy.append((geom_copy, cid + i))
+            else:
+                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
+            "available_shapes_geometry": geometry_copy,
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
@@ -282,6 +398,11 @@ def test_per_buffer_sample(per_buffer: ExperienceBuffer, mock_experience: Experi
     assert "weights" in sample
     assert len(sample["batch"]) == per_buffer.config.BATCH_SIZE
     assert isinstance(sample["batch"][0], tuple)
+    # Check structure of the first element's StateType
+    assert isinstance(sample["batch"][0][0], dict)
+    assert "grid" in sample["batch"][0][0]
+    assert "other_features" in sample["batch"][0][0]
+    assert "available_shapes_geometry" in sample["batch"][0][0]
     assert sample["indices"].shape == (per_buffer.config.BATCH_SIZE,)
     assert sample["weights"].shape == (per_buffer.config.BATCH_SIZE,)
     assert np.all(sample["weights"] >= 0) and np.all(
@@ -294,8 +415,23 @@ def test_per_buffer_sample_requires_step(
     per_buffer: ExperienceBuffer, mock_experience: Experience
 ):
     # Fill buffer
-    for _ in range(per_buffer.min_size_to_train):
-        per_buffer.add(mock_experience)
+    for i in range(per_buffer.min_size_to_train):
+        # Create copies
+        geometry_copy: list[SerializableShapeInfo | None] = []
+        for geom_info in mock_experience[0]["available_shapes_geometry"]:
+            if geom_info is not None:
+                geom, cid = geom_info
+                geom_copy = [(r, c, up) for r, c, up in geom]
+                geometry_copy.append((geom_copy, cid))
+            else:
+                geometry_copy.append(None)
+        state_copy: StateType = {
+            "grid": mock_experience[0]["grid"].copy(),
+            "other_features": mock_experience[0]["other_features"].copy(),
+            "available_shapes_geometry": geometry_copy,
+        }
+        exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
+        per_buffer.add(exp_copy)
     with pytest.raises(ValueError, match="current_train_step is required"):
         per_buffer.sample(per_buffer.config.BATCH_SIZE)
 
@@ -307,10 +443,19 @@ def test_per_buffer_update_priorities(
     # Add some items
     num_items = per_buffer.min_size_to_train
     for i in range(num_items):
-        # Correctly copy StateType dict and its NumPy arrays
+        # Create copies
+        geometry_copy: list[SerializableShapeInfo | None] = []
+        for geom_info in mock_experience[0]["available_shapes_geometry"]:
+            if geom_info is not None:
+                geom, cid = geom_info
+                geom_copy = [(r, c, up) for r, c, up in geom]
+                geometry_copy.append((geom_copy, cid + i))
+            else:
+                geometry_copy.append(None)
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i,
             "other_features": mock_experience[0]["other_features"].copy() + i,
+            "available_shapes_geometry": geometry_copy,
         }
         exp_copy: Experience = (state_copy, mock_experience[1], mock_experience[2] + i)
         per_buffer.add(exp_copy)
@@ -325,8 +470,6 @@ def test_per_buffer_update_priorities(
     per_buffer.update_priorities(indices, td_errors)
 
     # --- Verification Adjustment ---
-    # Instead of comparing the whole batch, compare based on unique indices.
-    # Create a mapping from tree index to the *last* expected priority for that index.
     expected_priorities_map = {}
     calculated_priorities = np.array(
         [per_buffer._get_priority(err) for err in td_errors]
@@ -334,20 +477,10 @@ def test_per_buffer_update_priorities(
     for tree_idx, expected_p in zip(indices, calculated_priorities, strict=True):
         expected_priorities_map[tree_idx] = expected_p  # Last write wins
 
-    # Get the actual updated priorities from the tree for the unique indices involved
-    # Remove list() call from sorted()
     unique_indices = sorted(expected_priorities_map.keys())
     actual_updated_priorities = [per_buffer.tree.tree[idx] for idx in unique_indices]
     expected_final_priorities = [expected_priorities_map[idx] for idx in unique_indices]
 
-    # Check if priorities changed (at least one should have)
-    # initial_priorities_unique = [
-    #     per_buffer.tree.tree[idx] for idx in unique_indices
-    # ]  # Get initial values for comparison *before* update (this needs adjustment - get before update)
-    # Re-sample or store initial priorities before update for a proper check if needed.
-    # For now, just check if the final values match the expected final values.
-
-    # Increase tolerance for floating point comparison
     assert np.allclose(
         actual_updated_priorities, expected_final_priorities, rtol=1e-4, atol=1e-4
     ), (
@@ -358,7 +491,6 @@ def test_per_buffer_update_priorities(
 def test_per_buffer_beta_annealing(per_buffer: ExperienceBuffer):
     config = per_buffer.config
     assert per_buffer._calculate_beta(0) == config.PER_BETA_INITIAL
-    # Ensure anneal steps is not None and > 0 before division
     anneal_steps = per_buffer.per_beta_anneal_steps
     assert anneal_steps is not None and anneal_steps > 0
     mid_step = anneal_steps // 2

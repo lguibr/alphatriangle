@@ -1,5 +1,5 @@
 import logging
-from typing import cast
+from typing import cast  # Added List, Optional, Tuple
 
 import numpy as np
 
@@ -8,7 +8,11 @@ from trianglengin import EnvConfig, GameState, Shape  # UPDATED IMPORT
 
 # Import alphatriangle configs
 from ..config import ModelConfig
-from ..utils.types import StateType
+from ..utils.types import (  # Import new types
+    SerializableShapeInfo,
+    ShapeGeometry,
+    StateType,
+)
 
 # Import grid_features locally
 from . import grid_features
@@ -46,7 +50,7 @@ class GameStateFeatures:
         return grid_state
 
     def _get_shape_features(self) -> np.ndarray:
-        """Extracts features for each shape slot using the Shape class."""
+        """Extracts numerical features for each shape slot using the Shape class."""
         num_slots = self.env_config.NUM_SHAPE_SLOTS
         # Ensure this matches OTHER_NN_INPUT_FEATURES_DIM calculation
         FEATURES_PER_SHAPE_HERE = 7
@@ -118,7 +122,7 @@ class GameStateFeatures:
         )
 
     def get_combined_other_features(self) -> np.ndarray:
-        """Combines all non-grid features into a single flat vector."""
+        """Combines all non-grid numerical features into a single flat vector."""
         shape_feats = self._get_shape_features()
         avail_feats = self._get_shape_availability()
         explicit_feats = self._get_explicit_features()
@@ -146,12 +150,34 @@ class GameStateFeatures:
 
         return cast("np.ndarray", combined.astype(np.float32))
 
+    # --- ADDED: Extract shape geometry ---
+    def _get_available_shapes_geometry(
+        self,
+    ) -> list[SerializableShapeInfo | None]:
+        """Extracts the geometry (triangle list) and color ID for shapes in slots."""
+        geometry_list: list[SerializableShapeInfo | None] = []
+        current_shapes: list[Shape | None] = self.gs.get_shapes()
+        for shape in current_shapes:
+            if shape and shape.triangles:
+                # Store triangles as simple list of tuples and the color ID
+                # Ensure triangles are stored as basic Python types
+                triangles_repr: ShapeGeometry = [
+                    (int(r), int(c), bool(up)) for r, c, up in shape.triangles
+                ]
+                geometry_list.append((triangles_repr, shape.color_id))
+            else:
+                geometry_list.append(None)  # Mark empty slot
+        return geometry_list
+
+    # --- END ADDED ---
+
 
 def extract_state_features(
     game_state: GameState, model_config: ModelConfig
 ) -> StateType:
     """
-    Extracts and returns the state dictionary {grid, other_features} for NN input.
+    Extracts and returns the state dictionary {grid, other_features, available_shapes_geometry}
+    for NN input and buffer storage.
     Requires ModelConfig to ensure dimensions match the network's expectations.
     Includes validation for non-finite values. Now reads from trianglengin.GameState wrapper.
     """
@@ -159,10 +185,18 @@ def extract_state_features(
     state_dict: StateType = {
         "grid": extractor._get_grid_state(),
         "other_features": extractor.get_combined_other_features(),
+        # --- ADDED: Populate geometry ---
+        "available_shapes_geometry": extractor._get_available_shapes_geometry(),
+        # --- END ADDED ---
     }
     grid_feat = state_dict["grid"]
     other_feat = state_dict["other_features"]
+    shape_geom = state_dict["available_shapes_geometry"]
+    num_avail_shapes = sum(1 for s in shape_geom if s is not None)
     logger.debug(
-        f"Extracted Features (State {game_state.current_step}): Grid(shape={grid_feat.shape}, min={grid_feat.min():.2f}, max={grid_feat.max():.2f}, mean={grid_feat.mean():.2f}), Other(shape={other_feat.shape}, min={other_feat.min():.2f}, max={other_feat.max():.2f}, mean={other_feat.mean():.2f})"
+        f"Extracted Features (State {game_state.current_step}): "
+        f"Grid(shape={grid_feat.shape}, min={grid_feat.min():.2f}, max={grid_feat.max():.2f}, mean={grid_feat.mean():.2f}), "
+        f"Other(shape={other_feat.shape}, min={other_feat.min():.2f}, max={other_feat.max():.2f}, mean={other_feat.mean():.2f}), "
+        f"AvailableShapes={num_avail_shapes}"
     )
     return state_dict

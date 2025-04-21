@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 
 # Import GameState and EnvConfig from trianglengin's top level
-from trianglengin import EnvConfig, GameState  # UPDATED IMPORT
+from trianglengin import EnvConfig, GameState
 
 # Keep alphatriangle imports
 from ..config import ModelConfig, TrainConfig
@@ -49,7 +49,9 @@ class NeuralNetwork:
         self.train_config = train_config
         self.device = device
         # Pass trianglengin.EnvConfig to model
-        self.model = AlphaTriangleNet(model_config, env_config).to(device)
+        # Store the original, uncompiled model reference separately
+        self._orig_model = AlphaTriangleNet(model_config, env_config).to(device)
+        self.model = self._orig_model  # Initially, model is the original model
         # Calculate action_dim manually
         self.action_dim = int(
             env_config.NUM_SHAPE_SLOTS * env_config.ROWS * env_config.COLS
@@ -78,7 +80,8 @@ class NeuralNetwork:
                     logger.info(
                         f"Attempting to compile model with torch.compile() on device '{self.device}'..."
                     )
-                    self.model = torch.compile(self.model)  # type: ignore
+                    # Compile the original model and store the result in self.model
+                    self.model = torch.compile(self._orig_model)  # type: ignore
                     logger.info(
                         f"Model compiled successfully on device '{self.device}'."
                     )
@@ -87,6 +90,8 @@ class NeuralNetwork:
                         f"torch.compile() failed on device '{self.device}': {e}. Proceeding without compilation.",
                         exc_info=False,
                     )
+                    # Ensure self.model still refers to the original if compilation fails
+                    self.model = self._orig_model
             else:
                 logger.warning(
                     "torch.compile() requested but not available (requires PyTorch 2.0+). Proceeding without compilation."
@@ -314,17 +319,18 @@ class NeuralNetwork:
 
     def get_weights(self) -> dict[str, torch.Tensor]:
         """Returns the model's state dictionary, moved to CPU."""
-        model_to_save = getattr(self.model, "_orig_mod", self.model)
-        return {k: v.cpu() for k, v in model_to_save.state_dict().items()}
+        # Always get weights from the original underlying model
+        return {k: v.cpu() for k, v in self._orig_model.state_dict().items()}
 
     def set_weights(self, weights: dict[str, torch.Tensor]):
-        """Loads the model's state dictionary from the provided weights."""
+        """Loads the model's state dictionary into the original underlying model."""
         try:
             weights_on_device = {k: v.to(self.device) for k, v in weights.items()}
-            model_to_load = getattr(self.model, "_orig_mod", self.model)
-            model_to_load.load_state_dict(weights_on_device)
+            # Always load weights into the original underlying model
+            self._orig_model.load_state_dict(weights_on_device)
+            # Ensure the potentially compiled model (self.model) is also in eval mode
             self.model.eval()
-            logger.debug("NN weights set successfully.")
+            logger.debug("NN weights set successfully into underlying model.")
         except Exception as e:
             logger.error(f"Error setting weights on NN instance: {e}", exc_info=True)
             raise

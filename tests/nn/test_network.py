@@ -45,7 +45,9 @@ def nn_interface(
     nn_interface_instance = NeuralNetwork(
         model_config, env_config, train_config, device
     )
+    # Ensure model is in eval mode for consistency, although set_weights should handle it
     nn_interface_instance.model.eval()
+    nn_interface_instance._orig_model.eval()
     return nn_interface_instance
 
 
@@ -165,48 +167,116 @@ def test_evaluate_batch(
 
 def test_get_set_weights(nn_interface: NeuralNetwork):
     """Test getting and setting model weights."""
-    initial_weights = nn_interface.get_weights()
-    assert isinstance(initial_weights, dict)
-    assert all(isinstance(v, torch.Tensor) for v in initial_weights.values())
-    assert all(v.device == torch.device("cpu") for v in initial_weights.values())
+    # Ensure model is on CPU for this test
+    nn_interface._orig_model.cpu()
+    nn_interface.device = torch.device("cpu")
 
-    # Modify weights slightly by creating NEW tensors
-    modified_weights = {}
+    initial_weights_state_dict = nn_interface.get_weights()
+    assert isinstance(initial_weights_state_dict, dict)
+    assert all(isinstance(v, torch.Tensor) for v in initial_weights_state_dict.values())
+    assert all(
+        v.device == torch.device("cpu") for v in initial_weights_state_dict.values()
+    )
+
+    # Create a deep copy of initial weights for comparison later
+    initial_weights_copy = {
+        k: v.clone().detach() for k, v in initial_weights_state_dict.items()
+    }
+
+    # Modify weights: Create a new state dict with zeros for float params
+    modified_weights_state_dict = {}
     params_modified = False
     float_keys_modified = []
-    for k, v in initial_weights.items():
+
+    for k, v in initial_weights_state_dict.items():
         if v.dtype.is_floating_point:
-            # Create a completely new tensor of ONES to ensure difference
-            # (assuming not all weights are initialized to 1)
-            modified_weights[k] = torch.ones_like(v)
+            modified_weights_state_dict[k] = torch.zeros_like(v)
             params_modified = True
             float_keys_modified.append(k)
-            # REMOVED internal assertion that failed when initial weight was already 1
-            # assert not torch.equal(
-            #     initial_weights[k], modified_weights[k]
-            # ), f"Weight {k} did not change after creating ones_like!"
+            # Check if modification actually happened (unless initial was already zero)
+            if not torch.all(initial_weights_state_dict[k] == 0):
+                assert not torch.equal(
+                    initial_weights_state_dict[k], modified_weights_state_dict[k]
+                ), f"Weight {k} did not change after creating zeros_like!"
         else:
-            modified_weights[k] = v  # Keep non-float tensors (buffers) unchanged
+            # Keep non-float tensors (buffers) unchanged, ensure they are detached copies
+            modified_weights_state_dict[k] = v.clone().detach()
 
     assert params_modified, "No floating point parameters found to modify in state_dict"
 
-    nn_interface.set_weights(modified_weights)
-    new_weights = nn_interface.get_weights()
+    # --- Set the modified weights ---
+    nn_interface.set_weights(modified_weights_state_dict)
 
-    # Check if weights were actually updated
-    weights_changed = False
+    # --- Direct Check: Compare model parameters immediately after setting ---
+    direct_check_passed = True
+    mismatched_params = []
+    with torch.no_grad():
+        # Use named_parameters which only includes trainable parameters
+        for name, param in nn_interface._orig_model.named_parameters():
+            if name in modified_weights_state_dict:
+                expected_tensor = modified_weights_state_dict[name]
+                actual_tensor = param.data
+                if not torch.allclose(actual_tensor, expected_tensor, atol=1e-6):
+                    direct_check_passed = False
+                    mismatched_params.append(name)
+                    print(f"Direct Param Check Mismatch for key '{name}':")
+                    print(f"  Expected (modified): {expected_tensor.flatten()[:5]}...")
+                    print(f"  Got (actual param):  {actual_tensor.flatten()[:5]}...")
+            else:
+                print(
+                    f"Warning: Parameter '{name}' not found in modified_weights_state_dict during direct check."
+                )
+
+    assert direct_check_passed, (
+        f"Direct parameter check failed after set_weights for keys: {mismatched_params}"
+    )
+
+    # --- Get weights again using the interface method ---
+    new_weights_state_dict = nn_interface.get_weights()
+
+    # --- Comparison using state dicts ---
+    weights_changed_from_initial = False
+    mismatched_keys_final = []
+
     for k in float_keys_modified:
-        # Check if the tensor retrieved AFTER setting is different from the INITIAL tensor
-        if not torch.equal(initial_weights[k], new_weights[k]):
-            weights_changed = True
-            break
+        initial_tensor = initial_weights_copy[k]  # Compare against the initial copy
+        new_tensor = new_weights_state_dict[k]
+        modified_tensor = modified_weights_state_dict[k]
 
-    assert weights_changed, "Floating point weights did not change after set_weights"
+        # Check 1: Did the tensor change from the initial state?
+        if not torch.equal(initial_tensor, new_tensor):
+            weights_changed_from_initial = True
 
-    # Check if the loaded weights match the modified ones we intended to set
+        # Check 2: Does the new tensor match the one we tried to set?
+        if not torch.allclose(new_tensor, modified_tensor, atol=1e-6):
+            mismatched_keys_final.append(k)
+            print(f"Final State Dict Mismatch for key '{k}':")
+            print(f"  Expected (modified): {modified_tensor.flatten()[:5]}...")
+            print(f"  Got (new state dict):{new_tensor.flatten()[:5]}...")
+            print(f"  Initial:             {initial_tensor.flatten()[:5]}...")
+
+    # Assert that at least one weight changed from the initial state
+    assert weights_changed_from_initial, (
+        "Floating point weights did not change from initial state after set_weights/get_weights cycle"
+    )
+
+    # Assert that all modified weights match the expected values in the final state dict
+    assert not mismatched_keys_final, (
+        f"Weights in final state_dict did not match expected values after set_weights for keys: {mismatched_keys_final}"
+    )
+
+    # Final check: ensure all keys match (including buffers)
     assert all(
-        torch.allclose(modified_weights[k], new_weights[k], atol=1e-6)
-        for k in modified_weights
+        (
+            torch.allclose(
+                modified_weights_state_dict[k], new_weights_state_dict[k], atol=1e-6
+            )
+            if modified_weights_state_dict[k].dtype.is_floating_point
+            else torch.equal(modified_weights_state_dict[k], new_weights_state_dict[k])
+        )
+        for k in modified_weights_state_dict
+    ), (
+        "Mismatch between modified_weights and new_weights across all keys in final state dict."
     )
 
 

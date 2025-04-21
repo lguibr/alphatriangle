@@ -1,4 +1,4 @@
-md
+
 # Reinforcement Learning Module (`alphatriangle.rl`)
 
 ## Purpose and Architecture
@@ -7,7 +7,7 @@ This module contains core components related to the reinforcement learning algor
 
 -   **Core Components ([`core/README.md`](core/README.md)):**
     -   `Trainer`: Responsible for performing the neural network update steps. It takes batches of experience from the buffer, calculates losses (policy cross-entropy, **distributional value cross-entropy**, optional entropy bonus), applies importance sampling weights if using PER, updates the network weights, and calculates TD errors for PER priority updates. **Uses `trianglengin.EnvConfig`.**
-    -   `ExperienceBuffer`: A replay buffer storing `Experience` tuples (`(StateType, policy_target, n_step_return)`). Supports both uniform sampling and Prioritized Experience Replay (PER).
+    -   `ExperienceBuffer`: A replay buffer storing `Experience` tuples (`(StateType, policy_target, n_step_return)`). The `StateType` contains processed numerical features (`grid`, `other_features`) **and the geometry of available shapes (`available_shapes_geometry`)**. Supports both uniform sampling and Prioritized Experience Replay (PER).
 -   **Self-Play Components ([`self_play/README.md`](self_play/README.md)):**
     -   `worker`: Defines the `SelfPlayWorker` Ray actor. Each actor runs game episodes independently using `trimcts.run_mcts` and its local copy of the neural network (`NeuralNetwork` which conforms to `trimcts.AlphaZeroNetworkInterface`). It collects experiences (including calculated n-step returns) and returns results via a `SelfPlayResult` object. It also logs stats and game state asynchronously. **Uses `trianglengin.GameState` and `trianglengin.EnvConfig`.**
 -   **Types ([`types.py`](types.py)):**

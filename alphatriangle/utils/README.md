@@ -1,4 +1,4 @@
-# File: alphatriangle/utils/README.md
+
 # Utilities Module (`alphatriangle.utils`)
 
 ## Purpose and Architecture
@@ -11,7 +11,7 @@ This module provides common utility functions and type definitions used across v
     -   `format_eta`: Converts a time duration (in seconds) into a human-readable string (HH:MM:SS).
     -   `normalize_color_for_matplotlib`: Converts RGB (0-255) to Matplotlib format (0.0-1.0).
 -   **Type Definitions ([`types.py`](types.py)):** Defines common type aliases and `TypedDict`s used throughout the codebase, particularly for data structures passed between modules (like RL components, NN, and environment). This improves code readability and enables better static analysis. Examples include:
-    -   `StateType`: A `TypedDict` defining the structure of the state representation passed to the NN and stored in the buffer (e.g., `{'grid': np.ndarray, 'other_features': np.ndarray}`).
+    -   `StateType`: A `TypedDict` defining the structure of the state representation passed to the NN and stored in the buffer. Contains `grid` (occupancy features), `other_features` (numerical features), and `available_shapes_geometry` (geometric info for shapes in slots).
     -   `ActionType`: An alias for `int`, representing encoded actions.
     -   `PolicyTargetMapping`: A mapping from `ActionType` to `float`, representing the policy target from MCTS.
     -   `Experience`: A tuple representing `(StateType, PolicyTargetMapping, float)` stored in the replay buffer (the float is the n-step return).
@@ -45,6 +45,8 @@ This module provides common utility functions and type definitions used across v
     -   `PERBatchSample` (TypedDict)
     -   `StatsCollectorData` (TypeAlias for `Dict[str, Deque[Tuple[StepInfo, float]]]`)
     -   `StepInfo` (TypedDict)
+    -   `ShapeGeometry` (TypeAlias)
+    -   `SerializableShapeInfo` (TypeAlias)
 
 ## Dependencies
 

@@ -5,11 +5,13 @@ mirroring trimcts.SearchConfiguration for easy control.
 """
 
 from pydantic import BaseModel, ConfigDict, Field
+from trimcts import SearchConfiguration  # Import base config for reference
 
-# Temporarily reduce simulations for faster profiling
-DEFAULT_MAX_SIMULATIONS = 64  # CHANGED TEMPORARILY
-DEFAULT_MAX_DEPTH = 16  # Keep depth lower for faster profiling too
+# Restore default simulations to a higher value for better play quality
+DEFAULT_MAX_SIMULATIONS = 1024  # Increased from 64
+DEFAULT_MAX_DEPTH = 32  # Can increase depth slightly too
 DEFAULT_CPUCT = 1.5
+DEFAULT_MCTS_BATCH_SIZE = 64  # Default batch size for network evals within MCTS
 
 
 class AlphaTriangleMCTSConfig(BaseModel):
@@ -52,5 +54,28 @@ class AlphaTriangleMCTSConfig(BaseModel):
         le=1.0,
     )
 
+    # Batching for Network Evaluations within MCTS
+    mcts_batch_size: int = Field(
+        default=DEFAULT_MCTS_BATCH_SIZE,
+        description="Number of leaf nodes to collect in C++ MCTS before calling network evaluate_batch.",
+        gt=0,
+    )
+
     # Use ConfigDict for Pydantic V2
     model_config = ConfigDict(validate_assignment=True)
+
+    def to_trimcts_config(self) -> SearchConfiguration:
+        """Converts this config to the trimcts.SearchConfiguration."""
+        return SearchConfiguration(
+            max_simulations=self.max_simulations,
+            max_depth=self.max_depth,
+            cpuct=self.cpuct,
+            dirichlet_alpha=self.dirichlet_alpha,
+            dirichlet_epsilon=self.dirichlet_epsilon,
+            discount=self.discount,
+            mcts_batch_size=self.mcts_batch_size,  # Pass batch size
+        )
+
+
+# Ensure model is rebuilt after changes
+AlphaTriangleMCTSConfig.model_rebuild(force=True)

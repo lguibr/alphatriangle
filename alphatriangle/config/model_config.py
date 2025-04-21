@@ -8,6 +8,9 @@ class ModelConfig(BaseModel):
     """
     Configuration for the Neural Network model (Pydantic model).
     --- TUNED FOR SMALLER CAPACITY (~3M Params Target, Laptop Feasible) ---
+    NOTE: Increasing filters/layers/dims can improve final agent strength
+          but will increase training time due to the NN evaluation bottleneck.
+          Adjust based on hardware capabilities and performance requirements.
     """
 
     # Input channels for the grid (e.g., 1 for occupancy, more for history/colors)
