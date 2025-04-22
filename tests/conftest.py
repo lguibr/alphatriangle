@@ -1,4 +1,3 @@
-# File: tests/conftest.py
 import random
 from typing import cast
 
@@ -106,6 +105,7 @@ def mock_train_config() -> TrainConfig:
         MAX_TRAINING_STEPS=200,
         N_STEP_RETURNS=3,
         GAMMA=0.99,
+        PROFILE_WORKERS=False,  # Added default for tests
     )
 
 

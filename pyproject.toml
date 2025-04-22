@@ -1,11 +1,12 @@
 
+# File: pyproject.toml
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "alphatriangle"
-version = "1.6.0" # Incremented version for stats refactor
+version = "1.7.0" # Incremented version for CLI enhancements
 authors = [{ name="Luis Guilherme P. M.", email="lgpelin92@gmail.com" }]
 description = "AlphaZero implementation for a triangle puzzle game (uses trianglengin v2+ and trimcts with tree reuse)." # Updated description
 readme = "README.md"
@@ -37,6 +38,8 @@ dependencies = [
     "typing_extensions>=4.0.0",
     "typer[all]>=0.9.0",
     "tensorboard>=2.10.0",
+    # --- CLI Enhancement ---
+    "rich>=13.0.0", # Added rich for CLI styling
 ]
 
 [project.urls]
@@ -91,8 +94,8 @@ addopts = "-ra -q --cov=alphatriangle --cov-report=term-missing"
 testpaths = ["tests"]
 [tool.coverage.run]
 omit = [
-    "alphatriangle/cli.py",
-    "alphatriangle/training/logging_utils.py",
+    "alphatriangle/cli.py", # Keep omitted for now due to subprocess/UI complexity
+    "alphatriangle/logging_config.py",
     "alphatriangle/config/*",
     "alphatriangle/data/schemas.py",
     "alphatriangle/utils/types.py", # Old types removed

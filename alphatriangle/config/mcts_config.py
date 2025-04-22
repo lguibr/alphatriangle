@@ -8,8 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from trimcts import SearchConfiguration  # Import base config for reference
 
 # Restore default simulations to a lower value for faster testing/profiling
-DEFAULT_MAX_SIMULATIONS = 512
-DEFAULT_MAX_DEPTH = 32
+DEFAULT_MAX_SIMULATIONS = 128
+DEFAULT_MAX_DEPTH = 16
 DEFAULT_CPUCT = 1.5
 DEFAULT_MCTS_BATCH_SIZE = 32  # Default batch size for network evals within MCTS
 

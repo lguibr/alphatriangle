@@ -1,12 +1,15 @@
 from .components import TrainingComponents
 
 # Utilities
-from .logging_utils import Tee, get_root_logger, setup_file_logging
+from .logging_utils import (
+    Tee,
+    log_configs_to_mlflow,
+)  # Removed get_root_logger, setup_file_logging
 from .loop import TrainingLoop
 from .loop_helpers import LoopHelpers
 
 # Re-export runner functions
-from .runner import run_training  # Import the single runner
+from .runner import run_training
 
 # REMOVE visual runner import
 from .setup import setup_training_components
@@ -22,9 +25,8 @@ __all__ = [
     "LoopHelpers",
     "setup_training_components",
     # Runners (re-exported)
-    "run_training",  # Export single runner
+    "run_training",
     # Logging Utilities
-    "setup_file_logging",
-    "get_root_logger",
     "Tee",
+    "log_configs_to_mlflow",
 ]

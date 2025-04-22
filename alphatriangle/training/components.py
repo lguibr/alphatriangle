@@ -1,3 +1,4 @@
+# File: alphatriangle/training/components.py
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -10,11 +11,10 @@ from trimcts import SearchConfiguration
 # Keep alphatriangle imports
 
 if TYPE_CHECKING:
-    # Keep AlphaTriangleMCTSConfig for potential future use if needed
     from alphatriangle.config import (
         ModelConfig,
         PersistenceConfig,
-        StatsConfig,  # ADDED
+        StatsConfig,
         TrainConfig,
     )
     from alphatriangle.data import DataManager
@@ -38,4 +38,5 @@ class TrainingComponents:
     model_config: "ModelConfig"
     mcts_config: SearchConfiguration
     persist_config: "PersistenceConfig"
-    stats_config: "StatsConfig"  # ADDED
+    stats_config: "StatsConfig"
+    profile_workers: bool  # Added flag

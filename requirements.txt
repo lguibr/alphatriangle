@@ -1,5 +1,5 @@
-trianglengin>=2.0.4
-trimcts>=0.1.0
+trianglengin>=2.0.6
+trimcts>=1.2.1
 numpy>=1.20.0
 torch>=2.0.0
 torchvision>=0.11.0
@@ -11,3 +11,4 @@ pydantic>=2.0.0
 typing_extensions>=4.0.0
 typer[all]>=0.9.0
 tensorboard>=2.10.0
+rich>=13.0.0 # 

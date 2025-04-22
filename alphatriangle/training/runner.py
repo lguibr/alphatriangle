@@ -10,13 +10,10 @@ import ray
 import torch
 
 from ..config import APP_NAME, PersistenceConfig, TrainConfig
+from ..logging_config import setup_logging  # Import centralized setup
 from ..utils.sumtree import SumTree
 from .components import TrainingComponents
-from .logging_utils import (
-    get_root_logger,
-    log_configs_to_mlflow,
-    setup_file_logging,
-)
+from .logging_utils import log_configs_to_mlflow  # Keep MLflow helper
 from .loop import TrainingLoop
 from .setup import count_parameters, setup_training_components
 
@@ -26,20 +23,15 @@ logger = logging.getLogger(__name__)
 def _initialize_mlflow(persist_config: PersistenceConfig, run_name: str) -> bool:
     """Sets up MLflow tracking and starts a run."""
     try:
-        # Get the absolute path and URI from PersistenceConfig
         mlflow_abs_path = persist_config.get_mlflow_abs_path()
         mlflow_tracking_uri = persist_config.MLFLOW_TRACKING_URI
-        logger.info(
-            f"Resolved MLflow absolute path: {mlflow_abs_path}"
-        )  # Log resolved path
-        logger.info(f"Using MLflow tracking URI: {mlflow_tracking_uri}")  # Log URI
+        logger.info(f"Resolved MLflow absolute path: {mlflow_abs_path}")
+        logger.info(f"Using MLflow tracking URI: {mlflow_tracking_uri}")
 
-        # Ensure the directory exists
         Path(mlflow_abs_path).mkdir(parents=True, exist_ok=True)
 
         mlflow.set_tracking_uri(mlflow_tracking_uri)
         mlflow.set_experiment(APP_NAME)
-        # logger.info(f"Set MLflow tracking URI to: {mlflow_tracking_uri}") # Redundant log
         logger.info(f"Set MLflow experiment to: {APP_NAME}")
 
         mlflow.start_run(run_name=run_name)
@@ -58,8 +50,8 @@ def _initialize_mlflow(persist_config: PersistenceConfig, run_name: str) -> bool
 def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoop:
     """Loads initial state using DataManager and applies it to components, returning an initialized TrainingLoop."""
     loaded_state = components.data_manager.load_initial_state()
-    training_loop = TrainingLoop(components)  # Instantiate loop first
-    initial_step = 0  # Default start step
+    training_loop = TrainingLoop(components)
+    initial_step = 0
 
     if loaded_state.checkpoint_data:
         cp_data = loaded_state.checkpoint_data
@@ -74,7 +66,6 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
                 components.trainer.optimizer.load_state_dict(
                     cp_data.optimizer_state_dict
                 )
-                # Ensure optimizer state is on the correct device
                 for state in components.trainer.optimizer.state.values():
                     for k, v in state.items():
                         if isinstance(v, torch.Tensor):
@@ -89,8 +80,7 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
             and components.stats_collector_actor is not None
         ):
             try:
-                # Use type ignore for remote call if needed
-                set_state_ref = components.stats_collector_actor.set_state.remote(  # type: ignore [attr-defined]
+                set_state_ref = components.stats_collector_actor.set_state.remote(
                     cp_data.stats_collector_state
                 )
                 ray.get(set_state_ref, timeout=5.0)
@@ -105,7 +95,7 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
             cp_data.episodes_played,
             cp_data.total_simulations_run,
         )
-        initial_step = cp_data.global_step  # Store loaded step
+        initial_step = cp_data.global_step
     else:
         logger.info("No checkpoint data loaded. Starting fresh.")
         training_loop.set_initial_state(0, 0, 0)
@@ -117,17 +107,15 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
             if not hasattr(components.buffer, "tree") or components.buffer.tree is None:
                 components.buffer.tree = SumTree(components.buffer.capacity)
             else:
-                # Re-initialize SumTree to ensure clean state
                 components.buffer.tree = SumTree(components.buffer.capacity)
 
-            max_p = 1.0  # Default priority for loaded experiences
+            max_p = 1.0
             for exp in loaded_state.buffer_data.buffer_list:
-                # Add with default max priority, actual priorities are lost on save/load
                 components.buffer.tree.add(max_p, exp)
             loaded_buffer_size = len(components.buffer)
             logger.info(f"PER buffer loaded. Size: {loaded_buffer_size}")
         else:
-            from collections import deque  # Import locally if needed
+            from collections import deque
 
             components.buffer.buffer = deque(
                 loaded_state.buffer_data.buffer_list,
@@ -156,7 +144,7 @@ def _save_final_state(training_loop: TrainingLoop):
         components.data_manager.save_training_state(
             nn=components.nn,
             optimizer=components.trainer.optimizer,
-            stats_collector_actor=components.stats_collector_actor,  # Pass handle
+            stats_collector_actor=components.stats_collector_actor,
             buffer=components.buffer,
             global_step=training_loop.global_step,
             episodes_played=training_loop.episodes_played,
@@ -171,31 +159,33 @@ def run_training(
     log_level_str: str,
     train_config_override: TrainConfig,
     persist_config_override: PersistenceConfig,
+    profile: bool,  # Added profile flag
 ) -> int:
     """Runs the training pipeline (headless)."""
     training_loop: TrainingLoop | None = None
     components: TrainingComponents | None = None
     exit_code = 1
-    log_file_path = None
-    file_handler = None
+    log_file_path: Path | None = None
+    file_handler: logging.FileHandler | None = None
     ray_initialized_by_setup = False
     mlflow_run_active = False
     tb_log_dir: str | None = None
 
     try:
-        # --- Setup File Logging ---
-        log_file_path = setup_file_logging(
-            persist_config_override,
-            train_config_override.RUN_NAME,
-            "train",
-        )
-        log_level = logging.getLevelName(log_level_str.upper())
+        # --- Setup File Logging Path ---
+        # Determine log file path before setting up logging
+        log_dir = Path(persist_config_override.get_run_base_dir()) / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file_path = log_dir / f"{train_config_override.RUN_NAME}_train.log"
+
+        # --- Setup Centralized Logging ---
+        # Pass the determined log file path
+        file_handler = setup_logging(log_level_str, log_file_path)
         logger.info(
-            f"Logging {logging.getLevelName(log_level)} and higher messages to console and: {log_file_path}"
+            f"Logging {log_level_str.upper()} and higher messages to console and: {log_file_path}"
         )
 
-        # --- TensorBoard Directory Setup (Moved Before Component Setup) ---
-        # Ensure the directory exists *before* the StatsCollectorActor tries to use it
+        # --- TensorBoard Directory Setup ---
         tb_log_dir = persist_config_override.get_tensorboard_log_dir()
         if tb_log_dir:
             try:
@@ -205,16 +195,17 @@ def run_training(
                 logger.error(
                     f"Failed to create TensorBoard directory '{tb_log_dir}': {e}"
                 )
-                tb_log_dir = None  # Prevent passing invalid path to actor
+                tb_log_dir = None
         else:
             logger.warning("Could not determine TensorBoard log directory path.")
 
         # --- Setup Components (includes Ray init, StatsActor init) ---
-        # Pass the potentially created tb_log_dir path to setup
+        # Pass tb_log_dir and profile flag
         components, ray_initialized_by_setup = setup_training_components(
             train_config_override,
             persist_config_override,
-            tb_log_dir,  # Pass tb_log_dir
+            tb_log_dir,
+            profile,  # Pass profile flag
         )
         if not components:
             raise RuntimeError("Failed to initialize training components.")
@@ -233,15 +224,13 @@ def run_training(
             mlflow.log_param("model_trainable_params", trainable_params)
             if log_file_path:
                 try:
-                    mlflow.log_artifact(log_file_path, artifact_path="logs")
+                    mlflow.log_artifact(str(log_file_path), artifact_path="logs")
                 except Exception as log_artifact_err:
                     logger.error(
                         f"Failed to log log file to MLflow: {log_artifact_err}"
                     )
-            # Log TB path if available
             if tb_log_dir and mlflow_run_active:
                 try:
-                    # Log relative path for portability
                     relative_tb_path = Path(tb_log_dir).relative_to(
                         Path(components.persist_config.get_run_base_dir()).parent
                     )
@@ -266,7 +255,7 @@ def run_training(
         elif training_loop.training_exception:
             exit_code = 1
         else:
-            exit_code = 1  # Loop stopped unexpectedly
+            exit_code = 1
 
     except Exception as e:
         logger.critical(
@@ -287,7 +276,6 @@ def run_training(
         error_msg = ""
         if training_loop:
             _save_final_state(training_loop)
-            # Cleanup actors (workers + stats collector, including its TB writer)
             training_loop.cleanup_actors()
             if training_loop.training_exception:
                 final_status = "FAILED"
@@ -299,16 +287,14 @@ def run_training(
         else:
             final_status = "SETUP_FAILED"
 
-        # Log final TB artifacts if possible (writer is closed in cleanup_actors)
         if (
             mlflow_run_active
-            and tb_log_dir  # Use the path determined earlier
+            and tb_log_dir
             and Path(tb_log_dir).exists()
-            and components is not None  # Check components exist
+            and components is not None
         ):
             try:
-                # Ensure files are flushed before logging
-                time.sleep(1)  # Short delay to allow potential final writes
+                time.sleep(1)
                 mlflow.log_artifacts(
                     tb_log_dir,
                     artifact_path=components.persist_config.TENSORBOARD_DIR_NAME,
@@ -338,18 +324,14 @@ def run_training(
             except Exception as e:
                 logger.error(f"Error shutting down Ray: {e}", exc_info=True)
 
-        # Close file logger
-        root_logger = get_root_logger()
-        file_handler = next(
-            (h for h in root_logger.handlers if isinstance(h, logging.FileHandler)),
-            None,
-        )
+        # Close file logger handler if it was created
         if file_handler:
             try:
                 file_handler.flush()
                 file_handler.close()
-                root_logger.removeHandler(file_handler)
+                logging.getLogger().removeHandler(file_handler)
             except Exception as e_close:
+                # Use print for final cleanup errors as logging might be compromised
                 print(f"Error closing log file handler: {e_close}", file=sys.__stderr__)
 
         logger.info(f"Training finished with exit code {exit_code}.")

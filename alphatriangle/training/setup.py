@@ -1,6 +1,6 @@
 # File: alphatriangle/training/setup.py
 import logging
-from typing import TYPE_CHECKING  # Import Optional
+from typing import TYPE_CHECKING
 
 import ray
 import torch
@@ -10,7 +10,7 @@ from trianglengin import EnvConfig
 
 # Keep alphatriangle imports
 from .. import config, utils
-from ..config import AlphaTriangleMCTSConfig, StatsConfig  # ADDED StatsConfig
+from ..config import AlphaTriangleMCTSConfig, StatsConfig
 from ..data import DataManager
 from ..nn import NeuralNetwork
 from ..rl import ExperienceBuffer, Trainer
@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 def setup_training_components(
     train_config_override: "TrainConfig",
     persist_config_override: "PersistenceConfig",
-    tb_log_dir: str | None = None,  # ADDED tb_log_dir argument
+    tb_log_dir: str | None = None,
+    profile: bool = False,  # Added profile flag
 ) -> tuple[TrainingComponents | None, bool]:
     """
     Initializes Ray (if not already initialized), detects cores, updates config,
@@ -41,7 +42,7 @@ def setup_training_components(
         if not ray.is_initialized():
             try:
                 # Reduce Ray's verbosity during init
-                ray.init(logging_level=logging.ERROR, log_to_driver=False)
+                ray.init(logging_level=logging.WARNING, log_to_driver=False)
                 ray_initialized_here = True
                 logger.info("Ray initialized by setup_training_components.")
             except Exception as e:
@@ -66,12 +67,11 @@ def setup_training_components(
         # --- Load Configurations ---
         train_config = train_config_override
         persist_config = persist_config_override
-        # Ensure run name consistency
         persist_config.RUN_NAME = train_config.RUN_NAME
         env_config = EnvConfig()
         model_config = config.ModelConfig()
         alphatriangle_mcts_config = AlphaTriangleMCTSConfig()
-        stats_config = StatsConfig()  # ADDED
+        stats_config = StatsConfig()
 
         # --- Adjust Worker Count ---
         requested_workers = train_config.NUM_SELF_PLAY_WORKERS
@@ -90,7 +90,6 @@ def setup_training_components(
         logger.info(f"Final worker count set to: {train_config.NUM_SELF_PLAY_WORKERS}")
 
         # --- Validate Configurations ---
-        # Validation now includes StatsConfig via print_config_info_and_validate
         config.print_config_info_and_validate(alphatriangle_mcts_config)
 
         # --- Create trimcts SearchConfiguration ---
@@ -107,17 +106,16 @@ def setup_training_components(
         logger.info(f"Determined Training Device: {device}")
         logger.info(f"Determined Worker Device: {worker_device}")
         logger.info(f"Model Compilation Enabled: {train_config.COMPILE_MODEL}")
+        logger.info(f"Worker Profiling Enabled: {profile}")  # Log profile status
 
         # --- Initialize Core Components ---
         data_manager = DataManager(persist_config, train_config)
         run_base_dir = data_manager.path_manager.run_base_dir
-        # tb_log_dir is now passed in
 
-        # Pass StatsConfig and run details to the actor
-        stats_collector_actor = StatsCollectorActor.remote(  # type: ignore
+        stats_collector_actor = StatsCollectorActor.remote(  # type: ignore [attr-defined]
             stats_config=stats_config,
             run_name=train_config.RUN_NAME,
-            tb_log_dir=tb_log_dir,  # Pass TB log dir determined in runner
+            tb_log_dir=tb_log_dir,
         )
         logger.info("Initialized StatsCollectorActor.")
 
@@ -139,13 +137,13 @@ def setup_training_components(
             model_config=model_config,
             mcts_config=trimcts_mcts_config,
             persist_config=persist_config,
-            stats_config=stats_config,  # ADDED
+            stats_config=stats_config,
+            profile_workers=profile,
         )
 
         return components, ray_initialized_here
     except Exception as e:
         logger.critical(f"Error setting up training components: {e}", exc_info=True)
-        # Ensure Ray is shut down if initialized here during setup failure
         if ray_initialized_here and ray.is_initialized():
             try:
                 ray.shutdown()

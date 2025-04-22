@@ -96,6 +96,12 @@ class TrainConfig(BaseModel):
         ),
     )
 
+    # --- Profiling ---
+    PROFILE_WORKERS: bool = Field(
+        default=False,
+        description="Enable cProfile for worker 0 to generate .prof files.",
+    )
+
     @model_validator(mode="after")
     def check_buffer_sizes(self) -> "TrainConfig":
         # Ensure attributes exist before comparing

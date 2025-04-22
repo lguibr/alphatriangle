@@ -1,4 +1,3 @@
-# File: tests/training/test_loop_integration.py
 import logging
 import time
 from pathlib import Path
@@ -140,6 +139,7 @@ def mock_training_config(mock_train_config: TrainConfig) -> TrainConfig:
     cfg.MAX_TRAINING_STEPS = 20
     cfg.USE_PER = False
     cfg.COMPILE_MODEL = False
+    cfg.PROFILE_WORKERS = False  # Ensure profiling is off for standard tests
     return cfg
 
 
@@ -155,7 +155,7 @@ def mock_components(
     mocker,
     mock_nn_interface,
     mock_training_config,
-    mock_stats_config_fixture,  # Use stats config fixture
+    mock_stats_config_fixture,
     mock_env_config,
     mock_model_config,
     mock_mcts_config,
@@ -170,7 +170,6 @@ def mock_components(
     mock_buffer.min_size_to_train = mock_training_config.MIN_BUFFER_SIZE_TO_TRAIN
     mock_buffer.use_per = mock_training_config.USE_PER
     mock_buffer.is_ready.return_value = True
-    # Mock buffer length
     mock_buffer.__len__.return_value = mock_training_config.MIN_BUFFER_SIZE_TO_TRAIN + 5
     dummy_sample: PERBatchSample = {
         "batch": [mock_experience],
@@ -178,7 +177,6 @@ def mock_components(
         "weights": np.array([1.0]),
     }
     mock_buffer.sample.return_value = dummy_sample
-    # Mock PER beta calculation if needed
     if mock_training_config.USE_PER:
         mock_buffer._calculate_beta = MagicMock(return_value=0.5)
     mocker.patch(
@@ -191,12 +189,10 @@ def mock_components(
     mock_trainer.model_config = mock_model_config
     mock_trainer.nn = mock_nn_interface
     mock_trainer.device = mock_nn_interface.device
-    # Trainer now returns raw loss dict
     mock_trainer.train_step.return_value = (
         {"total_loss": 0.1, "policy_loss": 0.05, "value_loss": 0.05},
         np.array([0.1]),
     )
-    # Mock get_current_lr
     mock_trainer.get_current_lr.return_value = mock_training_config.LEARNING_RATE
     mocker.patch("alphatriangle.rl.core.trainer.Trainer", return_value=mock_trainer)
 
@@ -206,11 +202,7 @@ def mock_components(
     mock_data_manager.path_manager = mock_path_manager
     mocker.patch("alphatriangle.data.DataManager", return_value=mock_data_manager)
 
-    # Mock the StatsCollectorActor handle (ensure it's not None for tests)
-    mock_stats_collector_handle = MagicMock(
-        name="StatsCollectorActorMockHandle"
-    )  # Use ActorHandle type if available
-    # Mock the remote methods needed by the loop
+    mock_stats_collector_handle = MagicMock(name="StatsCollectorActorMockHandle")
     mock_stats_collector_handle.log_event = MagicMock(name="log_event_remote")
     mock_stats_collector_handle.log_batch_events = MagicMock(
         name="log_batch_events_remote"
@@ -218,7 +210,6 @@ def mock_components(
     mock_stats_collector_handle.process_and_log = MagicMock(
         name="process_and_log_remote"
     )
-    # Mock the .remote attribute to return the mocked methods
     mock_stats_collector_handle.log_event.remote = mock_stats_collector_handle.log_event
     mock_stats_collector_handle.log_batch_events.remote = (
         mock_stats_collector_handle.log_batch_events
@@ -228,9 +219,7 @@ def mock_components(
     )
 
     mock_workers = [
-        MockSelfPlayWorker(
-            i, mock_stats_collector_handle
-        )  # Pass stats mock handle to worker
+        MockSelfPlayWorker(i, mock_stats_collector_handle)
         for i in range(mock_training_config.NUM_SELF_PLAY_WORKERS)
     ]
     mock_worker_manager_instance = MagicMock(spec=WorkerManager)
@@ -281,11 +270,6 @@ def mock_components(
                 worker.set_weights.remote(weights)
                 worker.set_current_trainer_step.remote(global_step)
         logger.debug("Mock update_worker_networks finished.")
-        # REMOVED: Sending the weight update event from here. Loop handles it now.
-        # assert mock_stats_collector_handle is not None
-        # mock_stats_collector_handle.log_event.remote(
-        #     RawMetricEvent(name="Event/Weight_Update", value=1.0, global_step=global_step)
-        # )
 
     mock_worker_manager_instance.update_worker_networks.side_effect = (
         mock_update_worker_networks
@@ -299,7 +283,6 @@ def mock_components(
         return_value=mock_worker_manager_instance,
     )
 
-    # Mock LoopHelpers (now simpler)
     mock_loop_helpers = MagicMock(spec=LoopHelpers)
     mock_loop_helpers.log_progress_eta = MagicMock()
     mock_loop_helpers.validate_experiences.side_effect = lambda exps: (exps, 0)
@@ -312,13 +295,14 @@ def mock_components(
         buffer=mock_buffer,
         trainer=mock_trainer,
         data_manager=mock_data_manager,
-        stats_collector_actor=mock_stats_collector_handle,  # Use the mock handle
+        stats_collector_actor=mock_stats_collector_handle,
         train_config=mock_training_config,
         env_config=mock_env_config,
         model_config=mock_model_config,
         mcts_config=mock_mcts_config,
         persist_config=mock_persistence_config,
-        stats_config=mock_stats_config_fixture,  # Add stats config
+        stats_config=mock_stats_config_fixture,
+        profile_workers=mock_training_config.PROFILE_WORKERS,  # Pass profile flag
     )
 
     return components
@@ -329,7 +313,6 @@ def mock_training_loop(mock_components: TrainingComponents) -> TrainingLoop:
     """Fixture for an initialized TrainingLoop with mocked components."""
     loop = TrainingLoop(mock_components)
     loop.set_initial_state(0, 0, 0)
-    # Submit initial tasks using the mocked manager
     for i in range(loop.train_config.NUM_SELF_PLAY_WORKERS):
         loop.worker_manager.submit_task(i)
     return loop
@@ -350,7 +333,6 @@ def test_worker_weight_update_usage(
     worker_manager = loop.worker_manager
     mock_workers = worker_manager.workers
     stats_collector_mock = components.stats_collector_actor
-    # Add assertion: Ensure mock is not None for MyPy
     assert stats_collector_mock is not None, (
         "Stats collector mock handle should not be None"
     )
@@ -358,14 +340,11 @@ def test_worker_weight_update_usage(
     update_freq = components.train_config.WORKER_UPDATE_FREQ_STEPS
     max_steps = components.train_config.MAX_TRAINING_STEPS or 20
 
-    # Run the loop
     loop.run()
 
-    # --- Assertions after the loop ---
     results_processed = loop.episodes_played
     total_expected_updates = max_steps // update_freq
 
-    # Check if the weight update event was sent the correct number of times
     weight_update_event_calls = [
         c
         for c in stats_collector_mock.log_event.call_args_list
@@ -376,7 +355,6 @@ def test_worker_weight_update_usage(
         f"Weight update event calls: expected {total_expected_updates}, got {len(weight_update_event_calls)}"
     )
 
-    # Verify the global step passed with the event
     for i, update_call in enumerate(weight_update_event_calls):
         expected_step = (i + 1) * update_freq
         event_arg = update_call.args[0]
@@ -385,7 +363,6 @@ def test_worker_weight_update_usage(
 
     assert results_processed > 0, "No self-play results were processed"
 
-    # Check worker state updates (remains the same)
     for worker_idx, worker in enumerate(mock_workers):
         if worker is not None:
             set_step_mock = cast("MagicMock", worker.set_current_trainer_step)
@@ -418,24 +395,17 @@ def test_stats_processing_trigger(
     """Verify that the stats processing is triggered periodically."""
     loop = mock_training_loop
     stats_collector_mock = mock_components.stats_collector_actor
-    # Add assertion: Ensure mock is not None for MyPy
     assert stats_collector_mock is not None, (
         "Stats collector mock handle should not be None"
     )
 
-    # Run the loop for a short duration
-    loop.train_config.MAX_TRAINING_STEPS = 10  # Run fewer steps
+    loop.train_config.MAX_TRAINING_STEPS = 10
     loop.run()
 
-    # Check if process_and_log was called on the stats actor mock
-    # The exact number of calls depends on timing and the processing interval
     assert stats_collector_mock.process_and_log.call_count > 0, (
         "Stats processing was never triggered"
     )
 
-    # Check the argument passed (the global step)
     last_call_args, _ = stats_collector_mock.process_and_log.call_args
     assert isinstance(last_call_args[0], int)
-    assert (
-        last_call_args[0] <= loop.global_step
-    )  # Should be called with current or previous step
+    assert last_call_args[0] <= loop.global_step
