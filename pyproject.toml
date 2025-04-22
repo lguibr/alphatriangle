@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alphatriangle"
-version = "1.4.0" # Incremented version for trimcts tree reuse
+version = "1.5.0" # Incremented version for trimcts tree reuse
 authors = [{ name="Luis Guilherme P. M.", email="lgpelin92@gmail.com" }]
 description = "AlphaZero implementation for a triangle puzzle game (uses trianglengin v2+ and trimcts with tree reuse)." # Updated description
 readme = "README.md"
