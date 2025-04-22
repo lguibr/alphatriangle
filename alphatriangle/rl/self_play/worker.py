@@ -30,7 +30,6 @@ if TYPE_CHECKING:
 
     MctsTreeHandle = Any
 
-# Use logger configured by the root setup
 logger = logging.getLogger(__name__)
 
 
@@ -54,7 +53,7 @@ class SelfPlayWorker:
         initial_weights: dict | None = None,
         seed: int | None = None,
         worker_device_str: str = "cpu",
-        profile_this_worker: bool = False,  # Added flag
+        profile_this_worker: bool = False,
     ):
         self.actor_id = actor_id
         self.env_config = env_config
@@ -65,13 +64,12 @@ class SelfPlayWorker:
         self.run_base_dir = Path(run_base_dir)
         self.seed = seed if seed is not None else random.randint(0, 1_000_000)
         self.worker_device_str = worker_device_str
-        self.profile_this_worker = profile_this_worker  # Store flag
+        self.profile_this_worker = profile_this_worker
 
         self.n_step = self.train_config.N_STEP_RETURNS
         self.gamma = self.train_config.GAMMA
         self.current_trainer_step = 0
 
-        # Rely on root logger configuration set up by the runner
         global logger
         logger = logging.getLogger(__name__)
 
@@ -96,7 +94,6 @@ class SelfPlayWorker:
         )
         logger.debug(f"Worker {self.actor_id} init complete.")
 
-        # Initialize profiler based on the flag
         self.profiler: cProfile.Profile | None = None
         if self.profile_this_worker:
             self.profiler = cProfile.Profile()
@@ -151,6 +148,7 @@ class SelfPlayWorker:
         final_score = 0.0
         final_step = 0
         total_sims_episode = 0
+        total_triangles_cleared_episode = 0
 
         try:
             self.nn_evaluator.model.eval()
@@ -167,16 +165,14 @@ class SelfPlayWorker:
                 logger.error(
                     f"Worker {self.actor_id}: Game over immediately after reset (Seed: {episode_seed}). Reason: {reason}"
                 )
-                self._send_event(
-                    "episode_end",
-                    1.0,
-                    context={
-                        "score": game.game_score(),
-                        "length": 0,
-                        "simulations": 0,
-                        "trainer_step": step_at_start,
-                    },
-                )
+                episode_end_context = {
+                    "score": game.game_score(),
+                    "length": 0,
+                    "simulations": 0,
+                    "triangles_cleared": 0,
+                    "trainer_step": step_at_start,
+                }
+                self._send_event("episode_end", 1.0, context=episode_end_context)
                 return SelfPlayResult(
                     episode_experiences=[],
                     final_score=game.game_score(),
@@ -185,21 +181,20 @@ class SelfPlayWorker:
                     total_simulations=0,
                     avg_root_visits=0.0,
                     avg_tree_depth=0.0,
+                    context=episode_end_context,
                 )
             if not game.valid_actions():
                 logger.error(
                     f"Worker {self.actor_id}: Game not over, but NO valid actions at start (Seed: {episode_seed})."
                 )
-                self._send_event(
-                    "episode_end",
-                    1.0,
-                    context={
-                        "score": game.game_score(),
-                        "length": 0,
-                        "simulations": 0,
-                        "trainer_step": step_at_start,
-                    },
-                )
+                episode_end_context = {
+                    "score": game.game_score(),
+                    "length": 0,
+                    "simulations": 0,
+                    "triangles_cleared": 0,
+                    "trainer_step": step_at_start,
+                }
+                self._send_event("episode_end", 1.0, context=episode_end_context)
                 return SelfPlayResult(
                     episode_experiences=[],
                     final_score=game.game_score(),
@@ -208,6 +203,7 @@ class SelfPlayWorker:
                     total_simulations=0,
                     avg_root_visits=0.0,
                     avg_tree_depth=0.0,
+                    context=episode_end_context,
                 )
 
             n_step_state_policy_buffer: deque[tuple[StateType, PolicyTargetMapping]] = (
@@ -342,10 +338,15 @@ class SelfPlayWorker:
 
                 game_step_start_time = time.monotonic()
                 step_reward, done = 0.0, False
+                cleared_triangles_this_step = 0
                 try:
                     step_reward, done = game.step(action)
+                    # Get cleared triangles count using the new method
+                    # Add type ignore as this method is new in the dependency
+                    cleared_triangles_this_step = game.get_last_cleared_triangles()  # type: ignore [attr-defined]
+                    total_triangles_cleared_episode += cleared_triangles_this_step
                     logger.debug(
-                        f"Worker {self.actor_id}: Step {current_step_in_loop}: game.step({action}) -> Reward: {step_reward:.3f}, Done: {done}"
+                        f"Worker {self.actor_id}: Step {current_step_in_loop}: game.step({action}) -> Reward: {step_reward:.3f}, Done: {done}, Cleared: {cleared_triangles_this_step}"
                     )
                     last_action = action
                 except Exception as step_err:
@@ -366,6 +367,12 @@ class SelfPlayWorker:
                     step_reward,
                     context={"game_step": current_step_in_loop},
                 )
+                if cleared_triangles_this_step > 0:
+                    self._send_event(
+                        "triangles_cleared_step",
+                        cleared_triangles_this_step,
+                        context={"game_step": current_step_in_loop},
+                    )
 
                 if len(n_step_reward_buffer) == self.n_step:
                     discounted_reward_sum = sum(
@@ -419,7 +426,7 @@ class SelfPlayWorker:
             final_score = game.game_score() if game else 0.0
             final_step = game.current_step if game else 0
             logger.info(
-                f"Worker {self.actor_id}: Episode loop finished. Final Score: {final_score:.2f}, Final Step: {final_step}"
+                f"Worker {self.actor_id}: Episode loop finished. Final Score: {final_score:.2f}, Final Step: {final_step}, Total Cleared: {total_triangles_cleared_episode}"
             )
 
             remaining_steps = len(n_step_reward_buffer)
@@ -448,16 +455,14 @@ class SelfPlayWorker:
                     f"Worker {self.actor_id}: Episode finished with 0 experiences collected. Score: {final_score}, Steps: {final_step}"
                 )
 
-            self._send_event(
-                name="episode_end",
-                value=1.0,
-                context={
-                    "score": final_score,
-                    "length": final_step,
-                    "simulations": total_sims_episode,
-                    "trainer_step": step_at_start,
-                },
-            )
+            episode_end_context = {
+                "score": final_score,
+                "length": final_step,
+                "simulations": total_sims_episode,
+                "triangles_cleared": total_triangles_cleared_episode,
+                "trainer_step": step_at_start,
+            }
+            self._send_event(name="episode_end", value=1.0, context=episode_end_context)
 
             result = SelfPlayResult(
                 episode_experiences=episode_experiences,
@@ -467,6 +472,7 @@ class SelfPlayWorker:
                 total_simulations=total_sims_episode,
                 avg_root_visits=float(last_total_visits),
                 avg_tree_depth=0.0,
+                context=episode_end_context,
             )
             logger.info(
                 f"Worker {self.actor_id}: Episode result created. Experiences: {len(result.episode_experiences)}"
@@ -479,16 +485,18 @@ class SelfPlayWorker:
             )
             final_score = game.game_score() if game else 0.0
             final_step = game.current_step if game else 0
+            episode_end_context = {
+                "score": final_score,
+                "length": final_step,
+                "simulations": total_sims_episode,
+                "triangles_cleared": total_triangles_cleared_episode,
+                "trainer_step": step_at_start,
+                "error": True,
+            }
             self._send_event(
                 "episode_end",
                 1.0,
-                context={
-                    "score": final_score,
-                    "length": final_step,
-                    "simulations": total_sims_episode,
-                    "trainer_step": step_at_start,
-                    "error": True,
-                },
+                context=episode_end_context,
             )
             result = SelfPlayResult(
                 episode_experiences=[],
@@ -498,6 +506,7 @@ class SelfPlayWorker:
                 total_simulations=total_sims_episode,
                 avg_root_visits=0.0,
                 avg_tree_depth=0.0,
+                context=episode_end_context,
             )
 
         finally:
@@ -523,16 +532,18 @@ class SelfPlayWorker:
             logger.error(
                 f"Worker {self.actor_id}: run_episode finished without setting a result. Returning empty."
             )
+            episode_end_context = {
+                "score": 0.0,
+                "length": 0,
+                "simulations": 0,
+                "triangles_cleared": 0,
+                "trainer_step": step_at_start,
+                "error": True,
+            }
             self._send_event(
                 "episode_end",
                 1.0,
-                context={
-                    "score": 0.0,
-                    "length": 0,
-                    "simulations": 0,
-                    "trainer_step": step_at_start,
-                    "error": True,
-                },
+                context=episode_end_context,
             )
             result = SelfPlayResult(
                 episode_experiences=[],
@@ -542,6 +553,7 @@ class SelfPlayWorker:
                 total_simulations=0,
                 avg_root_visits=0.0,
                 avg_tree_depth=0.0,
+                context=episode_end_context,
             )
 
         logger.info(

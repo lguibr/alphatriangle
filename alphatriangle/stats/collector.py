@@ -3,14 +3,12 @@ import logging
 import threading
 import time
 from collections import defaultdict, deque
-from typing import TYPE_CHECKING, Any  # Import Optional
+from typing import TYPE_CHECKING, Any
 
 import ray
 from torch.utils.tensorboard import SummaryWriter
 
 from .processor import StatsProcessor
-
-# Update import to use the new filename
 from .stats_types import LogContext, RawMetricEvent
 
 if TYPE_CHECKING:
@@ -18,7 +16,6 @@ if TYPE_CHECKING:
 
     from ..config import StatsConfig
 
-# Initialize logger at the module level
 logger = logging.getLogger(__name__)
 
 
@@ -34,33 +31,31 @@ class StatsCollectorActor:
         stats_config: "StatsConfig",
         run_name: str,
         tb_log_dir: str | None,
+        mlflow_run_id: str | None,
     ):
-        # Move global logger assignment here before any logging calls in __init__
         global logger
-        logger = logging.getLogger(
-            __name__
-        )  # Ensure actor uses the correct logger instance
+        logger = logging.getLogger(__name__)
 
-        self._config = stats_config  # Store internally
-        self._run_name = run_name  # Store internally
-        self._tb_log_dir = tb_log_dir  # Store internally
+        self._config = stats_config
+        self._run_name = run_name
+        self._tb_log_dir = tb_log_dir
+        self._mlflow_run_id = mlflow_run_id
 
-        # Internal state for raw data buffering
-        self._raw_data_buffer: dict[int, dict[str, list[float]]] = defaultdict(
+        # Buffer now stores lists of RawMetricEvent objects
+        self._raw_data_buffer: dict[int, dict[str, list[RawMetricEvent]]] = defaultdict(
             lambda: defaultdict(list)
         )
         self._latest_values: dict[str, tuple[int, float]] = {}
         self._event_timestamps: dict[str, deque[tuple[float, int]]] = defaultdict(
             lambda: deque(maxlen=200)
         )
+        # Initialize to -1, indicating no steps processed yet
         self._last_processed_step = -1
         self._last_processed_time = time.monotonic()
 
-        # Game state tracking
         self._latest_worker_states: dict[int, GameState] = {}
         self._last_state_update_time: dict[int, float] = {}
 
-        # Processor and logging setup
         self.tb_writer: SummaryWriter | None = None
         if self._tb_log_dir:
             try:
@@ -73,16 +68,18 @@ class StatsCollectorActor:
                     f"StatsCollectorActor: Failed to initialize TensorBoard writer: {e}"
                 )
 
-        # Always instantiate the processor internally
-        self.processor = StatsProcessor(self._config, self._run_name, self.tb_writer)
-
-        self._lock = threading.Lock()
-
-        logger.info(
-            f"StatsCollectorActor initialized for run '{self._run_name}'. Processing interval: {self._config.processing_interval_seconds}s"
+        self.processor = StatsProcessor(
+            self._config,
+            self._run_name,
+            self.tb_writer,
+            self._mlflow_run_id,
         )
 
-    # --- Getters for Testability ---
+        self._lock = threading.Lock()
+        logger.info(
+            f"StatsCollectorActor initialized for run '{self._run_name}'. Processing interval: {self._config.processing_interval_seconds}s. MLflow Run ID: {self._mlflow_run_id}"
+        )
+
     def get_config(self) -> "StatsConfig":
         return self._config
 
@@ -92,14 +89,11 @@ class StatsCollectorActor:
     def get_tb_log_dir(self) -> str | None:
         return self._tb_log_dir
 
-    # --- Event Logging ---
     def log_event(self, event: RawMetricEvent):
         """Logs a single raw metric event."""
         if not isinstance(event, RawMetricEvent):
             logger.error(f"Received invalid event type: {type(event)}")
             return
-
-        # Basic validation
         if not isinstance(event.name, str) or not event.name:
             logger.error(f"Invalid event name: {event.name}")
             return
@@ -114,24 +108,22 @@ class StatsCollectorActor:
             logger.error(f"Invalid event context type: {type(event.context)}")
             return
 
-        # Use float for consistency
-        value = float(event.value)
-
         if not event.is_valid():
             logger.warning(
-                f"Received non-finite value for event '{event.name}': {value}. Skipping."
+                f"Received non-finite value for event '{event.name}': {event.value}. Skipping."
             )
             return
 
         with self._lock:
             step_data = self._raw_data_buffer[event.global_step]
-            step_data[event.name].append(value)
-            self._latest_values[event.name] = (event.global_step, value)
-            # Record timestamp for rate calculation events
+            # Store the entire RawMetricEvent object
+            step_data[event.name].append(event)
+            # Still store the latest float value for quick access if needed elsewhere
+            self._latest_values[event.name] = (event.global_step, float(event.value))
             is_rate_numerator = any(
                 mc.rate_numerator_event == event.name
                 for mc in self._config.metrics
-                if mc.aggregation == "rate"  # Use self._config
+                if mc.aggregation == "rate"
             )
             if is_rate_numerator:
                 self._event_timestamps[event.name].append(
@@ -139,44 +131,45 @@ class StatsCollectorActor:
                 )
 
         logger.debug(
-            f"Logged event: {event.name}, Value: {value}, Step: {event.global_step}"
+            f"Logged event: {event.name}, Value: {event.value}, Step: {event.global_step}"
         )
 
     def log_batch_events(self, events: list[RawMetricEvent]):
         """Logs a batch of raw metric events."""
         logger.debug(f"Received batch of {len(events)} events.")
         for event in events:
-            self.log_event(event)  # Delegate to single event logging
+            self.log_event(event)
 
     def _process_and_log_internal(self, current_global_step: int):
         """Internal logic shared by process_and_log and force_process_and_log."""
         now = time.monotonic()
         logger.debug(f"Processing stats up to step {current_global_step}...")
-        processed_data = {}
+        # Prepare data with the correct type for the processor
+        processed_data: dict[int, dict[str, list[RawMetricEvent]]] = {}
         steps_to_process = []
         timestamp_data = {}
         latest_values_copy = {}
+        max_step_processed_in_batch = self._last_processed_step
 
         with self._lock:
-            # Collect steps to process (from last processed up to current)
+            # Process all steps <= current_global_step that haven't been processed
+            # This now includes step 0 if it hasn't been processed.
             steps_to_process = sorted(
-                [
-                    step
-                    for step in self._raw_data_buffer
-                    if step > self._last_processed_step and step <= current_global_step
-                ]
+                [step for step in self._raw_data_buffer if step <= current_global_step]
             )
             if not steps_to_process:
                 logger.debug("No new steps to process.")
-                # Update time even if no steps processed, only if called via regular process_and_log
-                # self._last_processed_time = now # Moved to caller
                 return
 
-            # Prepare data for the processor
+            # Prepare data for the processor (copy the lists of RawMetricEvent)
             for step in steps_to_process:
-                processed_data[step] = dict(self._raw_data_buffer[step])  # Copy data
+                processed_data[step] = {
+                    key: list(event_list)  # Create a copy of the list
+                    for key, event_list in self._raw_data_buffer[step].items()
+                }
+                # Track the maximum step number we are actually processing
+                max_step_processed_in_batch = max(max_step_processed_in_batch, step)
 
-            # Prepare timestamp data for rate calculation
             timestamp_data = {
                 name: list(dq) for name, dq in self._event_timestamps.items()
             }
@@ -185,14 +178,14 @@ class StatsCollectorActor:
         # Process and log outside the lock
         try:
             context = LogContext(
-                latest_step=current_global_step,
+                latest_step=current_global_step,  # Use the loop's current step for context
                 last_log_time=self._last_processed_time,
                 current_time=now,
                 event_timestamps=timestamp_data,
                 latest_values=latest_values_copy,
             )
-            # Ensure processor exists before calling
             if self.processor:
+                # Pass the correctly typed data
                 self.processor.process_and_log(processed_data, context)
                 logger.debug(f"Processing complete for steps {steps_to_process}.")
             else:
@@ -206,8 +199,8 @@ class StatsCollectorActor:
             for step in steps_to_process:
                 if step in self._raw_data_buffer:
                     del self._raw_data_buffer[step]
-            self._last_processed_step = steps_to_process[-1]
-            # self._last_processed_time = now # Moved to caller
+            # Update last processed step to the maximum step handled in this batch
+            self._last_processed_step = max_step_processed_in_batch
 
     def process_and_log(self, current_global_step: int):
         """
@@ -216,15 +209,10 @@ class StatsCollectorActor:
         processing interval.
         """
         now = time.monotonic()
-        # Check time interval condition *before* acquiring the lock
-        if (
-            now - self._last_processed_time < self._config.processing_interval_seconds
-        ):  # Use self._config
-            return  # Avoid processing too frequently
+        if now - self._last_processed_time < self._config.processing_interval_seconds:
+            return
 
         self._process_and_log_internal(current_global_step)
-
-        # Update last processed time only if the time check passed and processing occurred
         with self._lock:
             self._last_processed_time = now
 
@@ -237,11 +225,9 @@ class StatsCollectorActor:
             f"Forcing stats processing up to step {current_global_step} (bypassing time interval)."
         )
         self._process_and_log_internal(current_global_step)
-        # Update last processed time after forced processing
         with self._lock:
             self._last_processed_time = time.monotonic()
 
-    # --- Game State Handling (Remains the same) ---
     def update_worker_game_state(self, worker_id: int, game_state: "GameState"):
         """Stores the latest game state received from a worker."""
         if not isinstance(worker_id, int):
@@ -268,7 +254,6 @@ class StatsCollectorActor:
         )
         return states
 
-    # --- State Management for Checkpointing ---
     def get_state(self) -> dict[str, Any]:
         """Returns the internal state for saving (minimal state needed)."""
         with self._lock:
@@ -286,7 +271,6 @@ class StatsCollectorActor:
             self._last_processed_time = state.get(
                 "last_processed_time", time.monotonic()
             )
-            # Clear transient data on restore
             self._raw_data_buffer.clear()
             self._latest_values = {}
             self._event_timestamps.clear()
@@ -296,7 +280,6 @@ class StatsCollectorActor:
 
     def close_tb_writer(self):
         """Closes the TensorBoard writer if it exists."""
-        # Check if tb_writer exists before accessing
         if hasattr(self, "tb_writer") and self.tb_writer:
             try:
                 self.tb_writer.flush()
@@ -308,7 +291,6 @@ class StatsCollectorActor:
                     f"StatsCollectorActor: Error closing TensorBoard writer: {e}"
                 )
 
-    # --- Test-only method ---
     def _get_internal_state_for_testing(self) -> dict[str, Any]:
         """Returns copies of internal state for testing purposes ONLY."""
         logger.warning(
@@ -322,10 +304,10 @@ class StatsCollectorActor:
                 "event_timestamps": self._event_timestamps.copy(),
                 "last_processed_step": self._last_processed_step,
                 "last_processed_time": self._last_processed_time,
+                "mlflow_run_id": self._mlflow_run_id,
             }
 
     def __del__(self):
         """Ensure TensorBoard writer is closed when actor is destroyed."""
-        # Add check to prevent AttributeError if __init__ failed early
         if hasattr(self, "close_tb_writer"):
             self.close_tb_writer()

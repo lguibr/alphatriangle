@@ -23,7 +23,7 @@ classifiers = [
 ]
 dependencies = [
     # --- Core Dependencies ---
-    "trianglengin>=2.0.6",
+    "trianglengin>=2.0.7",
     "trimcts>=1.2.1",
     # --- RL/ML specific dependencies ---
     "numpy>=1.20.0",
@@ -32,7 +32,7 @@ dependencies = [
     "cloudpickle>=2.0.0",
     "numba>=0.55.0",
     "mlflow>=1.20.0",
-    "ray>=2.8.0",
+    "ray[default]", # Include full Ray for dev testing of dashboard
     "pydantic>=2.0.0",
     "typing_extensions>=4.0.0",
     "typer[all]>=0.9.0",
@@ -100,8 +100,8 @@ omit = [
     "alphatriangle/utils/types.py", # Old types removed
     "alphatriangle/rl/types.py",
     "alphatriangle/stats/stats_types.py", # Updated path for renamed types file
-    "alphatriangle/stats/collector.py", # Keep omitted for now due to Ray complexity
-    "alphatriangle/stats/processor.py", # Keep omitted for now
+    # REMOVED: "alphatriangle/stats/collector.py", # Keep omitted for now due to Ray complexity
+    # REMOVED: "alphatriangle/stats/processor.py", # Keep omitted for now
     "*/__init__.py",
     "*/README.md",
     "run_*.py",

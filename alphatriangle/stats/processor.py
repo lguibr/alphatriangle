@@ -1,14 +1,13 @@
 # File: alphatriangle/stats/processor.py
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING  # Import cast
+from typing import TYPE_CHECKING
 
-import mlflow
 import numpy as np
+from mlflow.tracking import MlflowClient
 from torch.utils.tensorboard import SummaryWriter
 
-# Update import to use the new filename
-from .stats_types import LogContext, MetricConfig
+from .stats_types import LogContext, MetricConfig, RawMetricEvent
 
 if TYPE_CHECKING:
     from ..config import StatsConfig
@@ -19,7 +18,8 @@ logger = logging.getLogger(__name__)
 class StatsProcessor:
     """
     Processes raw metric data collected by the StatsCollectorActor and logs
-    aggregated results according to the StatsConfig.
+    aggregated results according to the StatsConfig. Uses MlflowClient for robustness.
+    Prioritizes correct logging over MLflow UI rendering quirks.
     """
 
     def __init__(
@@ -27,17 +27,31 @@ class StatsProcessor:
         config: "StatsConfig",
         run_name: str,
         tb_writer: SummaryWriter | None,
+        mlflow_run_id: str | None,
     ):
         self.config = config
         self.run_name = run_name
-        self.tb_writer = tb_writer
+        self.mlflow_run_id = mlflow_run_id
         self._metric_configs: dict[str, MetricConfig] = {
             mc.name: mc for mc in config.metrics
         }
-        # State for rate calculation
-        self._last_rate_log_time: dict[str, float] = {}
-        self._last_rate_log_step: dict[str, int] = {}
-        self._last_rate_numerator_count: dict[str, int] = {}
+        # Track last logged time *per metric* for time-based frequency checks
+        self._last_log_time: dict[str, float] = {}
+
+        self.tb_writer = tb_writer
+        self.mlflow_client: MlflowClient | None = None
+
+        if self.mlflow_run_id:
+            try:
+                self.mlflow_client = MlflowClient()
+                logger.info("StatsProcessor: MlflowClient initialized.")
+            except Exception as e:
+                logger.error(f"StatsProcessor: Failed to initialize MlflowClient: {e}")
+                self.mlflow_client = None
+        else:
+            logger.warning(
+                "StatsProcessor: No MLflow run ID provided, MLflow metric logging will be disabled."
+            )
 
         logger.info("StatsProcessor initialized.")
 
@@ -46,41 +60,41 @@ class StatsProcessor:
         if not values:
             return None
         try:
+            finite_values = [v for v in values if np.isfinite(v)]
+            if not finite_values:
+                # Log less verbosely if no finite values
+                # logger.warning(f"No finite values found for aggregation method {method}.")
+                return None
+
             if method == "latest":
-                return values[-1]
+                return finite_values[-1]
             elif method == "mean":
-                # Cast numpy float to standard float
-                return float(np.mean(values))
+                return float(np.mean(finite_values))
             elif method == "sum":
-                # Cast numpy result to standard float/int
-                result = np.sum(values)
-                # Use np.issubdtype to check for integer types
+                result = np.sum(finite_values)
                 return (
                     int(result)
                     if np.issubdtype(result.dtype, np.integer)
                     else float(result)
                 )
             elif method == "min":
-                # Cast numpy result to standard float/int
-                result = np.min(values)
+                result = np.min(finite_values)
                 return (
                     int(result)
                     if np.issubdtype(result.dtype, np.integer)
                     else float(result)
                 )
             elif method == "max":
-                # Cast numpy result to standard float/int
-                result = np.max(values)
+                result = np.max(finite_values)
                 return (
                     int(result)
                     if np.issubdtype(result.dtype, np.integer)
                     else float(result)
                 )
             elif method == "std":
-                # Cast numpy float to standard float
-                return float(np.std(values))
+                return float(np.std(finite_values))
             elif method == "count":
-                return len(values)
+                return len(finite_values)
             else:
                 logger.warning(f"Unsupported aggregation method: {method}")
                 return None
@@ -92,19 +106,16 @@ class StatsProcessor:
         self,
         metric_config: MetricConfig,
         context: LogContext,
-        rate_numerators_in_batch: dict[str, float],  # Pass pre-calculated numerators
+        raw_data_for_interval: dict[int, dict[str, list[RawMetricEvent]]],
     ) -> float | None:
-        """Calculates rate per second for a given metric using pre-calculated numerators."""
+        """Calculates rate per second for a given metric over the interval."""
         if (
             metric_config.aggregation != "rate"
             or not metric_config.rate_numerator_event
         ):
             return None
 
-        event_key: str | None = (
-            metric_config.rate_numerator_event
-        )  # Assign to typed var
-        # Check event_key is not None before using it as dict key
+        event_key: str | None = metric_config.rate_numerator_event
         if event_key is None:
             logger.warning(
                 f"Rate metric '{metric_config.name}' is missing rate_numerator_event."
@@ -112,214 +123,215 @@ class StatsProcessor:
             return None
 
         current_time = context.current_time
-        # Use last_log_time from context as the start of the interval
-        last_log_time = context.last_log_time
+        last_log_time = context.last_log_time  # Use the overall interval time
         time_delta = current_time - last_log_time
 
         if time_delta <= 1e-3:  # Avoid division by zero or tiny intervals
-            return None  # Not enough time passed
+            return None
 
-        # Use the pre-calculated numerator sum/count for this batch
-        numerator_in_batch = rate_numerators_in_batch.get(event_key, 0.0)
-        rate = numerator_in_batch / time_delta
+        # Sum the numerator counts *within this processing interval*
+        numerator_count = 0.0
+        for _step, step_data in raw_data_for_interval.items():
+            if event_key in step_data:
+                event_list = step_data[event_key]
+                values = [float(e.value) for e in event_list if e.is_valid()]
+                if event_key == "mcts_step":  # Sum simulations
+                    numerator_count += sum(values)
+                else:  # Count events for other rates
+                    numerator_count += len(values)
 
-        # No need to update internal state here, as it's based on the processing interval
-
+        rate = numerator_count / time_delta
         return rate
 
     def _should_log(
         self,
         metric_config: MetricConfig,
-        global_step: int,
+        current_step: int,  # The step associated with the *aggregated value*
         context: LogContext,
     ) -> bool:
-        """Determines if a metric should be logged at the current step/time."""
+        """
+        Determines if a metric should be logged based on simple step OR time frequency.
+        """
+        metric_name = metric_config.name
+        # Check step frequency: Log if current step is a multiple of frequency
+        # Handles step 0 correctly if frequency is > 0
         log_by_step = (
             metric_config.log_frequency_steps > 0
-            and global_step % metric_config.log_frequency_steps == 0
+            and current_step % metric_config.log_frequency_steps == 0
         )
+        if log_by_step:
+            return True
 
-        # Check time-based logging using the last log time specific to this metric if available
-        last_metric_log_time = self._last_rate_log_time.get(
-            metric_config.name, 0.0
-        )  # Use rate log time dict
+        # Check time frequency: Log if enough time has passed since *last log for this metric*
+        last_logged_time = self._last_log_time.get(metric_name, 0.0)
+        time_delta = context.current_time - last_logged_time
         log_by_time = (
             metric_config.log_frequency_seconds > 0
-            and (context.current_time - last_metric_log_time)
-            >= metric_config.log_frequency_seconds
+            and time_delta >= metric_config.log_frequency_seconds
         )
-
-        # Special case for rates: only log if time frequency is met
-        if metric_config.aggregation == "rate":
-            # Rates are calculated over the interval, so log if the interval is met
-            return log_by_time
-
-        # For non-rate metrics, log if *either* step or time frequency is met
-        return log_by_step or log_by_time
+        return bool(log_by_time)
 
     def _log_to_targets(
         self,
         metric_config: MetricConfig,
         value: float | int,
         log_step: int,
+        log_time: float,
     ):
-        """Logs the processed value to configured targets."""
+        """Logs the processed value to configured targets and updates tracking."""
         if not np.isfinite(value):
             logger.warning(
                 f"Attempted to log non-finite value for {metric_config.name}: {value}. Skipping."
             )
             return
 
-        log_value = float(value)  # Ensure float for logging consistency
+        log_value = float(value)
+        metric_name = metric_config.name
 
-        if "mlflow" in metric_config.log_to:
+        if (
+            "mlflow" in metric_config.log_to
+            and self.mlflow_client
+            and self.mlflow_run_id
+        ):
             try:
-                mlflow.log_metric(metric_config.name, log_value, step=log_step)
+                # Add debug log here
+                logger.debug(
+                    f"Logging to MLflow: key='{metric_name}', value={log_value:.4f}, step={log_step}, timestamp={int(log_time * 1000)}"
+                )
+                self.mlflow_client.log_metric(
+                    run_id=self.mlflow_run_id,
+                    key=metric_name,
+                    value=log_value,
+                    step=log_step,
+                    timestamp=int(log_time * 1000),
+                )
             except Exception as e:
-                logger.error(f"Failed to log {metric_config.name} to MLflow: {e}")
+                logger.error(f"Failed to log {metric_name} to MLflow using client: {e}")
+        elif "mlflow" in metric_config.log_to:
+            logger.warning(
+                f"MLflow logging requested for {metric_name} but client/run_id is unavailable."
+            )
 
         if "tensorboard" in metric_config.log_to and self.tb_writer:
             try:
-                self.tb_writer.add_scalar(metric_config.name, log_value, log_step)
+                self.tb_writer.add_scalar(metric_name, log_value, log_step)
             except Exception as e:
-                logger.error(f"Failed to log {metric_config.name} to TensorBoard: {e}")
+                logger.error(f"Failed to log {metric_name} to TensorBoard: {e}")
 
         if "console" in metric_config.log_to:
-            # Basic console logging, could be enhanced
-            logger.info(f"STATS [{log_step}]: {metric_config.name} = {log_value:.4f}")
+            logger.info(f"STATS [{log_step}]: {metric_name} = {log_value:.4f}")
+
+        # Update last logged time for this metric (used for time frequency check)
+        self._last_log_time[metric_name] = log_time
 
     def _process_and_log_internal(
         self,
-        raw_data: dict[int, dict[str, list[float]]],
+        raw_data: dict[int, dict[str, list[RawMetricEvent]]],
         context: LogContext,
     ):
         """Internal logic for processing and logging, shared by public methods."""
         if not raw_data:
             return
 
-        aggregated_values_for_logging: dict[str, list[tuple[int, float | int]]] = (
-            defaultdict(list)
-        )
+        # --- Step 1: Aggregate non-rate metrics per step ---
+        aggregated_step_values: dict[str, dict[int, float | int]] = defaultdict(dict)
 
-        # Calculate total counts/sums for rate numerators across the processed steps *before* aggregation loop
-        rate_numerators_in_batch: dict[str, float] = defaultdict(float)
-        # Rename unused loop variable step to _step (Ruff B007 fix)
-        for _step, step_data in raw_data.items():
-            for metric_config_inner_loop in self.config.metrics:  # Use different name
-                if (
-                    metric_config_inner_loop.aggregation == "rate"
-                    and metric_config_inner_loop.rate_numerator_event
-                ):
-                    event_key: str | None = (
-                        metric_config_inner_loop.rate_numerator_event
-                    )  # Assign to typed var
-                    # Add check: event_key should not be None here due to validator
-                    if event_key and event_key in step_data:
-                        if event_key == "mcts_step":  # Sum values for simulations
-                            rate_numerators_in_batch[event_key] += sum(
-                                step_data[event_key]
-                            )
-                        else:  # Count events otherwise
-                            rate_numerators_in_batch[event_key] += len(
-                                step_data[event_key]
-                            )
+        for step, step_event_dict in sorted(raw_data.items()):
+            for metric_config in self.config.metrics:
+                # Skip rate metrics in this aggregation phase
+                if metric_config.aggregation == "rate":
+                    continue
 
-        # --- First loop: Aggregate step-based metrics ---
-        for step, step_data in sorted(raw_data.items()):
-            for metric_config in self.config.metrics:  # Outer loop variable
                 event_key = metric_config.event_key
-                if event_key in step_data:
-                    raw_values = step_data[event_key]
-                    # Handle episode score/length extraction from context if needed
-                    # This part needs refinement based on how context is passed in episode_end event
-                    if (
-                        event_key == "episode_end"
-                        and metric_config.name == "Episode/Final_Score"
-                    ):
-                        # Example: Assuming score is the *first* value if multiple episodes end at same step
-                        # This needs a better way, maybe log score as separate event or process context
-                        agg_value = self._aggregate_values(
-                            [raw_values[0]], "latest"
-                        )  # Placeholder
-                    elif (
-                        event_key == "episode_end"
-                        and metric_config.name == "Episode/Length"
-                    ):
-                        agg_value = self._aggregate_values(
-                            [raw_values[0]], "latest"
-                        )  # Placeholder
-                    elif (
-                        metric_config.aggregation != "rate"
-                    ):  # Rates handled separately below
-                        agg_value = self._aggregate_values(
-                            raw_values, metric_config.aggregation
-                        )
+                if event_key in step_event_dict:
+                    event_list = step_event_dict[event_key]
+                    values_to_aggregate: list[float] = []
+
+                    # Extract values
+                    if metric_config.context_key:
+                        for event in event_list:
+                            if metric_config.context_key in event.context:
+                                try:
+                                    val = float(
+                                        event.context[metric_config.context_key]
+                                    )
+                                    if np.isfinite(val):
+                                        values_to_aggregate.append(val)
+                                except (ValueError, TypeError):
+                                    pass
                     else:
-                        agg_value = None  # Skip aggregation for rates here
+                        values_to_aggregate = [
+                            float(e.value) for e in event_list if e.is_valid()
+                        ]
 
-                    if agg_value is not None:
-                        aggregated_values_for_logging[metric_config.name].append(
-                            (step, agg_value)
+                    # Aggregate if values exist
+                    if values_to_aggregate:
+                        agg_value = self._aggregate_values(
+                            values_to_aggregate, metric_config.aggregation
                         )
+                        if agg_value is not None:
+                            aggregated_step_values[metric_config.name][step] = agg_value
 
-        # Log aggregated step-based metrics
-        for metric_name, step_value_list in aggregated_values_for_logging.items():
-            # Add check for metric_config existence (MyPy fix)
-            metric_config_maybe: MetricConfig | None = self._metric_configs.get(
-                metric_name
-            )
-            if not metric_config_maybe:
+        # --- Step 2: Log aggregated non-rate metrics based on frequency ---
+        for metric_name, step_values in aggregated_step_values.items():
+            if not step_values:  # Skip if no values were aggregated for this metric
+                continue
+
+            maybe_metric_config = self._metric_configs.get(metric_name)
+            # Get the config *once* per metric name
+            if maybe_metric_config is None:
                 logger.warning(
                     f"Metric config not found for '{metric_name}' during logging."
                 )
                 continue
-            # Use a different name for the variable holding the specific config for this metric
-            current_metric_config: MetricConfig = (
-                metric_config_maybe  # Assign to non-optional type
-            )
 
-            # Log each step's aggregated value if frequency matches
-            for step, agg_value in step_value_list:
-                # Use _should_log which checks step frequency for non-rate metrics
-                if self._should_log(current_metric_config, step, context):
-                    log_step = step  # Use the actual step the data corresponds to
-                    self._log_to_targets(current_metric_config, agg_value, log_step)
-                    # Update last log time for time-based frequency check ONLY if logged by time
-                    if (
-                        current_metric_config.log_frequency_seconds > 0
-                        and (
-                            context.current_time
-                            - self._last_rate_log_time.get(
-                                current_metric_config.name, 0.0
-                            )
-                        )
-                        >= current_metric_config.log_frequency_seconds
-                    ):
-                        self._last_rate_log_time[current_metric_config.name] = (
-                            context.current_time
-                        )
+            metric_config = maybe_metric_config
+            # Check if metric_config is None before proceeding
 
-        # --- Second loop: Calculate and log rate metrics ---
-        # Use a different loop variable name here to fix MyPy error
-        for rate_metric_config in self.config.metrics:
-            # Use _should_log which checks time frequency for rate metrics
-            if self._should_log(rate_metric_config, context.latest_step, context):
-                rate_value = self._calculate_rate(
-                    rate_metric_config, context, rate_numerators_in_batch
+            # Log the value associated with the *latest step* in the batch if conditions met
+            latest_step_in_batch = max(step_values.keys())
+            latest_value = step_values[latest_step_in_batch]
+
+            # Check frequency *after* confirming config exists
+            # Now metric_config is guaranteed to be MetricConfig here
+            if self._should_log(metric_config, latest_step_in_batch, context):
+                self._log_to_targets(
+                    metric_config,
+                    latest_value,
+                    latest_step_in_batch,
+                    context.current_time,
                 )
-                if rate_value is not None:
-                    # Log rate against the latest global step
-                    self._log_to_targets(
-                        rate_metric_config, rate_value, context.latest_step
+
+        # --- Step 3: Calculate and log rate metrics ---
+        for rate_metric_config in self.config.metrics:
+            if rate_metric_config.aggregation == "rate":
+                # Use the overall context step for logging rates
+                log_step = context.latest_step
+                # Check only time frequency for rate logging
+                last_rate_log_time = self._last_log_time.get(
+                    rate_metric_config.name, 0.0
+                )
+                should_log_rate_time = (
+                    rate_metric_config.log_frequency_seconds > 0
+                    and context.current_time - last_rate_log_time
+                    >= rate_metric_config.log_frequency_seconds
+                )
+
+                if should_log_rate_time:
+                    rate_value = self._calculate_rate(
+                        rate_metric_config, context, raw_data
                     )
-                    # Update last log time for this metric
-                    self._last_rate_log_time[rate_metric_config.name] = (
-                        context.current_time
-                    )
+                    if rate_value is not None:
+                        self._log_to_targets(
+                            rate_metric_config,
+                            rate_value,
+                            log_step,
+                            context.current_time,
+                        )
 
     def process_and_log(
         self,
-        raw_data: dict[int, dict[str, list[float]]],
+        raw_data: dict[int, dict[str, list[RawMetricEvent]]],
         context: LogContext,
     ):
         """

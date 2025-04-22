@@ -1,4 +1,4 @@
-# File: alphatriangle/training/README.md
+
 
 # Training Module (`alphatriangle.training`)
 
@@ -14,7 +14,8 @@ This module encapsulates the logic for setting up, running, and managing the **h
     -   Adding experiences to the `ExperienceBuffer`.
     -   Triggering training steps on the `Trainer`.
     -   Updating worker network weights periodically, passing the current `global_step` to the workers.
-    -   **Sending raw metric events (`RawMetricEvent`) to the `StatsCollectorActor` for various occurrences (e.g., training step losses, episode completion, buffer size changes, weight updates).**
+    -   **Sending raw metric events (`RawMetricEvent`) to the `StatsCollectorActor` for various occurrences (e.g., training step losses, buffer size changes, total weight updates).**
+    -   **Processing results from workers and sending `episode_end` events with context (score, length, triangles cleared) to the `StatsCollectorActor`.**
     -   **Periodically triggering the `StatsCollectorActor` to process and log the collected raw metrics based on the `StatsConfig`.**
     -   Logging simple progress strings to the console.
     -   Handling stop requests.

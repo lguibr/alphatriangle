@@ -55,10 +55,15 @@ class MetricConfig(BaseModel):
         default=None,
         description="Raw event name for the numerator in rate calculation (e.g., 'step_completed')",
     )
+    # Optional: For metrics derived from context dicts (like episode_end)
+    context_key: str | None = Field(
+        default=None,
+        description="Key within the RawMetricEvent context dictionary to extract the value from.",
+    )
 
     @field_validator("log_frequency_steps", "log_frequency_seconds")
     @classmethod
-    def check_log_frequency(cls, v):  # Removed info argument
+    def check_log_frequency(cls, v):
         """Ensure at least one frequency is set if logging is enabled."""
         # This validation is tricky as it depends on other fields.
         # We'll rely on the processor logic to handle cases where both are 0.
@@ -68,13 +73,25 @@ class MetricConfig(BaseModel):
     @classmethod
     def check_rate_config(cls, v, info):
         """Ensure numerator is specified if aggregation is 'rate'."""
-        # info.data might not be available in Pydantic v2 validators
-        # Access values via info.values if needed, but direct access is preferred
         if info.data.get("aggregation") == "rate" and v is None:
             metric_name = info.data.get("name", "Unknown Metric")
             raise ValueError(
                 f"Metric '{metric_name}' has aggregation 'rate' but 'rate_numerator_event' is not set."
             )
+        return v
+
+    @field_validator("context_key")
+    @classmethod
+    def check_context_key_config(cls, v, info):
+        """Ensure context_key is set only when appropriate (e.g., for episode_end derived metrics)."""
+        raw_event = info.data.get("raw_event_name")
+        if v is not None and raw_event is None:
+            metric_name = info.data.get("name", "Unknown Metric")
+            logger.warning(
+                f"Metric '{metric_name}' has 'context_key' set ('{v}') but no 'raw_event_name'. "
+                "This might not work as expected unless the event name itself is used as context source."
+            )
+        # Add more specific checks if needed, e.g., ensure context_key is set for specific raw_event_names
         return v
 
     @property
@@ -89,7 +106,7 @@ class StatsConfig(BaseModel):
 
     # Interval (in seconds) for the StatsProcessor to process collected data
     processing_interval_seconds: float = Field(
-        default=2.0,
+        default=1.0,
         description="How often the StatsProcessor aggregates and logs metrics.",
         gt=0,
     )
@@ -97,12 +114,13 @@ class StatsConfig(BaseModel):
     # Default metrics - can be overridden or extended
     metrics: list[MetricConfig] = Field(
         default_factory=lambda: [
-            # --- Trainer Metrics ---
+            # --- Trainer Metrics (Log based on steps) ---
             MetricConfig(
                 name="Loss/Total",
                 source="trainer",
                 aggregation="mean",
-                log_frequency_steps=10,
+                log_frequency_steps=10,  # Log every 10 training steps
+                log_frequency_seconds=0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
@@ -110,6 +128,7 @@ class StatsConfig(BaseModel):
                 source="trainer",
                 aggregation="mean",
                 log_frequency_steps=10,
+                log_frequency_seconds=0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
@@ -117,6 +136,7 @@ class StatsConfig(BaseModel):
                 source="trainer",
                 aggregation="mean",
                 log_frequency_steps=10,
+                log_frequency_seconds=0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
@@ -124,13 +144,15 @@ class StatsConfig(BaseModel):
                 source="trainer",
                 aggregation="mean",
                 log_frequency_steps=10,
+                log_frequency_seconds=0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
-                name="Loss/Mean_TD_Error",
+                name="Loss/Mean_Abs_TD_Error",
                 source="trainer",
                 aggregation="mean",
                 log_frequency_steps=10,
+                log_frequency_seconds=0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
@@ -138,120 +160,143 @@ class StatsConfig(BaseModel):
                 source="trainer",
                 aggregation="latest",
                 log_frequency_steps=10,
+                log_frequency_seconds=0,
                 log_to=["mlflow", "tensorboard"],
             ),
-            # --- Worker Metrics (Aggregated) ---
+            # --- Worker Metrics (Log based on time) ---
             MetricConfig(
                 name="Episode/Final_Score",
                 source="worker",
-                raw_event_name="episode_end",  # Use context['score']
+                raw_event_name="episode_end",
+                context_key="score",
                 aggregation="mean",
-                log_frequency_steps=1,  # Log every step where an episode ended
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=5.0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
                 name="Episode/Length",
                 source="worker",
-                raw_event_name="episode_end",  # Use context['length']
+                raw_event_name="episode_end",
+                context_key="length",
                 aggregation="mean",
-                log_frequency_steps=1,
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=5.0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
-                name="MCTS/Avg_Simulations",
+                name="Episode/Triangles_Cleared_Total",
                 source="worker",
-                raw_event_name="mcts_step",  # Use value from mcts_step event
+                raw_event_name="episode_end",
+                context_key="triangles_cleared",
                 aggregation="mean",
-                log_frequency_steps=50,
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=5.0,
+                log_to=["mlflow", "tensorboard"],
+            ),
+            MetricConfig(
+                name="MCTS/Avg_Simulations_Per_Step",
+                source="worker",
+                raw_event_name="mcts_step",
+                aggregation="mean",
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=10.0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
                 name="RL/Step_Reward_Mean",
                 source="worker",
-                raw_event_name="step_reward",  # Use value from step_reward event
+                raw_event_name="step_reward",
                 aggregation="mean",
-                log_frequency_steps=50,
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=10.0,
                 log_to=["mlflow", "tensorboard"],
             ),
-            # --- Loop/System Metrics ---
+            # --- Loop/System Metrics (Log based on time) ---
             MetricConfig(
                 name="Buffer/Size",
                 source="loop",
                 aggregation="latest",
-                log_frequency_steps=10,
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=5.0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
                 name="Progress/Total_Simulations",
                 source="loop",
                 aggregation="latest",
-                log_frequency_steps=10,
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=5.0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
                 name="Progress/Episodes_Played",
                 source="loop",
                 aggregation="latest",
-                log_frequency_steps=10,
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=5.0,
+                log_to=["mlflow", "tensorboard"],
+            ),
+            MetricConfig(
+                name="Progress/Weight_Updates_Total",
+                source="loop",
+                aggregation="latest",
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=5.0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
                 name="System/Num_Active_Workers",
                 source="loop",
                 aggregation="latest",
-                log_frequency_steps=50,
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=10.0,
                 log_to=["mlflow", "tensorboard"],
             ),
             MetricConfig(
                 name="System/Num_Pending_Tasks",
                 source="loop",
                 aggregation="latest",
-                log_frequency_steps=50,
+                log_frequency_steps=0,  # Log based on time
+                log_frequency_seconds=10.0,
                 log_to=["mlflow", "tensorboard"],
             ),
-            # --- Rate Metrics ---
+            # --- Rate Metrics (Log based on time) ---
             MetricConfig(
                 name="Rate/Steps_Per_Sec",
                 source="loop",
                 aggregation="rate",
-                rate_numerator_event="step_completed",  # Assumes loop logs this event
+                rate_numerator_event="step_completed",
                 log_frequency_seconds=5.0,
-                log_frequency_steps=0,  # Primarily time-based
+                log_frequency_steps=0,
                 log_to=["mlflow", "tensorboard", "console"],
             ),
             MetricConfig(
                 name="Rate/Episodes_Per_Sec",
                 source="worker",
                 aggregation="rate",
-                rate_numerator_event="episode_end",  # Count episode_end events
+                rate_numerator_event="episode_end",
                 log_frequency_seconds=5.0,
                 log_frequency_steps=0,
                 log_to=["mlflow", "tensorboard", "console"],
             ),
             MetricConfig(
                 name="Rate/Simulations_Per_Sec",
-                source="worker",  # Sims happen in worker MCTS steps
+                source="worker",
                 aggregation="rate",
-                rate_numerator_event="mcts_step",  # Sum the 'value' of mcts_step events
+                rate_numerator_event="mcts_step",
                 log_frequency_seconds=5.0,
                 log_frequency_steps=0,
                 log_to=["mlflow", "tensorboard", "console"],
             ),
-            # --- PER Beta ---
+            # --- PER Beta (Log based on steps, as it changes with training step) ---
             MetricConfig(
                 name="PER/Beta",
-                source="buffer",  # Or loop, depending on where it's calculated
+                source="buffer",
                 aggregation="latest",
                 log_frequency_steps=10,
+                log_frequency_seconds=0,
                 log_to=["mlflow", "tensorboard"],
-            ),
-            # --- Event Markers ---
-            MetricConfig(
-                name="Event/Weight_Update",  # Matches old key for compatibility
-                source="loop",
-                aggregation="count",  # Count occurrences per interval
-                log_frequency_steps=10,  # Log counts every 10 steps
-                log_to=["mlflow", "tensorboard"],  # Log count, not just marker
             ),
         ]
     )

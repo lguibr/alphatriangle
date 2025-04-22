@@ -1,4 +1,5 @@
 
+
 # Reinforcement Learning Module (`alphatriangle.rl`)
 
 ## Purpose and Architecture
@@ -6,12 +7,12 @@
 This module contains core components related to the reinforcement learning algorithm itself, specifically the `Trainer` for network updates, the `ExperienceBuffer` for storing data, and the `SelfPlayWorker` actor for generating data using the `trimcts` library. **The overall orchestration of the training process resides in the [`alphatriangle.training`](../training/README.md) module.**
 
 -   **Core Components ([`core/README.md`](core/README.md)):**
-    -   `Trainer`: Responsible for performing the neural network update steps. It takes batches of experience from the buffer, calculates losses (policy cross-entropy, **distributional value cross-entropy**, optional entropy bonus), applies importance sampling weights if using PER, updates the network weights, and calculates TD errors for PER priority updates. **It now returns raw loss components and TD errors, sending loss metrics as `RawMetricEvent`s to the `StatsCollectorActor`.** Uses `trianglengin.EnvConfig`.
-    -   `ExperienceBuffer`: A replay buffer storing `Experience` tuples (`(StateType, policy_target, n_step_return)`). The `StateType` contains processed numerical features (`grid`, `other_features`) and the geometry of available shapes (`available_shapes_geometry`). Supports both uniform sampling and Prioritized Experience Replay (PER).
+    -   `Trainer`: Responsible for performing the neural network update steps. It takes batches of experience from the buffer, calculates losses (policy cross-entropy, **distributional value cross-entropy**, optional entropy bonus), applies importance sampling weights if using PER, updates the network weights, and calculates TD errors for PER priority updates. **It now returns raw loss components (e.g., `total_loss`, `policy_loss`, `value_loss`, `entropy`, `mean_td_error`) and TD errors. Sending loss metrics as `RawMetricEvent`s is handled by the `TrainingLoop`.** Uses `trianglengin.EnvConfig`.
+    -   `ExperienceBuffer`: A replay buffer storing `Experience` tuples (`(StateType, policy_target, n_step_return)`). The `StateType` contains processed numerical features (`grid`, `other_features`). Supports both uniform sampling and Prioritized Experience Replay (PER).
 -   **Self-Play Components ([`self_play/README.md`](self_play/README.md)):**
-    -   `worker`: Defines the `SelfPlayWorker` Ray actor. Each actor runs game episodes independently using `trimcts.run_mcts` and its local copy of the neural network (`NeuralNetwork` which conforms to `trimcts.AlphaZeroNetworkInterface`). It collects experiences (including calculated n-step returns) and returns results via a `SelfPlayResult` object. **It sends raw metric events (like step rewards, MCTS simulations, episode completion details) asynchronously to the `StatsCollectorActor`, tagged with the `current_trainer_step` (global step of its network weights).** Uses `trianglengin.GameState` and `trianglengin.EnvConfig`.
+    -   `worker`: Defines the `SelfPlayWorker` Ray actor. Each actor runs game episodes independently using `trimcts.run_mcts` and its local copy of the neural network (`NeuralNetwork` which conforms to `trimcts.AlphaZeroNetworkInterface`). It collects experiences (including calculated n-step returns) and returns results via a `SelfPlayResult` object. **It sends raw metric events (like step rewards, MCTS simulations, episode completion details including triangles cleared) asynchronously to the `StatsCollectorActor`, tagged with the `current_trainer_step` (global step of its network weights).** Uses `trianglengin.GameState` and `trianglengin.EnvConfig`.
 -   **Types ([`types.py`](types.py)):**
-    -   Defines Pydantic models like `SelfPlayResult` for structured data transfer between Ray actors and the training loop.
+    -   Defines Pydantic models like `SelfPlayResult` for structured data transfer between Ray actors and the training loop. **`SelfPlayResult` now includes a `context` field to pass structured data like `triangles_cleared`.**
 
 ## Exposed Interfaces
 

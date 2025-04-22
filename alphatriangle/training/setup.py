@@ -28,38 +28,95 @@ def setup_training_components(
     persist_config_override: "PersistenceConfig",
     tb_log_dir: str | None = None,
     profile: bool = False,  # Added profile flag
+    mlflow_run_id: str | None = None,  # Added mlflow_run_id
 ) -> tuple[TrainingComponents | None, bool]:
     """
     Initializes Ray (if not already initialized), detects cores, updates config,
     and returns the TrainingComponents bundle and a flag indicating if Ray was initialized here.
-    Adjusts worker count based on detected cores.
+    Adjusts worker count based on detected cores. Logs expected Ray Dashboard URL.
+    Handles minimal Ray installations gracefully regarding the dashboard.
     """
     ray_initialized_here = False
     detected_cpu_cores: int | None = None
+    dashboard_started_successfully = False  # Flag to track if dashboard init succeeded
 
     try:
         # --- Ray Initialization ---
         if not ray.is_initialized():
             try:
-                # Reduce Ray's verbosity during init
-                ray.init(logging_level=logging.WARNING, log_to_driver=False)
+                # Attempt to initialize with the dashboard first
+                logger.info("Attempting to initialize Ray with dashboard...")
+                ray.init(
+                    logging_level=logging.WARNING,
+                    log_to_driver=False,
+                    include_dashboard=True,
+                )
                 ray_initialized_here = True
-                logger.info("Ray initialized by setup_training_components.")
-            except Exception as e:
-                logger.critical(f"Failed to initialize Ray: {e}", exc_info=True)
-                raise RuntimeError("Ray initialization failed") from e
-        else:
+                dashboard_started_successfully = True  # Assume success if no exception
+                logger.info(
+                    "Ray initialized by setup_training_components WITH dashboard attempt."
+                )
+            except Exception as e_dash:
+                # Check if the error is specifically about missing dashboard packages
+                if "Cannot include dashboard with missing packages" in str(e_dash):
+                    logger.warning(
+                        "Ray dashboard dependencies missing. Retrying Ray initialization without dashboard. "
+                        "Install 'ray[default]' for dashboard support."
+                    )
+                    try:
+                        ray.init(
+                            logging_level=logging.WARNING,
+                            log_to_driver=False,
+                            include_dashboard=False,  # Retry without dashboard
+                        )
+                        ray_initialized_here = True
+                        dashboard_started_successfully = (
+                            False  # Dashboard definitely not started
+                        )
+                        logger.info(
+                            "Ray initialized by setup_training_components WITHOUT dashboard."
+                        )
+                    except Exception as e_no_dash:
+                        logger.critical(
+                            f"Failed to initialize Ray even without dashboard: {e_no_dash}",
+                            exc_info=True,
+                        )
+                        raise RuntimeError("Ray initialization failed") from e_no_dash
+                else:
+                    # Different error during initialization
+                    logger.critical(
+                        f"Failed to initialize Ray (with dashboard attempt): {e_dash}",
+                        exc_info=True,
+                    )
+                    raise RuntimeError("Ray initialization failed") from e_dash
+
+            # Log dashboard status based on initialization success/failure
+            if dashboard_started_successfully:
+                logger.info(
+                    "Ray Dashboard *should* be running. Check Ray startup logs (console/log file) for the exact URL (usually http://127.0.0.1:8265)."
+                )
+            elif ray_initialized_here:  # Initialized without dashboard
+                logger.info(
+                    "Ray Dashboard is NOT running (missing dependencies). Install 'ray[default]' to enable it."
+                )
+
+        else:  # Ray already initialized
             logger.info("Ray already initialized.")
+            # Cannot reliably check dashboard status of existing session without potentially unstable APIs
+            logger.info(
+                "Ray Dashboard status in existing session unknown. Check Ray logs or http://127.0.0.1:8265."
+            )
             ray_initialized_here = False
 
         # --- Resource Detection ---
         try:
             resources = ray.cluster_resources()
-            detected_cpu_cores = max(
-                0, int(resources.get("CPU", 0)) - 2
-            )  # Reserve 2 cores
+            # Reserve 1 core for the main process + 1 for overhead/OS
+            cores_to_reserve = 2
+            available_cores = int(resources.get("CPU", 0))
+            detected_cpu_cores = max(0, available_cores - cores_to_reserve)
             logger.info(
-                f"Ray detected {detected_cpu_cores} available CPU cores for workers."
+                f"Ray detected {available_cores} total CPU cores. Reserving {cores_to_reserve}. Available for workers: {detected_cpu_cores}."
             )
         except Exception as e:
             logger.error(f"Could not get Ray cluster resources: {e}")
@@ -82,6 +139,11 @@ def setup_training_components(
                 logger.info(
                     f"Adjusting requested workers ({requested_workers}) to available cores ({detected_cpu_cores}). Using {actual_workers} workers."
                 )
+        elif detected_cpu_cores == 0:
+            logger.warning(
+                "Detected 0 available CPU cores after reservation. Setting worker count to 1."
+            )
+            actual_workers = 1
         else:
             logger.warning(
                 f"Could not detect valid CPU cores ({detected_cpu_cores}). Using configured NUM_SELF_PLAY_WORKERS: {requested_workers}"
@@ -116,6 +178,7 @@ def setup_training_components(
             stats_config=stats_config,
             run_name=train_config.RUN_NAME,
             tb_log_dir=tb_log_dir,
+            mlflow_run_id=mlflow_run_id,  # Pass run_id
         )
         logger.info("Initialized StatsCollectorActor.")
 

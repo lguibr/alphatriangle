@@ -1,17 +1,18 @@
+# File: tests/training/test_loop_integration.py
 import logging
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
-from unittest.mock import MagicMock  # Import call
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
 # Import necessary classes for patching targets
-from alphatriangle.config import StatsConfig, TrainConfig  # Import StatsConfig
+from alphatriangle.config import StatsConfig, TrainConfig
 from alphatriangle.data import DataManager, PathManager
 from alphatriangle.rl import ExperienceBuffer, SelfPlayResult, Trainer
-from alphatriangle.stats.stats_types import RawMetricEvent  # Import RawMetricEvent
+from alphatriangle.stats.stats_types import RawMetricEvent
 from alphatriangle.training import TrainingComponents, TrainingLoop
 from alphatriangle.training.loop_helpers import LoopHelpers
 from alphatriangle.training.worker_manager import WorkerManager
@@ -19,23 +20,17 @@ from alphatriangle.training.worker_manager import WorkerManager
 if TYPE_CHECKING:
     from alphatriangle.utils.types import Experience, PERBatchSample
 
-    # Define ActorHandle type alias if ray provides one, otherwise use Any
-    try:
-        from ray.actor import ActorHandle
-    except ImportError:
-        ActorHandle = Any  # type: ignore
+    # Removed ActorHandle definition here
 
-# Define logger for the test file
+
 logger = logging.getLogger(__name__)
+
 
 # --- Fixtures ---
 
 
-# Mock Worker class (remains mostly the same, but logging changes)
 class MockSelfPlayWorker:
-    def __init__(
-        self, actor_id: int, stats_collector_mock: MagicMock | None
-    ):  # Allow None for typing
+    def __init__(self, actor_id: int, stats_collector_mock: MagicMock | None):
         self.actor_id = actor_id
         self.stats_collector_mock = stats_collector_mock
         self.weights_set_count = 0
@@ -43,19 +38,17 @@ class MockSelfPlayWorker:
         self.step_set_count = 0
         self.current_trainer_step = 0
         self.task_running = False
-        # Mock the remote methods directly on the instance
         self.set_weights = MagicMock(side_effect=self._set_weights_impl)
         self.set_current_trainer_step = MagicMock(
             side_effect=self._set_current_trainer_step_impl
         )
         self.run_episode = MagicMock(side_effect=self._run_episode_impl)
 
-        # Mock the .remote attribute to return the mocked methods
         self.set_weights.remote = self.set_weights
         self.set_current_trainer_step.remote = self.set_current_trainer_step
         self.run_episode.remote = self.run_episode
 
-    def _run_episode_impl(self):
+    def _run_episode_impl(self) -> SelfPlayResult:
         self.task_running = True
         step_at_start = self.current_trainer_step
         time.sleep(0.01)
@@ -64,7 +57,13 @@ class MockSelfPlayWorker:
             {0: 1.0},
             0.5,
         )
-        # Simulate sending events from worker (check if mock exists)
+        episode_context = {
+            "score": 1.0,
+            "length": 1,
+            "simulations": 10,
+            "triangles_cleared": 0,
+            "trainer_step": step_at_start,
+        }
         if self.stats_collector_mock:
             self.stats_collector_mock.log_event.remote(
                 RawMetricEvent(
@@ -90,18 +89,12 @@ class MockSelfPlayWorker:
                     context={"game_step": 0},
                 )
             )
-            # Simulate episode end event
             self.stats_collector_mock.log_event.remote(
                 RawMetricEvent(
                     name="episode_end",
                     value=1.0,
                     global_step=step_at_start,
-                    context={
-                        "score": 1.0,
-                        "length": 1,
-                        "simulations": 10,
-                        "trainer_step": step_at_start,
-                    },
+                    context=episode_context,
                 )
             )
 
@@ -113,16 +106,17 @@ class MockSelfPlayWorker:
             total_simulations=10,
             avg_root_visits=10.0,
             avg_tree_depth=1.0,
+            context=episode_context,
         )
         self.task_running = False
         return result
 
-    def _set_weights_impl(self, weights: dict):
+    def _set_weights_impl(self, weights: dict) -> None:
         self.weights_set_count += 1
         self.last_weights_received = weights
         time.sleep(0.001)
 
-    def _set_current_trainer_step_impl(self, global_step: int):
+    def _set_current_trainer_step_impl(self, global_step: int) -> None:
         self.step_set_count += 1
         self.current_trainer_step = global_step
         time.sleep(0.001)
@@ -139,14 +133,13 @@ def mock_training_config(mock_train_config: TrainConfig) -> TrainConfig:
     cfg.MAX_TRAINING_STEPS = 20
     cfg.USE_PER = False
     cfg.COMPILE_MODEL = False
-    cfg.PROFILE_WORKERS = False  # Ensure profiling is off for standard tests
+    cfg.PROFILE_WORKERS = False
     return cfg
 
 
 @pytest.fixture
 def mock_stats_config_fixture() -> StatsConfig:
     """Fixture for a basic StatsConfig."""
-    # Use a very short interval for testing processing triggers
     return StatsConfig(processing_interval_seconds=0.05, metrics=[])
 
 
@@ -202,7 +195,8 @@ def mock_components(
     mock_data_manager.path_manager = mock_path_manager
     mocker.patch("alphatriangle.data.DataManager", return_value=mock_data_manager)
 
-    mock_stats_collector_handle = MagicMock(name="StatsCollectorActorMockHandle")
+    # Use Any for the type hint of the mock handle
+    mock_stats_collector_handle: Any = MagicMock(name="StatsCollectorActorMockHandle")
     mock_stats_collector_handle.log_event = MagicMock(name="log_event_remote")
     mock_stats_collector_handle.log_batch_events = MagicMock(
         name="log_batch_events_remote"
@@ -295,14 +289,14 @@ def mock_components(
         buffer=mock_buffer,
         trainer=mock_trainer,
         data_manager=mock_data_manager,
-        stats_collector_actor=mock_stats_collector_handle,
+        stats_collector_actor=mock_stats_collector_handle,  # Pass the mock handle (typed as Any)
         train_config=mock_training_config,
         env_config=mock_env_config,
         model_config=mock_model_config,
         mcts_config=mock_mcts_config,
         persist_config=mock_persistence_config,
         stats_config=mock_stats_config_fixture,
-        profile_workers=mock_training_config.PROFILE_WORKERS,  # Pass profile flag
+        profile_workers=mock_training_config.PROFILE_WORKERS,
     )
 
     return components
@@ -344,22 +338,28 @@ def test_worker_weight_update_usage(
 
     results_processed = loop.episodes_played
     total_expected_updates = max_steps // update_freq
+    expected_total_weight_updates = total_expected_updates
 
     weight_update_event_calls = [
         c
         for c in stats_collector_mock.log_event.call_args_list
         if isinstance(c.args[0], RawMetricEvent)
-        and c.args[0].name == "Event/Weight_Update"
+        and c.args[0].name == "Progress/Weight_Updates_Total"
     ]
     assert len(weight_update_event_calls) == total_expected_updates, (
         f"Weight update event calls: expected {total_expected_updates}, got {len(weight_update_event_calls)}"
     )
 
-    for i, update_call in enumerate(weight_update_event_calls):
-        expected_step = (i + 1) * update_freq
-        event_arg = update_call.args[0]
-        assert isinstance(event_arg, RawMetricEvent)
-        assert event_arg.global_step == expected_step, f"Event {i} step mismatch"
+    if weight_update_event_calls:
+        last_event_arg = weight_update_event_calls[-1].args[0]
+        assert isinstance(last_event_arg, RawMetricEvent)
+        assert last_event_arg.value == expected_total_weight_updates, (
+            f"Last weight update event value mismatch: expected {expected_total_weight_updates}, got {last_event_arg.value}"
+        )
+        last_expected_step = total_expected_updates * update_freq
+        assert last_event_arg.global_step == last_expected_step, (
+            f"Last weight update event step mismatch: expected {last_expected_step}, got {last_event_arg.global_step}"
+        )
 
     assert results_processed > 0, "No self-play results were processed"
 

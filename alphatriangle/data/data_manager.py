@@ -249,12 +249,11 @@ class DataManager:
             config_path = self.path_manager.get_config_path()
             config_path.parent.mkdir(parents=True, exist_ok=True)
             self.serializer.save_config_json(configs, config_path)
-            # Log the config file to the root of the MLflow artifacts using its filename
-            mlflow.log_artifact(
-                str(config_path), artifact_path=self.persist_config.CONFIG_FILENAME
-            )
+            # Log the config file to the root of the MLflow artifacts
+            # Omit artifact_path to log to root
+            mlflow.log_artifact(str(config_path))
             logger.info(
-                f"Run config saved locally to {config_path} and logged to MLflow as '{self.persist_config.CONFIG_FILENAME}'."
+                f"Run config saved locally to {config_path} and logged to MLflow root."
             )
         except Exception as e:
             logger.error(f"Failed to save/log run config JSON: {e}", exc_info=True)

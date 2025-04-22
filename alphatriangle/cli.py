@@ -1,3 +1,4 @@
+# File: alphatriangle/cli.py
 import logging
 import shutil
 import subprocess
@@ -106,7 +107,8 @@ def _run_external_ui(
             console.print(
                 f"[bold red]Error:[/bold red] {ui_name} command failed with exit code {process.returncode}"
             )
-            raise typer.Exit(code=process.returncode)
+            # Don't exit immediately, let the calling function handle it if needed
+            # raise typer.Exit(code=process.returncode)
     except FileNotFoundError as e:
         console.print(
             f"[bold red]Error:[/bold red] '{executable}' command not found. Is {ui_name} installed and in your PATH?"
@@ -134,6 +136,7 @@ def train(
     🚀 Run the AlphaTriangle training pipeline (headless).
 
     Initiates the self-play and learning process. Logs will be saved to the run directory.
+    This command also initializes Ray and starts the Ray Dashboard. Check the logs for the dashboard URL.
     """
     # Setup logging using the centralized function (file logging handled by runner)
     setup_logging(log_level)
@@ -217,7 +220,15 @@ def ml(
         "--port",
         str(port),
     ]
-    _run_external_ui("mlflow", command_args, "MLflow UI", f"http://{host}:{port}")
+    try:
+        _run_external_ui("mlflow", command_args, "MLflow UI", f"http://{host}:{port}")
+    except typer.Exit as e:
+        if e.exit_code != 0:
+            console.print(
+                f"[yellow]MLflow UI failed to start (Exit Code: {e.exit_code}). "
+                f"Is port {port} already in use? Try specifying a different port with --port.[/]"
+            )
+        sys.exit(e.exit_code)
 
 
 @app.command()
@@ -253,37 +264,45 @@ def tb(
         "--port",
         str(port),
     ]
-    _run_external_ui(
-        "tensorboard", command_args, "TensorBoard UI", f"http://{host}:{port}"
-    )
+    try:
+        _run_external_ui(
+            "tensorboard", command_args, "TensorBoard UI", f"http://{host}:{port}"
+        )
+    except typer.Exit as e:
+        if e.exit_code != 0:
+            console.print(
+                f"[yellow]TensorBoard UI failed to start (Exit Code: {e.exit_code}). "
+                f"Is port {port} already in use? Try specifying a different port with --port.[/]"
+            )
+        sys.exit(e.exit_code)
 
 
 @app.command()
 def ray(
-    host: HostOption = "127.0.0.1",
+    host: HostOption = "127.0.0.1",  # Keep host/port options for reference
     port: PortOption = 8265,
 ):
     """
-    ☀️ Launch the Ray Dashboard web UI.
+    ☀️ Provides instructions to view the Ray Dashboard.
 
-    Requires Ray to be installed and potentially running (e.g., started by `alphatriangle train`).
+    The dashboard is automatically started when you run `alphatriangle train`.
+    Check the output logs of the `train` command for the correct URL.
     """
     setup_logging("INFO")  # Basic logging for this command
     console.print(
-        "[yellow]Note:[/yellow] This command attempts to open the Ray Dashboard for an existing Ray cluster."
+        Panel(
+            f"💡 To view the Ray Dashboard:\n\n"
+            f"1. The Ray Dashboard is started automatically when you run the `[bold]alphatriangle train[/]` command.\n"
+            f"2. Check the console output or the log file for the `train` command (located in `.alphatriangle_data/runs/<run_name>/logs/`).\n"
+            f"3. Look for a line similar to: '[bold cyan]Ray Dashboard running at: http://<address>:<port>[/]' \n"  # Removed extra [/]
+            f"4. Open that specific URL in your web browser.\n\n"
+            f"[dim]Note: The default URL is often http://{host}:{port}, but it might differ. "
+            f"If you cannot access the URL, check firewall settings or if the port is blocked.[/]",
+            title="[bold yellow]Ray Dashboard Instructions[/]",
+            border_style="yellow",
+            expand=False,
+        )
     )
-    console.print(
-        "If Ray is not running, this command might fail. Start Ray first (e.g., via `alphatriangle train`)."
-    )
-
-    command_args = [
-        "dashboard",
-        "--host",
-        host,
-        "--port",
-        str(port),
-    ]
-    _run_external_ui("ray", command_args, "Ray Dashboard", f"http://{host}:{port}")
 
 
 if __name__ == "__main__":

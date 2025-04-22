@@ -4,7 +4,9 @@ Statistics collection module. Handles asynchronous collection of raw metrics
 and processes/logs them according to configuration.
 """
 
-from .collector import StatsCollectorActor
+# Use full path import for mypy compatibility with Ray actors
+from alphatriangle.stats.collector import StatsCollectorActor
+
 from .processor import StatsProcessor
 
 # Update import to use the new filename
