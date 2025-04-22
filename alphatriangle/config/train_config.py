@@ -46,8 +46,9 @@ class TrainConfig(BaseModel):
         ge=1,
     )
     WORKER_UPDATE_FREQ_STEPS: int = Field(
-        default=500, ge=1
-    )  # Keep relatively frequent updates
+        default=10,
+        ge=1,  # Lowered for easier testing
+    )
 
     # --- N-Step Returns ---
     N_STEP_RETURNS: int = Field(default=5, ge=1)  # 5-step returns

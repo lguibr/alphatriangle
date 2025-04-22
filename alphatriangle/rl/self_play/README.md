@@ -1,3 +1,4 @@
+
 # RL Self-Play Submodule (`alphatriangle.rl.self_play`)
 
 ## Purpose and Architecture
@@ -17,7 +18,7 @@ This submodule focuses specifically on generating game episodes through self-pla
         -   Stores `(StateType, policy_target, n_step_return)` tuples (using extracted features and calculated n-step returns).
         -   Steps its local game environment (`GameState.step`).
         -   Returns the collected `Experience` list, final score, episode length, and MCTS statistics via a `SelfPlayResult` object.
-        -   **Asynchronously logs per-step statistics (score, reward, MCTS visits/depth) to the `StatsCollectorActor`, providing a `StepInfo` dictionary containing the `game_step_index` and the `current_trainer_step` (global step of its current network weights).**
+        -   **Asynchronously logs per-step statistics (score, reward, MCTS visits/depth) and episode summary statistics (final score, length) to the `StatsCollectorActor`, providing a `StepInfo` dictionary containing the `game_step_index` and the `current_trainer_step` (global step of its current network weights).**
 -   **[`mcts_helpers.py`](mcts_helpers.py):** Contains helper functions for processing MCTS visit counts into policy targets and selecting actions based on temperature. Includes `PolicyGenerationError` for specific failures.
 
 ## Future Optimizations

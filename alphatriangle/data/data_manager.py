@@ -1,3 +1,4 @@
+# File: alphatriangle/data/data_manager.py
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 class DataManager:
     """
     Orchestrates loading and saving of training artifacts using PathManager and Serializer.
-    Handles MLflow artifact logging.
+    Handles MLflow artifact logging. Saves step-specific files and updates links.
     """
 
     def __init__(
@@ -121,12 +122,14 @@ class DataManager:
         episodes_played: int,
         total_simulations_run: int,
         is_best: bool = False,
-        is_final: bool = False,
     ):
-        """Saves the training state using Serializer and PathManager."""
+        """
+        Saves the training state using Serializer and PathManager.
+        Saves step-specific files and updates 'latest'/'best' links.
+        """
         run_name = self.persist_config.RUN_NAME
         logger.info(
-            f"Saving training state for run '{run_name}' at step {global_step}. Final={is_final}, Best={is_best}"
+            f"Saving training state for run '{run_name}' at step {global_step}. Best={is_best}"
         )
 
         stats_collector_state = {}
@@ -155,13 +158,14 @@ class DataManager:
                 optimizer_state_dict=self.serializer.prepare_optimizer_state(optimizer),
                 stats_collector_state=stats_collector_state,
             )
+            # Get path for the step-specific file
             step_checkpoint_path = self.path_manager.get_checkpoint_path(
-                step=global_step, is_final=is_final
+                step=global_step
             )
             self.serializer.save_checkpoint(checkpoint_data, step_checkpoint_path)
             saved_checkpoint_path = step_checkpoint_path  # Store path if save succeeded
 
-            # Update latest/best links
+            # Update latest/best links using the step-specific file as source
             self.path_manager.update_checkpoint_links(
                 step_checkpoint_path, is_best=is_best
             )
@@ -177,13 +181,14 @@ class DataManager:
             try:
                 buffer_data = self.serializer.prepare_buffer_data(buffer)
                 if buffer_data:
-                    buffer_path = self.path_manager.get_buffer_path(
-                        step=global_step, is_final=is_final
+                    # Get path for the step-specific buffer file
+                    step_buffer_path = self.path_manager.get_buffer_path(
+                        step=global_step
                     )
-                    self.serializer.save_buffer(buffer_data, buffer_path)
-                    saved_buffer_path = buffer_path  # Store path if save succeeded
-                    # Update default buffer link
-                    self.path_manager.update_buffer_link(buffer_path)
+                    self.serializer.save_buffer(buffer_data, step_buffer_path)
+                    saved_buffer_path = step_buffer_path  # Store path if save succeeded
+                    # Update the default buffer link (buffer.pkl)
+                    self.path_manager.update_buffer_link(step_buffer_path)
                 else:
                     logger.warning("Buffer data preparation failed, buffer not saved.")
             except ValidationError as e:
@@ -200,18 +205,22 @@ class DataManager:
         buffer_path: Path | None,
         is_best: bool,
     ):
-        """Logs saved checkpoint and buffer files to MLflow."""
+        """Logs saved step-specific files and links to MLflow."""
         try:
+            # Log Checkpoint Artifacts
             if checkpoint_path and checkpoint_path.exists():
                 ckpt_artifact_path = self.persist_config.CHECKPOINT_SAVE_DIR_NAME
+                # Log the step-specific file
                 mlflow.log_artifact(
                     str(checkpoint_path), artifact_path=ckpt_artifact_path
                 )
+                # Log the 'latest.pkl' link
                 latest_path = self.path_manager.get_checkpoint_path(is_latest=True)
                 if latest_path.exists():
                     mlflow.log_artifact(
                         str(latest_path), artifact_path=ckpt_artifact_path
                     )
+                # Log the 'best.pkl' link if applicable
                 if is_best:
                     best_path = self.path_manager.get_checkpoint_path(is_best=True)
                     if best_path.exists():
@@ -219,20 +228,24 @@ class DataManager:
                             str(best_path), artifact_path=ckpt_artifact_path
                         )
                 logger.info(
-                    f"Logged checkpoint artifacts to MLflow path: {ckpt_artifact_path}"
+                    f"Logged checkpoint artifacts (step, latest, best={is_best}) to MLflow path: {ckpt_artifact_path}"
                 )
+
+            # Log Buffer Artifacts
             if buffer_path and buffer_path.exists():
                 buffer_artifact_path = self.persist_config.BUFFER_SAVE_DIR_NAME
+                # Log the step-specific buffer file
                 mlflow.log_artifact(
                     str(buffer_path), artifact_path=buffer_artifact_path
                 )
+                # Log the default buffer link ('buffer.pkl')
                 default_buffer_path = self.path_manager.get_buffer_path()
                 if default_buffer_path.exists():
                     mlflow.log_artifact(
                         str(default_buffer_path), artifact_path=buffer_artifact_path
                     )
                 logger.info(
-                    f"Logged buffer artifacts to MLflow path: {buffer_artifact_path}"
+                    f"Logged buffer artifacts (step, default link) to MLflow path: {buffer_artifact_path}"
                 )
         except Exception as e:
             logger.error(f"Failed to log artifacts to MLflow: {e}", exc_info=True)
@@ -254,16 +267,10 @@ class DataManager:
         step: int | None = None,
         is_latest: bool = False,
         is_best: bool = False,
-        is_final: bool = False,
     ) -> Path:
-        return self.path_manager.get_checkpoint_path(
-            run_name, step, is_latest, is_best, is_final
-        )
+        return self.path_manager.get_checkpoint_path(run_name, step, is_latest, is_best)
 
     def get_buffer_path(
-        self,
-        run_name: str | None = None,
-        step: int | None = None,
-        is_final: bool = False,
+        self, run_name: str | None = None, step: int | None = None
     ) -> Path:
-        return self.path_manager.get_buffer_path(run_name, step, is_final)
+        return self.path_manager.get_buffer_path(run_name, step)

@@ -11,7 +11,7 @@ from trimcts import SearchConfiguration  # Import base config for reference
 DEFAULT_MAX_SIMULATIONS = 512
 DEFAULT_MAX_DEPTH = 32
 DEFAULT_CPUCT = 1.5
-DEFAULT_MCTS_BATCH_SIZE = 64  # Default batch size for network evals within MCTS
+DEFAULT_MCTS_BATCH_SIZE = 32  # Default batch size for network evals within MCTS
 
 
 class AlphaTriangleMCTSConfig(BaseModel):

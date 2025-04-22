@@ -1,25 +1,18 @@
 # File: alphatriangle/training/loop_helpers.py
+# File: alphatriangle/training/loop_helpers.py
 import logging
-import queue  # Keep for type hint check
+import queue
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any  # Add cast
+from typing import TYPE_CHECKING, Any
 
+import mlflow
 import numpy as np
 import ray
-
-# --- ADD TensorBoard ---
 from torch.utils.tensorboard import SummaryWriter
 
-# --- END ADD ---
-# Import GameState from trianglengin
-# Keep alphatriangle imports
-# REMOVED WEIGHT_UPDATE_METRIC_KEY import (no longer plotting)
 from ..utils import format_eta
 from ..utils.types import Experience, StatsCollectorData, StepInfo
-
-# REMOVE ProgressBar import
-# REMOVE colors import
 
 if TYPE_CHECKING:
     from collections import deque
@@ -28,11 +21,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# REMOVE VISUAL_UPDATE_INTERVAL
 STATS_FETCH_INTERVAL = 0.5
-# REMOVE VIS_STATE_FETCH_TIMEOUT
 RATE_CALCULATION_INTERVAL = 5.0
-WEIGHT_UPDATE_EVENT_KEY = "Events/Weight_Update"  # Define key for logging
+ADDITIONAL_STATS_LOG_INTERVAL = 15.0  # Log additional stats less frequently
+WEIGHT_UPDATE_EVENT_KEY = "Events/Weight_Update"
 
 
 class LoopHelpers:
@@ -41,21 +33,18 @@ class LoopHelpers:
     def __init__(
         self,
         components: "TrainingComponents",
-        # REMOVE visual_state_queue parameter
         _visual_state_queue: (
             queue.Queue[dict[int, Any] | None] | None
         ),  # Keep param name but mark unused
         get_loop_state_func: Callable[[], dict[str, Any]],
     ):
         self.components = components
-        # REMOVE self.visual_state_queue = visual_state_queue
         self.get_loop_state = get_loop_state_func
 
         self.stats_collector_actor = components.stats_collector_actor
         self.train_config = components.train_config
         self.trainer = components.trainer
 
-        # REMOVE self.last_visual_update_time = 0.0
         self.last_stats_fetch_time = 0.0
         self.latest_stats_data: StatsCollectorData = {}
 
@@ -64,15 +53,20 @@ class LoopHelpers:
         self.last_rate_calc_episodes = 0
         self.last_rate_calc_sims = 0
 
-        # --- ADD TensorBoard Writer ---
-        self.tb_writer: SummaryWriter | None = None
-        # --- END ADD ---
+        self.last_additional_log_time = 0.0
+        # Track last logged index for additional metrics to avoid duplicates
+        self.last_logged_indices: dict[str, int] = {
+            "Episode/Final_Score": -1,
+            "Episode/Length": -1,
+            "RL/Step_Reward": -1,
+            "MCTS/Step_Simulations": -1,
+            "RL/Current_Score": -1,
+        }
 
-    # --- ADD Method to set writer ---
+        self.tb_writer: SummaryWriter | None = None
+
     def set_tensorboard_writer(self, writer: SummaryWriter):
         self.tb_writer = writer
-
-    # --- END ADD ---
 
     def reset_rate_counters(
         self, global_step: int, episodes_played: int, total_simulations: int
@@ -83,8 +77,6 @@ class LoopHelpers:
         self.last_rate_calc_episodes = episodes_played
         self.last_rate_calc_sims = total_simulations
 
-    # REMOVE initialize_progress_bars method
-
     def _fetch_latest_stats(self):
         """Fetches the latest stats data from the actor."""
         current_time = time.time()
@@ -93,7 +85,7 @@ class LoopHelpers:
         self.last_stats_fetch_time = current_time
         if self.stats_collector_actor:
             try:
-                data_ref = self.stats_collector_actor.get_data.remote()  # type: ignore
+                data_ref = self.stats_collector_actor.get_data.remote()
                 self.latest_stats_data = ray.get(data_ref, timeout=1.0)
             except Exception as e:
                 logger.warning(f"Failed to fetch latest stats: {e}")
@@ -101,7 +93,7 @@ class LoopHelpers:
     def calculate_and_log_rates(self):
         """
         Calculates and logs steps/sec, episodes/sec, sims/sec, and buffer size.
-        Logs to StatsCollectorActor and TensorBoard.
+        Logs to StatsCollectorActor, TensorBoard, and MLflow.
         """
         current_time = time.time()
         time_delta = current_time - self.last_rate_calc_time
@@ -139,11 +131,11 @@ class LoopHelpers:
                 rate_stats["Rate/Steps_Per_Sec"] = (steps_per_sec, step_info_global)
 
             try:
-                self.stats_collector_actor.log_batch.remote(rate_stats)  # type: ignore
+                self.stats_collector_actor.log_batch.remote(rate_stats)
             except Exception as e:
                 logger.error(f"Failed to log rate/buffer stats to collector: {e}")
 
-        # --- ADD Log to TensorBoard ---
+        # Log to TensorBoard and MLflow
         if self.tb_writer:
             try:
                 self.tb_writer.add_scalar(
@@ -161,7 +153,23 @@ class LoopHelpers:
                     )
             except Exception as tb_err:
                 logger.error(f"Failed to log rates to TensorBoard: {tb_err}")
-        # --- END ADD ---
+
+        try:
+            mlflow.log_metric(
+                "Rates/Episodes_Per_Sec", episodes_per_sec, step=global_step
+            )
+            mlflow.log_metric(
+                "Rates/Simulations_Per_Sec", sims_per_sec, step=global_step
+            )
+            mlflow.log_metric(
+                "Buffer/Size", float(current_buffer_size), step=global_step
+            )
+            if steps_delta > 0:
+                mlflow.log_metric(
+                    "Rates/Steps_Per_Sec", steps_per_sec, step=global_step
+                )
+        except Exception as mlf_err:
+            logger.error(f"Failed to log rates to MLflow: {mlf_err}")
 
         log_msg_steps = (
             f"Steps/s={steps_per_sec:.2f}" if steps_delta > 0 else "Steps/s=N/A"
@@ -187,12 +195,10 @@ class LoopHelpers:
 
         steps_per_sec = 0.0
         self._fetch_latest_stats()
-        # Safely access latest steps_per_sec from stats
         rate_dq: deque[tuple[StepInfo, float]] | None = self.latest_stats_data.get(
             "Rate/Steps_Per_Sec"
         )
         if rate_dq and len(rate_dq) > 0:
-            # Ensure the last item is a tuple with expected structure
             last_item = rate_dq[-1]
             if (
                 isinstance(last_item, tuple)
@@ -205,7 +211,6 @@ class LoopHelpers:
                     f"Unexpected structure in Rate/Steps_Per_Sec deque: {last_item}"
                 )
 
-        # Fallback if no stats available or invalid
         if steps_per_sec <= 0 and elapsed_time > 1 and steps_since_start > 0:
             steps_per_sec = steps_since_start / elapsed_time
 
@@ -255,7 +260,7 @@ class LoopHelpers:
                         and "other_features" in state_type
                         and isinstance(state_type["grid"], np.ndarray)
                         and isinstance(state_type["other_features"], np.ndarray)
-                        and isinstance(policy_map, dict)  # Check for dict specifically
+                        and isinstance(policy_map, dict)
                         and isinstance(value, float | int)
                     ):
                         if np.all(np.isfinite(state_type["grid"])) and np.all(
@@ -291,12 +296,12 @@ class LoopHelpers:
         self, loss_info: dict[str, float], global_step: int, total_simulations: int
     ) -> None:
         """
-        Logs training results asynchronously to StatsCollectorActor and TensorBoard.
+        Logs training results asynchronously to StatsCollectorActor, TensorBoard, and MLflow.
         """
         current_lr = self.trainer.get_current_lr()
         buffer = self.components.buffer
 
-        per_beta: float | None = None  # Ensure per_beta is typed
+        per_beta: float | None = None
         if self.train_config.USE_PER and hasattr(buffer, "_calculate_beta"):
             per_beta = buffer._calculate_beta(global_step)
 
@@ -315,14 +320,14 @@ class LoopHelpers:
             if per_beta is not None:
                 stats_batch["PER/Beta"] = (per_beta, step_info)
             try:
-                self.stats_collector_actor.log_batch.remote(stats_batch)  # type: ignore
+                self.stats_collector_actor.log_batch.remote(stats_batch)
                 logger.debug(
                     f"Logged training batch to StatsCollectorActor for Step {global_step}."
                 )
             except Exception as e:
                 logger.error(f"Failed to log batch to StatsCollectorActor: {e}")
 
-        # --- ADD Log to TensorBoard ---
+        # Log to TensorBoard
         if self.tb_writer:
             try:
                 self.tb_writer.add_scalar(
@@ -350,25 +355,119 @@ class LoopHelpers:
                     self.tb_writer.add_scalar("PER/Beta", per_beta, global_step)
             except Exception as tb_err:
                 logger.error(f"Failed to log training results to TensorBoard: {tb_err}")
-        # --- END ADD ---
+
+        # Log to MLflow
+        try:
+            mlflow.log_metric(
+                "Loss/Total", loss_info.get("total_loss", 0.0), step=global_step
+            )
+            mlflow.log_metric(
+                "Loss/Policy", loss_info.get("policy_loss", 0.0), step=global_step
+            )
+            mlflow.log_metric(
+                "Loss/Value", loss_info.get("value_loss", 0.0), step=global_step
+            )
+            mlflow.log_metric(
+                "Loss/Entropy", loss_info.get("entropy", 0.0), step=global_step
+            )
+            mlflow.log_metric(
+                "Loss/Mean_TD_Error",
+                loss_info.get("mean_td_error", 0.0),
+                step=global_step,
+            )
+            mlflow.log_metric("LearningRate", current_lr, step=global_step)
+            mlflow.log_metric(
+                "Progress/Total_Simulations", float(total_simulations), step=global_step
+            )
+            if per_beta is not None:
+                mlflow.log_metric("PER/Beta", per_beta, step=global_step)
+        except Exception as mlf_err:
+            logger.error(f"Failed to log training results to MLflow: {mlf_err}")
 
     def log_weight_update_event(self, global_step: int) -> None:
         """Logs the event of a worker weight update with StepInfo."""
         if self.stats_collector_actor:
             try:
                 step_info: StepInfo = {"global_step": global_step}
-                # Use the defined key for the event
                 update_metric = {WEIGHT_UPDATE_EVENT_KEY: (1.0, step_info)}
-                self.stats_collector_actor.log_batch.remote(update_metric)  # type: ignore
+                self.stats_collector_actor.log_batch.remote(update_metric)
                 logger.info(f"Logged worker weight update event at step {global_step}.")
             except Exception as e:
                 logger.error(f"Failed to log weight update event: {e}")
-        # --- ADD Log to TensorBoard ---
+
+        # Log to TensorBoard
         if self.tb_writer:
             try:
-                # Log as a scalar event (value 1 indicates update occurred)
                 self.tb_writer.add_scalar(WEIGHT_UPDATE_EVENT_KEY, 1.0, global_step)
             except Exception as tb_err:
                 logger.error(
                     f"Failed to log weight update event to TensorBoard: {tb_err}"
                 )
+
+        # Log to MLflow
+        try:
+            mlflow.log_metric(WEIGHT_UPDATE_EVENT_KEY, 1.0, step=global_step)
+        except Exception as mlf_err:
+            logger.error(f"Failed to log weight update event to MLflow: {mlf_err}")
+
+    def log_additional_stats(self):
+        """
+        Fetches additional stats (Episode Score/Length, Step Reward, etc.)
+        from the StatsCollectorActor and logs new entries to MLflow/TensorBoard.
+        """
+        current_time = time.time()
+        if current_time - self.last_additional_log_time < ADDITIONAL_STATS_LOG_INTERVAL:
+            return
+        self.last_additional_log_time = current_time
+
+        self._fetch_latest_stats()
+        if not self.latest_stats_data:
+            return
+
+        metrics_to_log = [
+            "Episode/Final_Score",
+            "Episode/Length",
+            "RL/Step_Reward",
+            "MCTS/Step_Simulations",
+            "RL/Current_Score",
+        ]
+        logged_count = 0
+
+        for metric_name in metrics_to_log:
+            metric_deque = self.latest_stats_data.get(metric_name)
+            if not metric_deque:
+                continue
+
+            last_logged_idx = self.last_logged_indices.get(metric_name, -1)
+            current_len = len(metric_deque)
+
+            if current_len > last_logged_idx + 1:
+                start_idx = last_logged_idx + 1
+                for i in range(start_idx, current_len):
+                    try:
+                        step_info, value = metric_deque[i]
+                        # Use global_step from StepInfo for logging step
+                        log_step = step_info.get("global_step")
+                        if log_step is None:
+                            # Fallback if global_step is missing (shouldn't happen often)
+                            log_step = self.get_loop_state().get("global_step", 0)
+                            logger.warning(
+                                f"Missing 'global_step' in StepInfo for {metric_name} at index {i}. Using current loop step {log_step}."
+                            )
+
+                        # Log to TensorBoard
+                        if self.tb_writer:
+                            self.tb_writer.add_scalar(metric_name, value, log_step)
+                        # Log to MLflow
+                        mlflow.log_metric(metric_name, value, step=log_step)
+                        logged_count += 1
+                    except Exception as e:
+                        logger.error(
+                            f"Error logging additional metric '{metric_name}' (index {i}): {e}",
+                            exc_info=False,
+                        )
+                # Update the last logged index for this metric
+                self.last_logged_indices[metric_name] = current_len - 1
+
+        if logged_count > 0:
+            logger.debug(f"Logged {logged_count} additional metric points.")

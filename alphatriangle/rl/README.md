@@ -1,4 +1,8 @@
 
+
+*   **Change:** Mention the newly logged metrics.
+
+```markdown
 # Reinforcement Learning Module (`alphatriangle.rl`)
 
 ## Purpose and Architecture
@@ -9,7 +13,7 @@ This module contains core components related to the reinforcement learning algor
     -   `Trainer`: Responsible for performing the neural network update steps. It takes batches of experience from the buffer, calculates losses (policy cross-entropy, **distributional value cross-entropy**, optional entropy bonus), applies importance sampling weights if using PER, updates the network weights, and calculates TD errors for PER priority updates. **Uses `trianglengin.EnvConfig`.**
     -   `ExperienceBuffer`: A replay buffer storing `Experience` tuples (`(StateType, policy_target, n_step_return)`). The `StateType` contains processed numerical features (`grid`, `other_features`) **and the geometry of available shapes (`available_shapes_geometry`)**. Supports both uniform sampling and Prioritized Experience Replay (PER).
 -   **Self-Play Components ([`self_play/README.md`](self_play/README.md)):**
-    -   `worker`: Defines the `SelfPlayWorker` Ray actor. Each actor runs game episodes independently using `trimcts.run_mcts` and its local copy of the neural network (`NeuralNetwork` which conforms to `trimcts.AlphaZeroNetworkInterface`). It collects experiences (including calculated n-step returns) and returns results via a `SelfPlayResult` object. It also logs stats and game state asynchronously. **Uses `trianglengin.GameState` and `trianglengin.EnvConfig`.**
+    -   `worker`: Defines the `SelfPlayWorker` Ray actor. Each actor runs game episodes independently using `trimcts.run_mcts` and its local copy of the neural network (`NeuralNetwork` which conforms to `trimcts.AlphaZeroNetworkInterface`). It collects experiences (including calculated n-step returns) and returns results via a `SelfPlayResult` object. It also logs stats (including step rewards, episode scores, and lengths) and game state asynchronously to the `StatsCollectorActor`. **Uses `trianglengin.GameState` and `trianglengin.EnvConfig`.**
 -   **Types ([`types.py`](types.py)):**
     -   Defines Pydantic models like `SelfPlayResult` for structured data transfer between Ray actors and the training loop.
 

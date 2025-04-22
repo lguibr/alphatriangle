@@ -7,11 +7,8 @@ from pathlib import Path
 import mlflow
 import ray
 import torch
-
-# --- ADD TensorBoard ---
 from torch.utils.tensorboard import SummaryWriter
 
-# --- END ADD ---
 from ..config import APP_NAME, PersistenceConfig, TrainConfig
 from ..utils.sumtree import SumTree
 from .components import TrainingComponents
@@ -55,6 +52,7 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
     loaded_state = components.data_manager.load_initial_state()
     # Pass None for visual queue
     training_loop = TrainingLoop(components)  # Instantiate loop first
+    initial_step = 0  # Default start step
 
     if loaded_state.checkpoint_data:
         cp_data = loaded_state.checkpoint_data
@@ -78,14 +76,11 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
                 logger.error(
                     f"Could not load optimizer state: {opt_load_err}. Optimizer might reset."
                 )
-        # --- CHANGED: Removed isinstance check, rely on ActorHandle type hint ---
         if (
             cp_data.stats_collector_state
             and components.stats_collector_actor is not None
         ):
-            # --- END CHANGED ---
             try:
-                # MyPy should now know this is an ActorHandle
                 set_state_ref = components.stats_collector_actor.set_state.remote(
                     cp_data.stats_collector_state
                 )
@@ -101,10 +96,12 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
             cp_data.episodes_played,
             cp_data.total_simulations_run,
         )
+        initial_step = cp_data.global_step  # Store loaded step
     else:
         logger.info("No checkpoint data loaded. Starting fresh.")
         training_loop.set_initial_state(0, 0, 0)
 
+    loaded_buffer_size = 0
     if loaded_state.buffer_data:
         if components.train_config.USE_PER:
             logger.info("Rebuilding PER SumTree from loaded buffer data...")
@@ -115,7 +112,8 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
             max_p = 1.0
             for exp in loaded_state.buffer_data.buffer_list:
                 components.buffer.tree.add(max_p, exp)
-            logger.info(f"PER buffer loaded. Size: {len(components.buffer)}")
+            loaded_buffer_size = len(components.buffer)
+            logger.info(f"PER buffer loaded. Size: {loaded_buffer_size}")
         else:
             from collections import deque  # Import locally if needed
 
@@ -123,14 +121,16 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
                 loaded_state.buffer_data.buffer_list,
                 maxlen=components.buffer.capacity,
             )
-            logger.info(f"Uniform buffer loaded. Size: {len(components.buffer)}")
-        # REMOVED progress bar update
-        # if training_loop.buffer_fill_progress:
-        #     training_loop.buffer_fill_progress.set_current_steps(len(components.buffer))
+            loaded_buffer_size = len(components.buffer)
+            logger.info(f"Uniform buffer loaded. Size: {loaded_buffer_size}")
     else:
         logger.info("No buffer data loaded.")
 
     components.nn.model.train()
+    # Add log message confirming state application
+    logger.info(
+        f"Initial state loaded and applied. Starting step: {initial_step}, Buffer size: {loaded_buffer_size}"
+    )
     return training_loop
 
 
@@ -143,6 +143,7 @@ def _save_final_state(training_loop: TrainingLoop):
     logger.info("Saving final training state...")
     try:
         # Pass the actor handle directly
+        # Remove is_final argument
         components.data_manager.save_training_state(
             nn=components.nn,
             optimizer=components.trainer.optimizer,
@@ -151,7 +152,7 @@ def _save_final_state(training_loop: TrainingLoop):
             global_step=training_loop.global_step,
             episodes_played=training_loop.episodes_played,
             total_simulations_run=training_loop.total_simulations_run,
-            is_final=True,
+            is_best=False,  # Assuming final state is not necessarily the 'best'
         )
     except Exception as e_save:
         logger.error(f"Failed to save final training state: {e_save}", exc_info=True)
@@ -170,15 +171,15 @@ def run_training(
     file_handler = None
     ray_initialized_by_setup = False
     mlflow_run_active = False
-    tb_writer: SummaryWriter | None = None  # ADDED
-    tb_log_dir: str | None = None  # ADDED
+    tb_writer: SummaryWriter | None = None
+    tb_log_dir: str | None = None
 
     try:
         # --- Setup File Logging ---
         log_file_path = setup_file_logging(
             persist_config_override,
             train_config_override.RUN_NAME,
-            "train",  # Changed suffix
+            "train",
         )
         log_level = logging.getLevelName(log_level_str.upper())
         logger.info(
@@ -197,15 +198,13 @@ def run_training(
             components.persist_config, components.train_config.RUN_NAME
         )
         if mlflow_run_active:
-            log_configs_to_mlflow(components)  # Log configs after run starts
-            # Log parameter counts after MLflow run starts
+            log_configs_to_mlflow(components)
             total_params, trainable_params = count_parameters(components.nn.model)
             logger.info(
                 f"Model Parameters: Total={total_params:,}, Trainable={trainable_params:,}"
             )
             mlflow.log_param("model_total_params", total_params)
             mlflow.log_param("model_trainable_params", trainable_params)
-            # Log log file path
             if log_file_path:
                 try:
                     mlflow.log_artifact(log_file_path, artifact_path="logs")
@@ -216,7 +215,7 @@ def run_training(
         else:
             logger.warning("MLflow initialization failed, proceeding without MLflow.")
 
-        # --- Initialize TensorBoard --- ADDED ---
+        # --- Initialize TensorBoard ---
         tb_log_dir = components.persist_config.get_tensorboard_log_dir()
         if tb_log_dir:
             Path(tb_log_dir).mkdir(parents=True, exist_ok=True)
@@ -224,7 +223,6 @@ def run_training(
             logger.info(f"TensorBoard logging initialized. Log directory: {tb_log_dir}")
             if mlflow_run_active:
                 try:
-                    # Log TB dir relative path within MLflow run
                     relative_tb_path = Path(tb_log_dir).relative_to(
                         Path(components.persist_config.get_run_base_dir()).parent
                     )
@@ -237,14 +235,13 @@ def run_training(
             logger.warning(
                 "Could not determine TensorBoard log directory. Skipping TensorBoard."
             )
-        # --- END ADDED ---
 
         # --- Load State & Initialize Loop ---
-        training_loop = _load_and_apply_initial_state(components)
-        # --- Pass TensorBoard writer to loop helpers --- ADDED ---
+        training_loop = _load_and_apply_initial_state(
+            components
+        )  # Log message added inside
         if tb_writer:
             training_loop.loop_helpers.set_tensorboard_writer(tb_writer)
-        # --- END ADDED ---
 
         # --- Run Training Loop ---
         training_loop.initialize_workers()
@@ -254,16 +251,16 @@ def run_training(
         if training_loop.training_complete:
             exit_code = 0
         elif training_loop.training_exception:
-            exit_code = 1  # Failed
+            exit_code = 1
         else:
-            exit_code = 1  # Interrupted or other issue
+            # If loop stopped without completing or exception (e.g., external signal not caught)
+            exit_code = 1
 
     except Exception as e:
         logger.critical(
             f"An unhandled error occurred during training setup or execution: {e}"
         )
         traceback.print_exc()
-        # Attempt to log failure status if MLflow run was started
         if mlflow_run_active:
             try:
                 mlflow.log_param("training_status", "SETUP_FAILED")
@@ -277,29 +274,24 @@ def run_training(
         final_status = "UNKNOWN"
         error_msg = ""
         if training_loop:
-            # Save final state
+            # Save final state regardless of how the loop ended
             _save_final_state(training_loop)
-            # Cleanup loop actors
             training_loop.cleanup_actors()
-            # Determine final status
             if training_loop.training_exception:
                 final_status = "FAILED"
                 error_msg = str(training_loop.training_exception)
             elif training_loop.training_complete:
                 final_status = "COMPLETED"
             else:
-                final_status = "INTERRUPTED"
+                final_status = "INTERRUPTED"  # Or potentially "STOPPED_EARLY"
         else:
             final_status = "SETUP_FAILED"
 
-        # --- Close TensorBoard Writer --- ADDED ---
         if tb_writer:
             try:
                 tb_writer.flush()
                 tb_writer.close()
                 logger.info("TensorBoard writer closed.")
-                # Log TB dir as artifact AFTER closing
-                # Check if components is not None before accessing persist_config
                 if (
                     mlflow_run_active
                     and tb_log_dir
@@ -320,9 +312,7 @@ def run_training(
                         )
             except Exception as tb_close_err:
                 logger.error(f"Error closing TensorBoard writer: {tb_close_err}")
-        # --- END ADDED ---
 
-        # End MLflow run
         if mlflow_run_active:
             try:
                 mlflow.log_param("training_status", final_status)
@@ -333,7 +323,6 @@ def run_training(
             except Exception as mlf_end_err:
                 logger.error(f"Error ending MLflow run: {mlf_end_err}")
 
-        # Shutdown Ray ONLY if initialized by the setup function in this process
         if ray_initialized_by_setup and ray.is_initialized():
             try:
                 ray.shutdown()
@@ -341,7 +330,6 @@ def run_training(
             except Exception as e:
                 logger.error(f"Error shutting down Ray: {e}", exc_info=True)
 
-        # Close file handler
         root_logger = get_root_logger()
         file_handler = next(
             (h for h in root_logger.handlers if isinstance(h, logging.FileHandler)),

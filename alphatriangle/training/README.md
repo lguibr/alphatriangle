@@ -1,3 +1,4 @@
+
 # Training Module (`alphatriangle.training`)
 
 ## Purpose and Architecture
@@ -15,7 +16,7 @@ This module encapsulates the logic for setting up, running, and managing the **h
     -   Logging progress and rates.
     -   Handling stop requests.
 -   **`worker_manager.py`:** Defines the `WorkerManager` class, responsible for creating, managing, submitting tasks to, and collecting results from the `SelfPlayWorker` actors. **It now passes the `trimcts.SearchConfiguration` and the `run_base_dir` to workers during initialization.**
--   **`loop_helpers.py`:** Contains helper functions used by `TrainingLoop` for tasks like logging rates, validating experiences, and logging results to the `StatsCollectorActor` and TensorBoard. **It constructs the `StepInfo` dictionary containing relevant step counters (`global_step`, `buffer_size`) for logging.** It also includes logic to log the weight update event.
+-   **`loop_helpers.py`:** Contains helper functions used by `TrainingLoop` for tasks like logging rates, validating experiences, and logging results to the `StatsCollectorActor`, TensorBoard, and MLflow. **It constructs the `StepInfo` dictionary containing relevant step counters (`global_step`, `buffer_size`) for logging.** It includes logic to log the weight update event. **It also periodically fetches episode scores, lengths, and step rewards from the `StatsCollectorActor` and logs them to MLflow/TensorBoard.**
 -   **`runner.py`:** Contains the top-level logic for running the headless training pipeline. It handles argument parsing (via CLI), setup logging, calls `setup_training_components`, loads initial state, runs the `TrainingLoop`, and manages overall cleanup (MLflow, TensorBoard, Ray shutdown).
 -   **`runners.py`:** Re-exports the main entry point function (`run_training`) from `runner.py`.
 -   **`logging_utils.py`:** Contains helper functions for setting up file logging, redirecting output (`Tee` class), and logging configurations/metrics to MLflow.

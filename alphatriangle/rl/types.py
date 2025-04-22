@@ -19,6 +19,7 @@ class SelfPlayResult(BaseModel):
     episode_experiences: list[Experience]
     final_score: float
     episode_steps: int
+    trainer_step_at_episode_start: int  # Added field
 
     total_simulations: int = Field(..., ge=0)
     avg_root_visits: float = Field(..., ge=0)
@@ -43,10 +44,8 @@ class SelfPlayResult(BaseModel):
                         isinstance(state_type, dict)
                         and "grid" in state_type
                         and "other_features" in state_type
-                        # REMOVED: and "available_shapes_geometry" in state_type
                         and isinstance(state_type["grid"], np.ndarray)
                         and isinstance(state_type["other_features"], np.ndarray)
-                        # REMOVED: and isinstance(state_type["available_shapes_geometry"], list)
                         and isinstance(policy_map, dict)
                         # Use isinstance with | for multiple types
                         and isinstance(value, float | int)
@@ -81,13 +80,7 @@ class SelfPlayResult(BaseModel):
             logger.warning(
                 f"SelfPlayResult validation: Found {invalid_count} invalid experience structures out of {len(self.episode_experiences)}. Keeping only valid ones."
             )
-            # Note: Modifying self within validator is generally discouraged,
-            # but here we filter invalid data before it propagates.
-            # A cleaner approach might be a separate validation function called after creation.
-            # However, for immediate use, this ensures the validated object has valid experiences.
-            object.__setattr__(
-                self, "episode_experiences", valid_experiences
-            )  # Use object.__setattr__ to bypass Pydantic's immutability during validation
+            object.__setattr__(self, "episode_experiences", valid_experiences)
 
         return self
 

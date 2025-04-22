@@ -1,6 +1,6 @@
 # File: tests/conftest.py
 import random
-from typing import cast  # Import List, Optional, Tuple
+from typing import cast
 
 import numpy as np
 import pytest
@@ -8,10 +8,17 @@ import torch
 import torch.optim as optim
 
 # Import from trianglengin's top level
-from trianglengin import EnvConfig  # Corrected import
+from trianglengin import EnvConfig
+
+# Import trimcts config
+from trimcts import SearchConfiguration
 
 # Keep alphatriangle imports
-from alphatriangle.config import ModelConfig, TrainConfig
+from alphatriangle.config import (
+    ModelConfig,
+    PersistenceConfig,
+    TrainConfig,
+)
 from alphatriangle.nn import NeuralNetwork
 from alphatriangle.rl import ExperienceBuffer, Trainer
 from alphatriangle.utils.types import Experience, StateType
@@ -82,7 +89,7 @@ def mock_train_config() -> TrainConfig:
         RANDOM_SEED=42,
         NUM_SELF_PLAY_WORKERS=1,
         WORKER_DEVICE="cpu",
-        WORKER_UPDATE_FREQ_STEPS=10,
+        WORKER_UPDATE_FREQ_STEPS=10,  # Keep lowered default for tests
         OPTIMIZER_TYPE="Adam",
         LEARNING_RATE=1e-3,
         WEIGHT_DECAY=1e-4,
@@ -97,8 +104,29 @@ def mock_train_config() -> TrainConfig:
         PER_BETA_ANNEAL_STEPS=100,
         PER_EPSILON=1e-5,
         MAX_TRAINING_STEPS=200,
-        N_STEP_RETURNS=3,  # Add default for n-step
-        GAMMA=0.99,  # Add default for gamma
+        N_STEP_RETURNS=3,
+        GAMMA=0.99,
+    )
+
+
+@pytest.fixture(scope="session")
+def mock_persistence_config() -> PersistenceConfig:
+    """Provides a default PersistenceConfig for tests."""
+    return PersistenceConfig(RUN_NAME="test_run_pytest")
+
+
+@pytest.fixture(scope="session")
+def mock_mcts_config() -> SearchConfiguration:
+    """Provides a default trimcts.SearchConfiguration for tests."""
+    # Use low simulation count for tests
+    return SearchConfiguration(
+        max_simulations=8,
+        max_depth=5,
+        cpuct=1.0,
+        dirichlet_alpha=0.3,
+        dirichlet_epsilon=0.25,
+        discount=1.0,
+        mcts_batch_size=4,
     )
 
 
@@ -117,7 +145,6 @@ def mock_state_type(
     return {
         "grid": rng.random(grid_shape, dtype=np.float32),
         "other_features": rng.random(other_shape, dtype=np.float32),
-        # REMOVED: "available_shapes_geometry": mock_geometry_list,
     }
 
 
@@ -186,7 +213,6 @@ def filled_mock_buffer(
         state_copy: StateType = {
             "grid": mock_experience[0]["grid"].copy() + i * 0.01,  # Add smaller noise
             "other_features": mock_experience[0]["other_features"].copy() + i * 0.01,
-            # REMOVED: "available_shapes_geometry": geometry_copy,
         }
 
         # Create a new experience tuple with the copied state

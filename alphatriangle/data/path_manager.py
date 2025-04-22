@@ -45,45 +45,42 @@ class PathManager:
         step: int | None = None,
         is_latest: bool = False,
         is_best: bool = False,
-        is_final: bool = False,
     ) -> Path:
         """Constructs the path for a checkpoint file."""
         target_run_name = run_name if run_name else self.persist_config.RUN_NAME
         base_dir = Path(self.persist_config.get_run_base_dir(target_run_name))
         checkpoint_dir = base_dir / self.persist_config.CHECKPOINT_SAVE_DIR_NAME
+
         if is_latest:
             filename = self.persist_config.LATEST_CHECKPOINT_FILENAME
         elif is_best:
             filename = self.persist_config.BEST_CHECKPOINT_FILENAME
-        elif is_final and step is not None:
-            filename = f"checkpoint_final_step_{step}.pkl"
         elif step is not None:
+            # Always use step number if provided for the specific file
             filename = f"checkpoint_step_{step}.pkl"
         else:
             # Default to latest if no specific type is given
             filename = self.persist_config.LATEST_CHECKPOINT_FILENAME
+
         # Ensure filename ends with .pkl
         filename_pkl = Path(filename).with_suffix(".pkl")
         return checkpoint_dir / filename_pkl
 
     def get_buffer_path(
-        self,
-        run_name: str | None = None,
-        step: int | None = None,
-        is_final: bool = False,
+        self, run_name: str | None = None, step: int | None = None
     ) -> Path:
         """Constructs the path for the replay buffer file."""
         target_run_name = run_name if run_name else self.persist_config.RUN_NAME
         base_dir = Path(self.persist_config.get_run_base_dir(target_run_name))
         buffer_dir = base_dir / self.persist_config.BUFFER_SAVE_DIR_NAME
-        if is_final and step is not None:
-            filename = f"buffer_final_step_{step}.pkl"
-        elif step is not None and self.persist_config.BUFFER_SAVE_FREQ_STEPS > 0:
-            # Use default name for intermediate saves if frequency is set
-            filename = self.persist_config.BUFFER_FILENAME
+
+        if step is not None:
+            # Always use step number if provided for the specific file
+            filename = f"buffer_step_{step}.pkl"
         else:
-            # Default name for initial load or if frequency is not set
+            # Default name for the main buffer link/file
             filename = self.persist_config.BUFFER_FILENAME
+
         return buffer_dir / Path(filename).with_suffix(".pkl")
 
     def get_config_path(self, run_name: str | None = None) -> Path:
@@ -95,44 +92,75 @@ class PathManager:
     def find_latest_run_dir(self, current_run_name: str) -> str | None:
         """
         Finds the most recent *previous* run directory based on timestamp parsing.
-        Assumes run names follow a pattern like 'prefix_YYYYMMDD_HHMMSS'.
+        Assumes run names contain a 'YYYYMMDD_HHMMSS' pattern, potentially with prefixes/suffixes.
         """
         runs_root_dir = self.root_data_dir / self.persist_config.RUNS_DIR_NAME
         potential_runs: list[tuple[datetime.datetime, str]] = []
-        run_name_pattern = re.compile(r"^(?:test_run|train)_(\d{8}_\d{6})$")
+        # Regex: Find YYYYMMDD_HHMMSS pattern anywhere in the name
+        run_name_pattern = re.compile(r"(\d{8}_\d{6})")
+        logger.info(f"Searching for previous runs in: {runs_root_dir}")
+        logger.info(f"Current run name to exclude: {current_run_name}")
+        logger.info(f"Using regex pattern: {run_name_pattern.pattern}")
 
         try:
             if not runs_root_dir.exists():
+                logger.info("Runs root directory does not exist.")
                 return None
 
-            for d in runs_root_dir.iterdir():
+            found_dirs = list(runs_root_dir.iterdir())
+            logger.info(
+                f"Found {len(found_dirs)} items in runs directory: {[d.name for d in found_dirs]}"
+            )
+
+            for d in found_dirs:
+                logger.debug(f"Checking item: {d.name}")
                 if d.is_dir() and d.name != current_run_name:
-                    match = run_name_pattern.match(d.name)
+                    logger.debug(
+                        f"  '{d.name}' is a directory and not the current run."
+                    )
+                    # Use search to find the pattern anywhere
+                    match = run_name_pattern.search(d.name)
                     if match:
                         timestamp_str = match.group(1)
+                        logger.info(
+                            f"  Regex matched! Found timestamp '{timestamp_str}' in '{d.name}'"
+                        )
                         try:
                             run_time = datetime.datetime.strptime(
                                 timestamp_str, "%Y%m%d_%H%M%S"
                             )
                             potential_runs.append((run_time, d.name))
+                            logger.info(
+                                f"  Successfully parsed timestamp and added '{d.name}' to potential runs."
+                            )
                         except ValueError:
                             logger.warning(
-                                f"Could not parse timestamp from directory name: {d.name}"
+                                f"Could not parse timestamp '{timestamp_str}' from directory name: {d.name}"
                             )
                     else:
-                        logger.debug(
-                            f"Directory name {d.name} does not match expected pattern."
+                        logger.info(  # Use INFO to see non-matches clearly
+                            f"  Directory name {d.name} did not match timestamp pattern with regex: {run_name_pattern.pattern}"
                         )
+                elif not d.is_dir():
+                    logger.debug(f"  '{d.name}' is not a directory.")
+                else:
+                    logger.debug(f"  '{d.name}' is the current run directory.")
 
             if not potential_runs:
-                logger.info("No previous run directories found matching the pattern.")
+                logger.info(
+                    "No previous run directories found matching the pattern after filtering."
+                )
                 return None
 
+            # Sort by datetime object (most recent first)
             potential_runs.sort(key=lambda item: item[0], reverse=True)
-            latest_run_name = potential_runs[0][1]
-            logger.debug(
-                f"Found potential previous runs (sorted): {[name for _, name in potential_runs]}. Latest: {latest_run_name}"
+            # Log the sorted list for debugging
+            logger.info(
+                f"Sorted potential runs (most recent first): {[(dt.strftime('%Y%m%d_%H%M%S'), name) for dt, name in potential_runs]}"
             )
+
+            latest_run_name = potential_runs[0][1]
+            logger.info(f"Selected latest previous run: {latest_run_name}")
             return latest_run_name
 
         except Exception as e:
@@ -157,8 +185,12 @@ class PathManager:
                 )
 
         if not checkpoint_to_load and auto_resume:
+            logger.info(
+                f"Attempting to find latest run directory to auto-resume from (current: {current_run_name})."
+            )
             latest_run_name = self.find_latest_run_dir(current_run_name)
             if latest_run_name:
+                # Try loading from the 'latest.pkl' link first
                 potential_latest_path = self.get_checkpoint_path(
                     run_name=latest_run_name, is_latest=True
                 )
@@ -169,7 +201,7 @@ class PathManager:
                     )
                 else:
                     logger.info(
-                        f"Latest checkpoint file not found in latest run directory '{latest_run_name}'."
+                        f"Latest checkpoint file ('{self.persist_config.LATEST_CHECKPOINT_FILENAME}') not found in latest run directory '{latest_run_name}'."
                     )
             else:
                 logger.info("Auto-resume enabled, but no previous run directory found.")
@@ -186,27 +218,32 @@ class PathManager:
         checkpoint_run_name: str | None,
     ) -> Path | None:
         """Determines the buffer file path to load."""
+        buffer_to_load: Path | None = None
+
         if load_path_config:
             load_path = Path(load_path_config)
             if load_path.exists():
                 logger.info(f"Using specified buffer path: {load_path_config}")
-                return load_path.resolve()
+                buffer_to_load = load_path.resolve()
             else:
                 logger.warning(f"Specified buffer path not found: {load_path_config}")
 
-        if checkpoint_run_name:
+        # If not loaded via specific path, try loading from the same run as the checkpoint
+        if not buffer_to_load and checkpoint_run_name:
+            # Try loading the default buffer link first
             potential_buffer_path = self.get_buffer_path(run_name=checkpoint_run_name)
             if potential_buffer_path.exists():
                 logger.info(
-                    f"Loading buffer from checkpoint run '{checkpoint_run_name}': {potential_buffer_path}"
+                    f"Loading buffer from checkpoint run '{checkpoint_run_name}' (using default link): {potential_buffer_path}"
                 )
-                return potential_buffer_path.resolve()
+                buffer_to_load = potential_buffer_path.resolve()
             else:
                 logger.info(
-                    f"Default buffer file not found in checkpoint run directory '{checkpoint_run_name}'."
+                    f"Default buffer file ('{self.persist_config.BUFFER_FILENAME}') not found in checkpoint run directory '{checkpoint_run_name}'."
                 )
 
-        if auto_resume and not checkpoint_run_name:
+        # If still not loaded and auto-resume is on, try the latest previous run
+        if not buffer_to_load and auto_resume and not checkpoint_run_name:
             latest_previous_run_name = self.find_latest_run_dir(
                 self.persist_config.RUN_NAME
             )
@@ -218,14 +255,16 @@ class PathManager:
                     logger.info(
                         f"Auto-resuming buffer from latest previous run '{latest_previous_run_name}' (no checkpoint loaded): {potential_buffer_path}"
                     )
-                    return potential_buffer_path.resolve()
+                    buffer_to_load = potential_buffer_path.resolve()
                 else:
                     logger.info(
                         f"Default buffer file not found in latest run directory '{latest_previous_run_name}'."
                     )
 
-        logger.info("No suitable buffer file found to load.")
-        return None
+        if not buffer_to_load:
+            logger.info("No suitable buffer file found to load.")
+
+        return buffer_to_load
 
     def update_checkpoint_links(self, step_checkpoint_path: Path, is_best: bool):
         """Updates the 'latest' and optionally 'best' checkpoint links."""
@@ -238,6 +277,7 @@ class PathManager:
         latest_path = self.get_checkpoint_path(is_latest=True)
         best_path = self.get_checkpoint_path(is_best=True)
         try:
+            # Use copy2 to preserve metadata, overwrite if exists
             shutil.copy2(step_checkpoint_path, latest_path)
             logger.debug(f"Updated latest checkpoint link to {step_checkpoint_path}")
         except Exception as e:
@@ -252,15 +292,16 @@ class PathManager:
                 logger.error(f"Failed to update best checkpoint link: {e}")
 
     def update_buffer_link(self, step_buffer_path: Path):
-        """Updates the default buffer link."""
+        """Updates the default buffer link ('buffer.pkl')."""
         if not step_buffer_path.exists():
             logger.error(f"Source buffer path does not exist: {step_buffer_path}")
             return
 
-        default_buffer_path = self.get_buffer_path()
+        default_buffer_path = self.get_buffer_path()  # Gets buffer.pkl path
         try:
+            # Use copy2 to preserve metadata, overwrite if exists
             shutil.copy2(step_buffer_path, default_buffer_path)
-            logger.debug(f"Updated default buffer file: {default_buffer_path}")
+            logger.debug(f"Updated default buffer file link: {default_buffer_path}")
         except Exception as e_default:
             logger.error(
                 f"Error updating default buffer file {default_buffer_path}: {e_default}"

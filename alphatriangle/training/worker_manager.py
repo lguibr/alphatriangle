@@ -1,4 +1,5 @@
 # File: alphatriangle/training/worker_manager.py
+# File: alphatriangle/training/worker_manager.py
 import logging
 from typing import TYPE_CHECKING
 
@@ -185,8 +186,8 @@ class WorkerManager:
             return
         try:
             ray.get(all_tasks, timeout=120.0)
-            logger.debug(
-                f"Worker networks updated for {len(active_workers)} workers to step {global_step}."
+            logger.info(
+                f"Worker networks updated successfully for {len(active_workers)} workers to step {global_step}."
             )
         except ray.exceptions.RayActorError as e:
             logger.error(
