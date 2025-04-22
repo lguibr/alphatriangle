@@ -118,7 +118,7 @@ def save_train_config_module(
     """TrainConfig for the initial 'save' run (module-scoped)."""
     return mock_train_config.model_copy(
         update={
-            "MAX_TRAINING_STEPS": 6,  # Save at step 5
+            "MAX_TRAINING_STEPS": 6,  # Save at step 5, finish after step 6
             "CHECKPOINT_SAVE_FREQ_STEPS": 5,
             "BUFFER_SAVE_FREQ_STEPS": 5,
             "MIN_BUFFER_SIZE_TO_TRAIN": 2,
@@ -140,10 +140,13 @@ def resume_train_config_module(
     return save_train_config_module.model_copy(
         update={
             "AUTO_RESUME_LATEST": True,
-            "MAX_TRAINING_STEPS": 11,  # Run a few more steps
+            "MAX_TRAINING_STEPS": 8,  # Resume from 6, run steps 7, 8
             "RUN_NAME": resume_run_name,  # Use fixed run name
             "LOAD_CHECKPOINT_PATH": None,  # Ensure auto-resume is tested
             "LOAD_BUFFER_PATH": None,
+            # No need to save frequently during resume test
+            "CHECKPOINT_SAVE_FREQ_STEPS": 100,
+            "BUFFER_SAVE_FREQ_STEPS": 100,
         }
     )
 
@@ -288,9 +291,9 @@ def test_resume_state(
     serializer = Serializer()
     final_checkpoint = serializer.load_checkpoint(latest_ckpt_path)
     assert final_checkpoint is not None
-    # Resumed from 6, ran until 11 (MAX_TRAINING_STEPS)
-    assert final_checkpoint.global_step == 11, (
-        f"Expected final step 11 after resume, got {final_checkpoint.global_step}"
+    # Resumed from 6, ran until 8 (MAX_TRAINING_STEPS)
+    assert final_checkpoint.global_step == 8, (
+        f"Expected final step 8 after resume, got {final_checkpoint.global_step}"
     )
 
     logging.info("Resume state test passed.")
