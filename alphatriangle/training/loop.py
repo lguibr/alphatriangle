@@ -6,7 +6,9 @@ from typing import TYPE_CHECKING, Any
 import ray
 
 from ..rl import SelfPlayResult
-from ..stats.types import RawMetricEvent  # ADDED
+
+# Update import to use the new filename
+from ..stats.stats_types import RawMetricEvent
 from .loop_helpers import LoopHelpers
 from .worker_manager import WorkerManager
 

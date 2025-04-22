@@ -15,11 +15,11 @@ AlphaTriangle is a project implementing an artificial intelligence agent based o
 *   **High-Performance MCTS:** Integrates the [`trimcts>=1.2.1`](https://github.com/lguibr/trimcts) library, providing a **C++ implementation of MCTS** for efficient search, callable from Python. MCTS parameters are configurable via `alphatriangle/config/mcts_config.py`.
 *   **Deep Learning Model:** Features a PyTorch neural network with policy and distributional value heads, convolutional layers, and **optional Transformer Encoder layers**.
 *   **Parallel Self-Play:** Leverages **Ray** for distributed self-play data generation across multiple CPU cores. **The number of workers automatically adjusts based on detected CPU cores (reserving some for stability), capped by the `NUM_SELF_PLAY_WORKERS` setting in `TrainConfig`.**
-*   **Experiment Tracking:** Uses **MLflow** and **TensorBoard** for logging parameters, metrics, and artifacts, enabling web-based monitoring.
+*   **Experiment Tracking:** Uses **MLflow** and **TensorBoard** for logging parameters, metrics, and artifacts, enabling web-based monitoring. All persistent data is stored within the `.alphatriangle_data` directory.
 *   **Headless Training:** Focuses on a command-line interface for running the training pipeline without visual output.
 *   **Enhanced CLI:** Uses the **`rich`** library for improved visual feedback (colors, panels, emojis) in the terminal.
-*   **Centralized Logging:** Uses Python's standard `logging` module configured centrally for consistent log formatting (including `▲` prefix) and level control across the project.
-*   **Optional Profiling:** Supports profiling worker 0 using `cProfile` via a command-line flag.
+*   **Centralized Logging:** Uses Python's standard `logging` module configured centrally for consistent log formatting (including `▲` prefix) and level control across the project. Run logs are saved to `.alphatriangle_data/runs/<run_name>/logs/`.
+*   **Optional Profiling:** Supports profiling worker 0 using `cProfile` via a command-line flag. Profile data is saved to `.alphatriangle_data/runs/<run_name>/profile_data/`.
 *   **Unit Tests:** Includes tests for RL components.
 
 ---
@@ -40,8 +40,8 @@ This project trains an agent to play the game defined by the `trianglengin` libr
 *   **Ray:** For parallelizing self-play data generation and statistics collection across multiple CPU cores/processes. **Dynamically scales worker count based on available cores.**
 *   **Numba:** (Optional, used in `features.grid_features`) For performance optimization of specific grid calculations.
 *   **Cloudpickle:** For serializing the experience replay buffer and training checkpoints.
-*   **MLflow:** For logging parameters, metrics, and artifacts (checkpoints, buffers) during training runs. **Provides the primary web UI dashboard for experiment management.**
-*   **TensorBoard:** For visualizing metrics during training (e.g., detailed loss curves). **Provides a secondary web UI dashboard, often with faster graph updates.**
+*   **MLflow:** For logging parameters, metrics, and artifacts (checkpoints, buffers) during training runs. **Provides the primary web UI dashboard for experiment management. Data stored in `.alphatriangle_data/mlruns/`.**
+*   **TensorBoard:** For visualizing metrics during training (e.g., detailed loss curves). **Provides a secondary web UI dashboard. Data stored in `.alphatriangle_data/runs/<run_name>/tensorboard/`.**
 *   **Pydantic:** For configuration management and data validation.
 *   **Typer:** For the command-line interface.
 *   **Rich:** For enhanced CLI output formatting and styling.
@@ -54,21 +54,27 @@ This project trains an agent to play the game defined by the `trianglengin` libr
 ├── .github/workflows/      # GitHub Actions CI/CD
 │   └── ci_cd.yml
 ├── .alphatriangle_data/    # Root directory for ALL persistent data (GITIGNORED)
-│   ├── mlruns/             # MLflow internal tracking data & artifact store (for UI)
-│   └── runs/               # Local artifacts per run (checkpoints, buffers, TB logs, configs)
-│       └── <run_name>/
-│           ├── checkpoints/ # Saved model weights & optimizer states
-│           ├── buffers/     # Saved experience replay buffers (containing StateType features)
-│           ├── logs/        # Plain text log files for the run (with ▲ prefix)
-│           ├── tensorboard/ # TensorBoard log files (scalars, etc.)
-│           ├── profile_data/ # cProfile output files (.prof) if profiling enabled
+│   ├── mlruns/             # MLflow internal tracking data & artifact store (for MLflow UI)
+│   │   └── <experiment_id>/
+│   │       └── <mlflow_run_id>/
+│   │           ├── artifacts/ # MLflow's copy of logged artifacts (checkpoints, buffers, etc.)
+│   │           ├── metrics/
+│   │           ├── params/
+│   │           └── tags/
+│   └── runs/               # Local artifacts per run (source for TensorBoard UI & resume)
+│       └── <run_name>/     # e.g., train_YYYYMMDD_HHMMSS
+│           ├── checkpoints/ # Saved model weights & optimizer states (*.pkl)
+│           ├── buffers/     # Saved experience replay buffers (*.pkl)
+│           ├── logs/        # Plain text log files for the run (*.log)
+│           ├── tensorboard/ # TensorBoard log files (event files)
+│           ├── profile_data/ # cProfile output files (*.prof) if profiling enabled
 │           └── configs.json # Copy of run configuration
 ├── alphatriangle/          # Source code for the AlphaZero agent package
 │   ├── __init__.py
 │   ├── cli.py              # CLI logic (train, ml, tb, ray commands - headless only, uses Rich)
 │   ├── config/             # Pydantic configuration models (Model, Train, Persistence, MCTS, Stats)
 │   │   └── README.md
-│   ├── data/               # Data saving/loading logic (DataManager, Schemas)
+│   ├── data/               # Data saving/loading logic (DataManager, Schemas, PathManager, Serializer)
 │   │   └── README.md
 │   ├── features/           # Feature extraction logic (operates on trianglengin.GameState)
 │   │   └── README.md
@@ -77,9 +83,9 @@ This project trains an agent to play the game defined by the `trianglengin` libr
 │   │   └── README.md
 │   ├── rl/                 # RL components (Trainer, Buffer, Worker using trimcts)
 │   │   └── README.md
-│   ├── stats/              # Statistics collection actor (StatsCollectorActor)
+│   ├── stats/              # Statistics collection actor (StatsCollectorActor, StatsProcessor)
 │   │   └── README.md
-│   ├── training/           # Training orchestration (Loop, Setup, Runner)
+│   ├── training/           # Training orchestration (Loop, Setup, Runner, WorkerManager)
 │   │   └── README.md
 │   └── utils/              # Shared utilities and types (specific to AlphaTriangle)
 │       └── README.md
@@ -101,14 +107,14 @@ This project trains an agent to play the game defined by the `trianglengin` libr
 ## Key Modules (`alphatriangle`)
 
 *   **`cli`:** Defines the command-line interface using Typer (**`train`**, **`ml`**, **`tb`**, **`ray`** commands - headless). Uses **`rich`** for styling. ([`alphatriangle/cli.py`](alphatriangle/cli.py))
-*   **`config`:** Centralized Pydantic configuration classes (Model, Train, Persistence, **MCTS**, **Stats**). ([`alphatriangle/config/README.md`](alphatriangle/config/README.md))
+*   **`config`:** Centralized Pydantic configuration classes (Model, Train, Persistence, **MCTS**, **Stats**). Imports `EnvConfig` from `trianglengin`. ([`alphatriangle/config/README.md`](alphatriangle/config/README.md))
 *   **`features`:** Contains logic to convert `trianglengin.GameState` objects into numerical features (`StateType`). ([`alphatriangle/features/README.md`](alphatriangle/features/README.md))
 *   **`logging_config`:** Defines the `setup_logging` function for centralized logger configuration. ([`alphatriangle/logging_config.py`](alphatriangle/logging_config.py))
 *   **`nn`:** Contains the PyTorch `nn.Module` definition (`AlphaTriangleNet`) and a wrapper class (`NeuralNetwork`). **The `NeuralNetwork` class implicitly conforms to the `trimcts.AlphaZeroNetworkInterface` protocol.** ([`alphatriangle/nn/README.md`](alphatriangle/nn/README.md))
 *   **`rl`:** Contains RL components: `Trainer` (network updates), `ExperienceBuffer` (data storage, **supports PER**), and `SelfPlayWorker` (Ray actor for parallel self-play **using `trimcts.run_mcts`**). ([`alphatriangle/rl/README.md`](alphatriangle/rl/README.md))
 *   **`training`:** Orchestrates the **headless** training process using `TrainingLoop`, managing workers, data flow, logging (via centralized setup), and checkpoints. Includes `runner.py` for the callable training function. ([`alphatriangle/training/README.md`](alphatriangle/training/README.md))
-*   **`stats`:** Contains the `StatsCollectorActor` (Ray actor) for asynchronous statistics collection. ([`alphatriangle/stats/README.md`](alphatriangle/stats/README.md))
-*   **`data`:** Manages saving and loading of training artifacts (`DataManager`) using Pydantic schemas and `cloudpickle`. ([`alphatriangle/data/README.md`](alphatriangle/data/README.md))
+*   **`stats`:** Contains the `StatsCollectorActor` (Ray actor) for asynchronous statistics collection and the `StatsProcessor` for aggregation/logging. ([`alphatriangle/stats/README.md`](alphatriangle/stats/README.md))
+*   **`data`:** Manages saving and loading of training artifacts (`DataManager`, `PathManager`, `Serializer`) using Pydantic schemas and `cloudpickle`. ([`alphatriangle/data/README.md`](alphatriangle/data/README.md))
 *   **`utils`:** Provides common helper functions and shared type definitions specific to the AlphaZero implementation. ([`alphatriangle/utils/README.md`](alphatriangle/utils/README.md))
 
 ## Setup
@@ -147,8 +153,8 @@ This project trains an agent to play the game defined by the `trianglengin` libr
             pip install -e .[dev] # Installs dev deps from pyproject.toml
             ```
     *Note: Ensure you have the correct PyTorch version installed for your system (CPU/CUDA/MPS). See [pytorch.org](https://pytorch.org/). Ray may have specific system requirements. `trianglengin` and `trimcts` require a C++ compiler (like GCC, Clang, or MSVC) and CMake.*
-4.  **(Optional) Add data directory to `.gitignore`:**
-    Create or edit the `.gitignore` file in your project root and add the line:
+4.  **(Optional but Recommended) Add data directory to `.gitignore`:**
+    Ensure the `.gitignore` file in your project root contains the line:
     ```
     .alphatriangle_data/
     ```
@@ -165,17 +171,17 @@ Use the `alphatriangle` command for training and monitoring. The CLI uses `rich`
     ```bash
     alphatriangle train [--seed 42] [--log-level INFO] [--profile]
     ```
-    *   `--log-level`: Set console/file logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default: INFO.
+    *   `--log-level`: Set console/file logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default: INFO. Logs are saved to `.alphatriangle_data/runs/<run_name>/logs/`.
     *   `--seed`: Set the random seed for reproducibility. Default: 42.
     *   `--profile`: Enable cProfile for worker 0. Generates `.prof` files in `.alphatriangle_data/runs/<run_name>/profile_data/`.
 *   **Launch MLflow UI:**
-    Launches the MLflow web interface, automatically finding the `.alphatriangle_data/mlruns` directory.
+    Launches the MLflow web interface, automatically pointing to the `.alphatriangle_data/mlruns` directory.
     ```bash
     alphatriangle ml [--host 127.0.0.1] [--port 5000]
     ```
     Access via `http://localhost:5000` (or the specified host/port).
 *   **Launch TensorBoard UI:**
-    Launches the TensorBoard web interface, automatically finding the `.alphatriangle_data/runs` directory.
+    Launches the TensorBoard web interface, automatically pointing to the `.alphatriangle_data/runs` directory (which contains the individual run subdirectories with `tensorboard` logs).
     ```bash
     alphatriangle tb [--host 127.0.0.1] [--port 6006]
     ```
@@ -209,7 +215,8 @@ All major parameters for the AlphaZero agent (Model, Training, Persistence, **MC
 
 ## Data Storage
 
-All persistent data is stored within the `.alphatriangle_data/` directory in the project root.
+All persistent data is stored within the `.alphatriangle_data/` directory in the project root. This directory should be added to your `.gitignore`.
+
 *   **`.alphatriangle_data/mlruns/`**: Managed by **MLflow**. Contains MLflow's internal tracking data (parameters, metrics) and its own copy of logged artifacts. This is the source for the MLflow UI (`alphatriangle ml`).
 *   **`.alphatriangle_data/runs/`**: Managed by **DataManager**. Contains locally saved artifacts for each run (checkpoints, buffers, TensorBoard logs, configs, **profile data**) before/during logging to MLflow. This directory is used for auto-resuming and is the source for the TensorBoard UI (`alphatriangle tb`).
     *   **Replay Buffer Content:** The saved buffer file (`buffer.pkl`) contains `Experience` tuples: `(StateType, PolicyTargetMapping, n_step_return)`. The `StateType` includes:

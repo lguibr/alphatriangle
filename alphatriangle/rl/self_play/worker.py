@@ -14,7 +14,7 @@ from trimcts import SearchConfiguration, run_mcts
 from ...config import ModelConfig, TrainConfig
 from ...features import extract_state_features
 from ...nn import NeuralNetwork
-from ...stats.types import RawMetricEvent
+from ...stats.stats_types import RawMetricEvent
 from ...utils import get_device, set_random_seeds
 from ..types import SelfPlayResult
 from .mcts_helpers import (

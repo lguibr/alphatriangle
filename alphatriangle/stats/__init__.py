@@ -6,7 +6,9 @@ and processes/logs them according to configuration.
 
 from .collector import StatsCollectorActor
 from .processor import StatsProcessor
-from .types import LogContext, MetricConfig, RawMetricEvent, StatsConfig
+
+# Update import to use the new filename
+from .stats_types import LogContext, MetricConfig, RawMetricEvent, StatsConfig
 
 __all__ = [
     # Core Collector Actor

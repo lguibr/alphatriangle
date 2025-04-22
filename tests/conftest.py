@@ -106,13 +106,19 @@ def mock_train_config() -> TrainConfig:
         N_STEP_RETURNS=3,
         GAMMA=0.99,
         PROFILE_WORKERS=False,  # Added default for tests
+        RUN_NAME="pytest_default_run",  # Add a default run name
     )
 
 
 @pytest.fixture(scope="session")
-def mock_persistence_config() -> PersistenceConfig:
-    """Provides a default PersistenceConfig for tests."""
-    return PersistenceConfig(RUN_NAME="test_run_pytest")
+def mock_persistence_config(tmp_path_factory) -> PersistenceConfig:
+    """Provides a PersistenceConfig using a temporary directory (session-scoped)."""
+    # Create a base temporary directory for the session
+    base_tmp_dir = tmp_path_factory.mktemp("alphatriangle_test_data_session")
+    return PersistenceConfig(
+        ROOT_DATA_DIR=str(base_tmp_dir),  # Use the session-scoped temp dir
+        RUN_NAME="test_run_pytest",  # Keep a default run name for tests
+    )
 
 
 @pytest.fixture(scope="session")

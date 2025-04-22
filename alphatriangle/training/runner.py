@@ -3,7 +3,7 @@ import logging
 import sys
 import time
 import traceback
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import mlflow
 import ray
@@ -17,18 +17,25 @@ from .logging_utils import log_configs_to_mlflow  # Keep MLflow helper
 from .loop import TrainingLoop
 from .setup import count_parameters, setup_training_components
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 logger = logging.getLogger(__name__)
 
 
-def _initialize_mlflow(persist_config: PersistenceConfig, run_name: str) -> bool:
-    """Sets up MLflow tracking and starts a run."""
+def _initialize_mlflow(
+    persist_config: PersistenceConfig, run_name: str, log_file_path: "Path | None"
+) -> bool:
+    """Sets up MLflow tracking and starts a run. Optionally logs the log file."""
     try:
-        mlflow_abs_path = persist_config.get_mlflow_abs_path()
+        # Use the computed property which resolves the path and creates the dir
         mlflow_tracking_uri = persist_config.MLFLOW_TRACKING_URI
+        mlflow_abs_path = persist_config.get_mlflow_abs_path()
         logger.info(f"Resolved MLflow absolute path: {mlflow_abs_path}")
         logger.info(f"Using MLflow tracking URI: {mlflow_tracking_uri}")
 
-        Path(mlflow_abs_path).mkdir(parents=True, exist_ok=True)
+        # Ensure the directory exists (PersistenceConfig property handles this now)
+        # Path(mlflow_abs_path).mkdir(parents=True, exist_ok=True) # No longer needed here
 
         mlflow.set_tracking_uri(mlflow_tracking_uri)
         mlflow.set_experiment(APP_NAME)
@@ -38,6 +45,23 @@ def _initialize_mlflow(persist_config: PersistenceConfig, run_name: str) -> bool
         active_run = mlflow.active_run()
         if active_run:
             logger.info(f"MLflow Run started (ID: {active_run.info.run_id}).")
+            # Log the log file artifact *if* it exists
+            if log_file_path and log_file_path.exists():
+                try:
+                    # Log the file into an 'logs' artifact directory
+                    mlflow.log_artifact(str(log_file_path), artifact_path="logs")
+                    logger.info(f"Logged log file artifact: {log_file_path.name}")
+                except Exception as log_artifact_err:
+                    logger.error(
+                        f"Failed to log log file to MLflow: {log_artifact_err}"
+                    )
+            elif log_file_path:
+                logger.warning(
+                    f"Log file path provided but does not exist, skipping MLflow artifact logging: {log_file_path}"
+                )
+            else:
+                logger.info("No log file path provided, skipping MLflow artifact log.")
+
             return True
         else:
             logger.error("MLflow run failed to start.")
@@ -107,6 +131,7 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
             if not hasattr(components.buffer, "tree") or components.buffer.tree is None:
                 components.buffer.tree = SumTree(components.buffer.capacity)
             else:
+                # Re-initialize SumTree to ensure correct state
                 components.buffer.tree = SumTree(components.buffer.capacity)
 
             max_p = 1.0
@@ -169,12 +194,15 @@ def run_training(
     file_handler: logging.FileHandler | None = None
     ray_initialized_by_setup = False
     mlflow_run_active = False
-    tb_log_dir: str | None = None
+    tb_log_dir: Path | None = None  # Use Path object
 
     try:
         # --- Setup File Logging Path ---
         # Determine log file path before setting up logging
-        log_dir = Path(persist_config_override.get_run_base_dir()) / "logs"
+        log_dir = (
+            persist_config_override.get_run_base_dir()
+            / persist_config_override.LOG_DIR_NAME
+        )
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file_path = log_dir / f"{train_config_override.RUN_NAME}_train.log"
 
@@ -189,7 +217,7 @@ def run_training(
         tb_log_dir = persist_config_override.get_tensorboard_log_dir()
         if tb_log_dir:
             try:
-                Path(tb_log_dir).mkdir(parents=True, exist_ok=True)
+                tb_log_dir.mkdir(parents=True, exist_ok=True)
                 logger.info(f"Ensured TensorBoard log directory exists: {tb_log_dir}")
             except Exception as e:
                 logger.error(
@@ -200,19 +228,20 @@ def run_training(
             logger.warning("Could not determine TensorBoard log directory path.")
 
         # --- Setup Components (includes Ray init, StatsActor init) ---
-        # Pass tb_log_dir and profile flag
+        # Pass tb_log_dir as string and profile flag
         components, ray_initialized_by_setup = setup_training_components(
             train_config_override,
             persist_config_override,
-            tb_log_dir,
+            str(tb_log_dir) if tb_log_dir else None,
             profile,  # Pass profile flag
         )
         if not components:
             raise RuntimeError("Failed to initialize training components.")
 
         # --- Initialize MLflow ---
+        # Pass log_file_path to _initialize_mlflow
         mlflow_run_active = _initialize_mlflow(
-            components.persist_config, components.train_config.RUN_NAME
+            components.persist_config, components.train_config.RUN_NAME, log_file_path
         )
         if mlflow_run_active:
             log_configs_to_mlflow(components)
@@ -222,17 +251,14 @@ def run_training(
             )
             mlflow.log_param("model_total_params", total_params)
             mlflow.log_param("model_trainable_params", trainable_params)
-            if log_file_path:
-                try:
-                    mlflow.log_artifact(str(log_file_path), artifact_path="logs")
-                except Exception as log_artifact_err:
-                    logger.error(
-                        f"Failed to log log file to MLflow: {log_artifact_err}"
-                    )
+
+            # Logging of log file artifact moved inside _initialize_mlflow
+
             if tb_log_dir and mlflow_run_active:
                 try:
-                    relative_tb_path = Path(tb_log_dir).relative_to(
-                        Path(components.persist_config.get_run_base_dir()).parent
+                    # Log the relative path to the TB dir as a parameter
+                    relative_tb_path = tb_log_dir.relative_to(
+                        components.persist_config.get_runs_root_dir()
                     )
                     mlflow.log_param("tensorboard_log_dir", str(relative_tb_path))
                 except Exception as tb_param_err:
@@ -252,10 +278,23 @@ def run_training(
         # --- Determine Exit Code ---
         if training_loop.training_complete:
             exit_code = 0
+            logger.info(
+                f"Training run '[bold cyan]{components.train_config.RUN_NAME}[/]' completed successfully.",
+                extra={"markup": True},
+            )
         elif training_loop.training_exception:
             exit_code = 1
+            logger.error(
+                f"Training run '[bold cyan]{components.train_config.RUN_NAME}[/]' failed due to exception: {training_loop.training_exception}",
+                extra={"markup": True},
+            )
         else:
-            exit_code = 1
+            # If stopped manually or for other reasons without exception/completion
+            exit_code = 0  # Consider manual stop successful
+            logger.warning(
+                f"Training run '[bold cyan]{components.train_config.RUN_NAME}[/]' stopped before completion.",
+                extra={"markup": True},
+            )
 
     except Exception as e:
         logger.critical(
@@ -274,7 +313,7 @@ def run_training(
         # --- Cleanup ---
         final_status = "UNKNOWN"
         error_msg = ""
-        if training_loop:
+        if training_loop and components:  # Check components exist too
             _save_final_state(training_loop)
             training_loop.cleanup_actors()
             if training_loop.training_exception:
@@ -284,19 +323,25 @@ def run_training(
                 final_status = "COMPLETED"
             else:
                 final_status = "INTERRUPTED"
-        else:
+        elif not components:
             final_status = "SETUP_FAILED"
+            error_msg = "Component setup failed"
+        else:  # components exist but training_loop doesn't (error during loop init)
+            final_status = "SETUP_FAILED"
+            error_msg = "Training loop initialization failed"
 
+        # Log final TensorBoard artifacts if the directory exists
         if (
             mlflow_run_active
             and tb_log_dir
-            and Path(tb_log_dir).exists()
+            and tb_log_dir.exists()
             and components is not None
         ):
             try:
-                time.sleep(1)
+                time.sleep(1)  # Allow final writes
+                # Log the entire TB directory relative to the run base dir
                 mlflow.log_artifacts(
-                    tb_log_dir,
+                    str(tb_log_dir),
                     artifact_path=components.persist_config.TENSORBOARD_DIR_NAME,
                 )
                 logger.info(

@@ -126,6 +126,7 @@ class DataManager:
         """
         Saves the training state using Serializer and PathManager.
         Saves step-specific files and updates 'latest'/'best' links.
+        Logs artifacts to MLflow.
         """
         run_name = self.persist_config.RUN_NAME
         logger.info(
@@ -135,7 +136,6 @@ class DataManager:
         stats_collector_state = {}
         if stats_collector_actor is not None:
             try:
-                # Call remote method on the handle
                 stats_state_ref = stats_collector_actor.get_state.remote()
                 stats_collector_state = ray.get(stats_state_ref, timeout=5.0)
             except Exception as e:
@@ -158,18 +158,14 @@ class DataManager:
                 optimizer_state_dict=self.serializer.prepare_optimizer_state(optimizer),
                 stats_collector_state=stats_collector_state,
             )
-            # Get path for the step-specific file
             step_checkpoint_path = self.path_manager.get_checkpoint_path(
                 step=global_step
             )
             self.serializer.save_checkpoint(checkpoint_data, step_checkpoint_path)
-            saved_checkpoint_path = step_checkpoint_path  # Store path if save succeeded
-
-            # Update latest/best links using the step-specific file as source
+            saved_checkpoint_path = step_checkpoint_path
             self.path_manager.update_checkpoint_links(
                 step_checkpoint_path, is_best=is_best
             )
-
         except ValidationError as e:
             logger.error(f"Failed to create CheckpointData model: {e}", exc_info=True)
         except Exception as e:
@@ -181,13 +177,11 @@ class DataManager:
             try:
                 buffer_data = self.serializer.prepare_buffer_data(buffer)
                 if buffer_data:
-                    # Get path for the step-specific buffer file
                     step_buffer_path = self.path_manager.get_buffer_path(
                         step=global_step
                     )
                     self.serializer.save_buffer(buffer_data, step_buffer_path)
-                    saved_buffer_path = step_buffer_path  # Store path if save succeeded
-                    # Update the default buffer link (buffer.pkl)
+                    saved_buffer_path = step_buffer_path
                     self.path_manager.update_buffer_link(step_buffer_path)
                 else:
                     logger.warning("Buffer data preparation failed, buffer not saved.")
@@ -205,47 +199,46 @@ class DataManager:
         buffer_path: Path | None,
         is_best: bool,
     ):
-        """Logs saved step-specific files and links to MLflow."""
+        """Logs saved step-specific files and links to MLflow using relative artifact paths."""
         try:
             # Log Checkpoint Artifacts
             if checkpoint_path and checkpoint_path.exists():
-                ckpt_artifact_path = self.persist_config.CHECKPOINT_SAVE_DIR_NAME
+                # Define the artifact path within the MLflow run
+                ckpt_artifact_dir = self.persist_config.CHECKPOINT_SAVE_DIR_NAME
                 # Log the step-specific file
                 mlflow.log_artifact(
-                    str(checkpoint_path), artifact_path=ckpt_artifact_path
+                    str(checkpoint_path), artifact_path=ckpt_artifact_dir
                 )
                 # Log the 'latest.pkl' link
                 latest_path = self.path_manager.get_checkpoint_path(is_latest=True)
                 if latest_path.exists():
                     mlflow.log_artifact(
-                        str(latest_path), artifact_path=ckpt_artifact_path
+                        str(latest_path), artifact_path=ckpt_artifact_dir
                     )
                 # Log the 'best.pkl' link if applicable
                 if is_best:
                     best_path = self.path_manager.get_checkpoint_path(is_best=True)
                     if best_path.exists():
                         mlflow.log_artifact(
-                            str(best_path), artifact_path=ckpt_artifact_path
+                            str(best_path), artifact_path=ckpt_artifact_dir
                         )
                 logger.info(
-                    f"Logged checkpoint artifacts (step, latest, best={is_best}) to MLflow path: {ckpt_artifact_path}"
+                    f"Logged checkpoint artifacts (step, latest, best={is_best}) to MLflow path: {ckpt_artifact_dir}"
                 )
 
             # Log Buffer Artifacts
             if buffer_path and buffer_path.exists():
-                buffer_artifact_path = self.persist_config.BUFFER_SAVE_DIR_NAME
+                buffer_artifact_dir = self.persist_config.BUFFER_SAVE_DIR_NAME
                 # Log the step-specific buffer file
-                mlflow.log_artifact(
-                    str(buffer_path), artifact_path=buffer_artifact_path
-                )
+                mlflow.log_artifact(str(buffer_path), artifact_path=buffer_artifact_dir)
                 # Log the default buffer link ('buffer.pkl')
                 default_buffer_path = self.path_manager.get_buffer_path()
                 if default_buffer_path.exists():
                     mlflow.log_artifact(
-                        str(default_buffer_path), artifact_path=buffer_artifact_path
+                        str(default_buffer_path), artifact_path=buffer_artifact_dir
                     )
                 logger.info(
-                    f"Logged buffer artifacts (step, default link) to MLflow path: {buffer_artifact_path}"
+                    f"Logged buffer artifacts (step, default link) to MLflow path: {buffer_artifact_dir}"
                 )
         except Exception as e:
             logger.error(f"Failed to log artifacts to MLflow: {e}", exc_info=True)
@@ -256,7 +249,13 @@ class DataManager:
             config_path = self.path_manager.get_config_path()
             config_path.parent.mkdir(parents=True, exist_ok=True)
             self.serializer.save_config_json(configs, config_path)
-            mlflow.log_artifact(str(config_path), artifact_path="config")
+            # Log the config file to the root of the MLflow artifacts using its filename
+            mlflow.log_artifact(
+                str(config_path), artifact_path=self.persist_config.CONFIG_FILENAME
+            )
+            logger.info(
+                f"Run config saved locally to {config_path} and logged to MLflow as '{self.persist_config.CONFIG_FILENAME}'."
+            )
         except Exception as e:
             logger.error(f"Failed to save/log run config JSON: {e}", exc_info=True)
 

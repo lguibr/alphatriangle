@@ -11,7 +11,7 @@ import pytest
 from alphatriangle.config import StatsConfig, TrainConfig  # Import StatsConfig
 from alphatriangle.data import DataManager, PathManager
 from alphatriangle.rl import ExperienceBuffer, SelfPlayResult, Trainer
-from alphatriangle.stats.types import RawMetricEvent  # Import RawMetricEvent
+from alphatriangle.stats.stats_types import RawMetricEvent  # Import RawMetricEvent
 from alphatriangle.training import TrainingComponents, TrainingLoop
 from alphatriangle.training.loop_helpers import LoopHelpers
 from alphatriangle.training.worker_manager import WorkerManager

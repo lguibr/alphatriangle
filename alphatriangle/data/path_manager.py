@@ -1,4 +1,3 @@
-# File: alphatriangle/data/path_manager.py
 import datetime
 import logging
 import re
@@ -17,18 +16,37 @@ class PathManager:
 
     def __init__(self, persist_config: "PersistenceConfig"):
         self.persist_config = persist_config
-        self.root_data_dir = Path(self.persist_config.ROOT_DATA_DIR)
+        # Resolve root data dir immediately
+        self.root_data_dir = self._resolve_root_data_dir()
         self._update_paths()  # Initialize paths based on config
+
+    def _resolve_root_data_dir(self) -> Path:
+        """Resolves ROOT_DATA_DIR to an absolute path relative to the project root."""
+        project_root = Path.cwd()  # Assume running from project root
+        root_path = project_root / self.persist_config.ROOT_DATA_DIR
+        return root_path.resolve()
 
     def _update_paths(self):
         """Updates paths based on the current RUN_NAME in persist_config."""
-        self.run_base_dir = Path(self.persist_config.get_run_base_dir())
+        self.run_base_dir = self.get_run_base_dir()  # Use method to get absolute path
         self.checkpoint_dir = (
             self.run_base_dir / self.persist_config.CHECKPOINT_SAVE_DIR_NAME
         )
         self.buffer_dir = self.run_base_dir / self.persist_config.BUFFER_SAVE_DIR_NAME
         self.log_dir = self.run_base_dir / self.persist_config.LOG_DIR_NAME
+        self.tb_log_dir = self.run_base_dir / self.persist_config.TENSORBOARD_DIR_NAME
+        self.profile_dir = self.run_base_dir / self.persist_config.PROFILE_DIR_NAME
         self.config_path = self.run_base_dir / self.persist_config.CONFIG_FILENAME
+
+    def get_runs_root_dir(self) -> Path:
+        """Gets the absolute path to the directory containing all runs."""
+        return self.root_data_dir / self.persist_config.RUNS_DIR_NAME
+
+    def get_run_base_dir(self, run_name: str | None = None) -> Path:
+        """Gets the absolute base directory path for a specific run."""
+        runs_root = self.get_runs_root_dir()
+        name = run_name if run_name else self.persist_config.RUN_NAME
+        return runs_root / name
 
     def create_run_directories(self):
         """Creates necessary directories for the current run."""
@@ -36,6 +54,8 @@ class PathManager:
         self.run_base_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.tb_log_dir.mkdir(parents=True, exist_ok=True)
+        self.profile_dir.mkdir(parents=True, exist_ok=True)  # Create profile dir
         if self.persist_config.SAVE_BUFFER:
             self.buffer_dir.mkdir(parents=True, exist_ok=True)
 
@@ -46,36 +66,33 @@ class PathManager:
         is_latest: bool = False,
         is_best: bool = False,
     ) -> Path:
-        """Constructs the path for a checkpoint file."""
-        target_run_name = run_name if run_name else self.persist_config.RUN_NAME
-        base_dir = Path(self.persist_config.get_run_base_dir(target_run_name))
-        checkpoint_dir = base_dir / self.persist_config.CHECKPOINT_SAVE_DIR_NAME
+        """Constructs the absolute path for a checkpoint file."""
+        target_run_base_dir = self.get_run_base_dir(run_name)
+        checkpoint_dir = (
+            target_run_base_dir / self.persist_config.CHECKPOINT_SAVE_DIR_NAME
+        )
 
         if is_latest:
             filename = self.persist_config.LATEST_CHECKPOINT_FILENAME
         elif is_best:
             filename = self.persist_config.BEST_CHECKPOINT_FILENAME
         elif step is not None:
-            # Always use step number if provided for the specific file
             filename = f"checkpoint_step_{step}.pkl"
         else:
             # Default to latest if no specific type is given
             filename = self.persist_config.LATEST_CHECKPOINT_FILENAME
 
-        # Ensure filename ends with .pkl
         filename_pkl = Path(filename).with_suffix(".pkl")
         return checkpoint_dir / filename_pkl
 
     def get_buffer_path(
         self, run_name: str | None = None, step: int | None = None
     ) -> Path:
-        """Constructs the path for the replay buffer file."""
-        target_run_name = run_name if run_name else self.persist_config.RUN_NAME
-        base_dir = Path(self.persist_config.get_run_base_dir(target_run_name))
-        buffer_dir = base_dir / self.persist_config.BUFFER_SAVE_DIR_NAME
+        """Constructs the absolute path for the replay buffer file."""
+        target_run_base_dir = self.get_run_base_dir(run_name)
+        buffer_dir = target_run_base_dir / self.persist_config.BUFFER_SAVE_DIR_NAME
 
         if step is not None:
-            # Always use step number if provided for the specific file
             filename = f"buffer_step_{step}.pkl"
         else:
             # Default name for the main buffer link/file
@@ -84,17 +101,25 @@ class PathManager:
         return buffer_dir / Path(filename).with_suffix(".pkl")
 
     def get_config_path(self, run_name: str | None = None) -> Path:
-        """Constructs the path for the config JSON file."""
-        target_run_name = run_name if run_name else self.persist_config.RUN_NAME
-        base_dir = Path(self.persist_config.get_run_base_dir(target_run_name))
-        return base_dir / self.persist_config.CONFIG_FILENAME
+        """Constructs the absolute path for the config JSON file."""
+        target_run_base_dir = self.get_run_base_dir(run_name)
+        return target_run_base_dir / self.persist_config.CONFIG_FILENAME
+
+    def get_profile_path(
+        self, worker_id: int, episode_seed: int, run_name: str | None = None
+    ) -> Path:
+        """Constructs the absolute path for a profile data file."""
+        target_run_base_dir = self.get_run_base_dir(run_name)
+        profile_dir = target_run_base_dir / self.persist_config.PROFILE_DIR_NAME
+        filename = f"worker_{worker_id}_ep_{episode_seed}.prof"
+        return profile_dir / filename
 
     def find_latest_run_dir(self, current_run_name: str) -> str | None:
         """
         Finds the most recent *previous* run directory based on timestamp parsing.
         Assumes run names contain a 'YYYYMMDD_HHMMSS' pattern, potentially with prefixes/suffixes.
         """
-        runs_root_dir = self.root_data_dir / self.persist_config.RUNS_DIR_NAME
+        runs_root_dir = self.get_runs_root_dir()
         potential_runs: list[tuple[datetime.datetime, str]] = []
         # Regex: Find YYYYMMDD_HHMMSS pattern anywhere in the name
         run_name_pattern = re.compile(r"(\d{8}_\d{6})")
@@ -108,7 +133,7 @@ class PathManager:
                 return None
 
             found_dirs = list(runs_root_dir.iterdir())
-            logger.info(
+            logger.debug(
                 f"Found {len(found_dirs)} items in runs directory: {[d.name for d in found_dirs]}"
             )
 
@@ -118,11 +143,10 @@ class PathManager:
                     logger.debug(
                         f"  '{d.name}' is a directory and not the current run."
                     )
-                    # Use search to find the pattern anywhere
                     match = run_name_pattern.search(d.name)
                     if match:
                         timestamp_str = match.group(1)
-                        logger.info(
+                        logger.debug(
                             f"  Regex matched! Found timestamp '{timestamp_str}' in '{d.name}'"
                         )
                         try:
@@ -130,7 +154,7 @@ class PathManager:
                                 timestamp_str, "%Y%m%d_%H%M%S"
                             )
                             potential_runs.append((run_time, d.name))
-                            logger.info(
+                            logger.debug(
                                 f"  Successfully parsed timestamp and added '{d.name}' to potential runs."
                             )
                         except ValueError:
@@ -138,8 +162,8 @@ class PathManager:
                                 f"Could not parse timestamp '{timestamp_str}' from directory name: {d.name}"
                             )
                     else:
-                        logger.info(  # Use INFO to see non-matches clearly
-                            f"  Directory name {d.name} did not match timestamp pattern with regex: {run_name_pattern.pattern}"
+                        logger.debug(
+                            f"  Directory name {d.name} did not match timestamp pattern."
                         )
                 elif not d.is_dir():
                     logger.debug(f"  '{d.name}' is not a directory.")
@@ -152,10 +176,8 @@ class PathManager:
                 )
                 return None
 
-            # Sort by datetime object (most recent first)
             potential_runs.sort(key=lambda item: item[0], reverse=True)
-            # Log the sorted list for debugging
-            logger.info(
+            logger.debug(
                 f"Sorted potential runs (most recent first): {[(dt.strftime('%Y%m%d_%H%M%S'), name) for dt, name in potential_runs]}"
             )
 
@@ -175,9 +197,9 @@ class PathManager:
         checkpoint_to_load: Path | None = None
 
         if load_path_config:
-            load_path = Path(load_path_config)
+            load_path = Path(load_path_config).resolve()  # Resolve immediately
             if load_path.exists():
-                checkpoint_to_load = load_path.resolve()
+                checkpoint_to_load = load_path
                 logger.info(f"Using specified checkpoint path: {checkpoint_to_load}")
             else:
                 logger.warning(
@@ -190,7 +212,6 @@ class PathManager:
             )
             latest_run_name = self.find_latest_run_dir(current_run_name)
             if latest_run_name:
-                # Try loading from the 'latest.pkl' link first
                 potential_latest_path = self.get_checkpoint_path(
                     run_name=latest_run_name, is_latest=True
                 )
@@ -221,16 +242,14 @@ class PathManager:
         buffer_to_load: Path | None = None
 
         if load_path_config:
-            load_path = Path(load_path_config)
+            load_path = Path(load_path_config).resolve()  # Resolve immediately
             if load_path.exists():
                 logger.info(f"Using specified buffer path: {load_path_config}")
-                buffer_to_load = load_path.resolve()
+                buffer_to_load = load_path
             else:
                 logger.warning(f"Specified buffer path not found: {load_path_config}")
 
-        # If not loaded via specific path, try loading from the same run as the checkpoint
         if not buffer_to_load and checkpoint_run_name:
-            # Try loading the default buffer link first
             potential_buffer_path = self.get_buffer_path(run_name=checkpoint_run_name)
             if potential_buffer_path.exists():
                 logger.info(
@@ -242,7 +261,6 @@ class PathManager:
                     f"Default buffer file ('{self.persist_config.BUFFER_FILENAME}') not found in checkpoint run directory '{checkpoint_run_name}'."
                 )
 
-        # If still not loaded and auto-resume is on, try the latest previous run
         if not buffer_to_load and auto_resume and not checkpoint_run_name:
             latest_previous_run_name = self.find_latest_run_dir(
                 self.persist_config.RUN_NAME
@@ -277,7 +295,6 @@ class PathManager:
         latest_path = self.get_checkpoint_path(is_latest=True)
         best_path = self.get_checkpoint_path(is_best=True)
         try:
-            # Use copy2 to preserve metadata, overwrite if exists
             shutil.copy2(step_checkpoint_path, latest_path)
             logger.debug(f"Updated latest checkpoint link to {step_checkpoint_path}")
         except Exception as e:
@@ -297,9 +314,8 @@ class PathManager:
             logger.error(f"Source buffer path does not exist: {step_buffer_path}")
             return
 
-        default_buffer_path = self.get_buffer_path()  # Gets buffer.pkl path
+        default_buffer_path = self.get_buffer_path()
         try:
-            # Use copy2 to preserve metadata, overwrite if exists
             shutil.copy2(step_buffer_path, default_buffer_path)
             logger.debug(f"Updated default buffer file link: {default_buffer_path}")
         except Exception as e_default:

@@ -7,7 +7,8 @@ import mlflow
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
-from .types import LogContext, MetricConfig
+# Update import to use the new filename
+from .stats_types import LogContext, MetricConfig
 
 if TYPE_CHECKING:
     from ..config import StatsConfig

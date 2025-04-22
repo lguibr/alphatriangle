@@ -9,7 +9,9 @@ import ray
 from torch.utils.tensorboard import SummaryWriter
 
 from .processor import StatsProcessor
-from .types import LogContext, RawMetricEvent
+
+# Update import to use the new filename
+from .stats_types import LogContext, RawMetricEvent
 
 if TYPE_CHECKING:
     from trianglengin.core.environment import GameState

@@ -1,9 +1,7 @@
-# File: alphatriangle/cli.py
 import logging
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -102,6 +100,7 @@ def _run_external_ui(
     )
 
     try:
+        # Use Popen for non-blocking execution if needed, but run is simpler for now
         process = subprocess.run(full_command, check=False)
         if process.returncode != 0:
             console.print(
@@ -145,6 +144,8 @@ def train(
     persist_config_override = PersistenceConfig()
     train_config_override.RANDOM_SEED = seed
     train_config_override.PROFILE_WORKERS = profile  # Set profile config
+    # Ensure run name is set for persistence config
+    persist_config_override.RUN_NAME = train_config_override.RUN_NAME
 
     console.print(
         Panel(
@@ -191,18 +192,21 @@ def ml(
     """
     📊 Launch the MLflow UI for experiment tracking.
 
-    Requires MLflow to be installed. Finds the `.alphatriangle_data/mlruns` directory.
+    Requires MLflow to be installed. Points to the `.alphatriangle_data/mlruns` directory.
     """
     setup_logging("INFO")  # Basic logging for this command
     persist_config = PersistenceConfig()
+    # Use the computed property which resolves the path and creates the dir
     mlflow_uri = persist_config.MLFLOW_TRACKING_URI
     mlflow_path = persist_config.get_mlflow_abs_path()
 
-    if not Path(mlflow_path).exists():
+    if not mlflow_path.exists() or not any(mlflow_path.iterdir()):
         console.print(
-            f"[yellow]Warning:[/yellow] MLflow directory not found at expected location: [dim]{mlflow_path}[/]"
+            f"[yellow]Warning:[/yellow] MLflow directory not found or empty at expected location: [dim]{mlflow_path}[/]"
         )
         console.print("[yellow]Attempting to launch MLflow UI anyway...[/]")
+    else:
+        console.print(f"Found MLflow data at: [dim]{mlflow_path}[/]")
 
     command_args = [
         "ui",
@@ -224,24 +228,26 @@ def tb(
     """
     📈 Launch TensorBoard UI pointing to the runs directory.
 
-    Requires TensorBoard to be installed. Finds the `.alphatriangle_data/runs` directory.
+    Requires TensorBoard to be installed. Points to the `.alphatriangle_data/runs` directory.
     """
     setup_logging("INFO")  # Basic logging for this command
     persist_config = PersistenceConfig()
-    # Point to the parent of the specific run directory to see all runs
-    runs_parent_dir = Path(persist_config.get_run_base_dir()).parent
+    # Point to the parent directory containing all individual run folders
+    runs_root_dir = persist_config.get_runs_root_dir()
 
-    if not runs_parent_dir.exists() or not any(runs_parent_dir.iterdir()):
+    if not runs_root_dir.exists() or not any(runs_root_dir.iterdir()):
         console.print(
-            f"[yellow]Warning:[/yellow] TensorBoard 'runs' directory not found or empty at: [dim]{runs_parent_dir}[/]"
+            f"[yellow]Warning:[/yellow] TensorBoard 'runs' directory not found or empty at: [dim]{runs_root_dir}[/]"
         )
         console.print(
             "[yellow]Attempting to launch TensorBoard UI anyway (it might show no data)...[/]"
         )
+    else:
+        console.print(f"Found TensorBoard runs data at: [dim]{runs_root_dir}[/]")
 
     command_args = [
         "--logdir",
-        str(runs_parent_dir),
+        str(runs_root_dir),  # Pass the absolute path string
         "--host",
         host,
         "--port",

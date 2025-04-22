@@ -1,3 +1,4 @@
+
 # Configuration Module (`alphatriangle.config`)
 
 ## Purpose and Architecture
@@ -11,7 +12,8 @@ This module centralizes all configuration parameters for the AlphaTriangle proje
 -   **Validation Script:** The [`validation.py`](validation.py) script instantiates all configuration models (including importing and validating `trianglengin.EnvConfig`), triggering Pydantic's validation, and prints a summary.
 -   **Dynamic Defaults:** Some configurations, like `RUN_NAME` in `TrainConfig`, use `default_factory` for dynamic defaults (e.g., timestamp).
 -   **Computed Fields:** Properties like `MLFLOW_TRACKING_URI` in `PersistenceConfig` are defined using `@computed_field` for clarity.
--   **Tuned Defaults:** The default values in `TrainConfig` and `ModelConfig` are tuned for substantial learning runs. `AlphaTriangleMCTSConfig` defaults to 512 simulations. `StatsConfig` defines a default set of metrics to track.
+-   **Tuned Defaults:** The default values in `TrainConfig` and `ModelConfig` are tuned for substantial learning runs. `AlphaTriangleMCTSConfig` defaults to 128 simulations. `StatsConfig` defines a default set of metrics to track.
+-   **Data Paths:** `PersistenceConfig` defines the structure within the `.alphatriangle_data` directory where all local artifacts (runs, checkpoints, logs, TensorBoard data) and MLflow data (`mlruns`) are stored.
 
 ## Exposed Interfaces
 
@@ -19,7 +21,7 @@ This module centralizes all configuration parameters for the AlphaTriangle proje
     -   `EnvConfig` (Imported from `trianglengin`): Environment parameters (grid size, shapes, rewards).
     -   [`ModelConfig`](model_config.py): Neural network architecture parameters.
     -   [`TrainConfig`](train_config.py): Training loop hyperparameters (batch size, learning rate, workers, PER settings, etc.).
-    -   [`PersistenceConfig`](persistence_config.py): Data saving/loading parameters (directories, filenames).
+    -   [`PersistenceConfig`](persistence_config.py): Data saving/loading parameters (directories within `.alphatriangle_data`, filenames).
     -   [`AlphaTriangleMCTSConfig`](mcts_config.py): MCTS parameters (simulations, exploration constants, temperature).
     -   [`StatsConfig`](stats_config.py): Statistics collection and logging parameters (metrics, aggregation, frequency).
 -   **Constants:**

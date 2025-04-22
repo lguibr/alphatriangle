@@ -5,7 +5,7 @@
 This module provides utilities for collecting, processing, and logging time-series statistics generated during the reinforcement learning training process. It aims for asynchronous collection and configurable, centralized processing and logging.
 
 -   **Configuration ([`alphatriangle.config.stats_config`](../config/stats_config.py)):** A dedicated Pydantic model (`StatsConfig`) defines *which* metrics to track, their *source*, *how* they should be aggregated (mean, sum, rate, latest, etc.), *how often* they should be logged (based on steps or time), and *where* they should be logged (MLflow, TensorBoard, console).
--   **Types ([`types.py`](types.py)):** Defines Pydantic models for data structures:
+-   **Types ([`stats_types.py`](stats_types.py)):** Defines Pydantic models for data structures:
     -   `RawMetricEvent`: Represents a single raw data point sent to the collector, tagged with its name, value, `global_step`, and optional context.
     -   `LogContext`: Contains timing and state information passed to the processor during logging cycles.
 -   **Collector ([`collector.py`](collector.py)):** Defines the `StatsCollectorActor` class, a **Ray actor**.
@@ -34,7 +34,7 @@ This module provides utilities for collecting, processing, and logging time-seri
         -   `get_latest_worker_states.remote() -> Dict[int, GameState]`
         -   (Other methods: `get_state`, `set_state`, `close_tb_writer`)
     -   `StatsProcessor`: Handles aggregation and logging logic (used internally by actor).
--   **Types (from `types.py`):**
+-   **Types (from `stats_types.py`):**
     -   `StatsConfig`, `MetricConfig`, `RawMetricEvent`, `LogContext`.
 
 ## Dependencies

@@ -1,4 +1,3 @@
-
 # File: pyproject.toml
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -6,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alphatriangle"
-version = "1.7.0" # Incremented version for CLI enhancements
+version = "1.8.0" # Incremented version for CLI enhancements
 authors = [{ name="Luis Guilherme P. M.", email="lgpelin92@gmail.com" }]
 description = "AlphaZero implementation for a triangle puzzle game (uses trianglengin v2+ and trimcts with tree reuse)." # Updated description
 readme = "README.md"
@@ -100,7 +99,7 @@ omit = [
     "alphatriangle/data/schemas.py",
     "alphatriangle/utils/types.py", # Old types removed
     "alphatriangle/rl/types.py",
-    "alphatriangle/stats/types.py", # New types file
+    "alphatriangle/stats/stats_types.py", # Updated path for renamed types file
     "alphatriangle/stats/collector.py", # Keep omitted for now due to Ray complexity
     "alphatriangle/stats/processor.py", # Keep omitted for now
     "*/__init__.py",

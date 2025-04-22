@@ -1,4 +1,3 @@
-# File: tests/data/test_path_data_interaction.py
 import logging
 import shutil
 import time
@@ -16,15 +15,18 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture
 def temp_data_dir(tmp_path: Path) -> Path:
-    """Creates a temporary root data directory."""
+    """Creates a temporary root data directory for a single test."""
+    # Use tmp_path directly provided by pytest for test isolation
     data_dir = tmp_path / ".test_alphatriangle_data"
     data_dir.mkdir()
+    logger.info(f"Created temporary data dir for test: {data_dir}")
     return data_dir
 
 
 @pytest.fixture
 def persist_config(temp_data_dir: Path) -> PersistenceConfig:
-    """PersistenceConfig using the temporary directory."""
+    """PersistenceConfig using the temporary directory for a single test."""
+    # Use the test-specific temp dir
     return PersistenceConfig(ROOT_DATA_DIR=str(temp_data_dir))
 
 
@@ -44,33 +46,31 @@ def serializer() -> Serializer:
 def create_dummy_run(
     persist_config: PersistenceConfig, run_name: str, steps: list[int]
 ):
-    """Creates dummy run directories and checkpoint/buffer files."""
+    """Creates dummy run directories and checkpoint/buffer files within the temp dir."""
     # Create a PathManager instance specifically for this dummy run setup
+    # It will use the ROOT_DATA_DIR from the provided persist_config (temp dir)
     pm = PathManager(persist_config.model_copy(update={"RUN_NAME": run_name}))
     # Create the base run directory and standard subdirs first
     pm.create_run_directories()
     logger.info(f"Created directories for run '{run_name}' at {pm.run_base_dir}")
-    logger.info(
-        f"Checkpoint dir: {pm.checkpoint_dir}, Exists: {pm.checkpoint_dir.exists()}"
-    )
-    logger.info(f"Buffer dir: {pm.buffer_dir}, Exists: {pm.buffer_dir.exists()}")
-
-    # Explicitly ensure subdirs exist (should be redundant but safe)
-    pm.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    pm.buffer_dir.mkdir(parents=True, exist_ok=True)
+    assert pm.run_base_dir.exists()
+    assert pm.checkpoint_dir.exists()
+    assert pm.buffer_dir.exists()
 
     # Create dummy checkpoint files
     for step in steps:
         cp_path = pm.get_checkpoint_path(step=step)
-        logger.info(f"Attempting to touch checkpoint file: {cp_path}")
+        logger.debug(f"Attempting to touch checkpoint file: {cp_path}")
         cp_path.touch()
-        logger.info(f"Touched checkpoint file: {cp_path}")
+        assert cp_path.exists()
+        logger.debug(f"Touched checkpoint file: {cp_path}")
 
         # Create dummy buffer files if needed
         buf_path = pm.get_buffer_path(step=step)
-        logger.info(f"Attempting to touch buffer file: {buf_path}")
+        logger.debug(f"Attempting to touch buffer file: {buf_path}")
         buf_path.touch()
-        logger.info(f"Touched buffer file: {buf_path}")
+        assert buf_path.exists()
+        logger.debug(f"Touched buffer file: {buf_path}")
 
     # Create latest links pointing to the last step
     if steps:
@@ -79,7 +79,8 @@ def create_dummy_run(
         if last_cp_path.exists():  # Check if source exists before linking
             latest_cp_path = pm.get_checkpoint_path(is_latest=True)
             shutil.copy2(last_cp_path, latest_cp_path)
-            logger.info(f"Linked latest checkpoint to {last_cp_path}")
+            assert latest_cp_path.exists()
+            logger.debug(f"Linked latest checkpoint to {last_cp_path}")
         else:
             pytest.fail(
                 f"Source checkpoint file {last_cp_path} does not exist for linking."
@@ -89,7 +90,8 @@ def create_dummy_run(
         if last_buf_path.exists():  # Check if source exists before linking
             latest_buf_path = pm.get_buffer_path()  # Default buffer link
             shutil.copy2(last_buf_path, latest_buf_path)
-            logger.info(f"Linked default buffer to {last_buf_path}")
+            assert latest_buf_path.exists()
+            logger.debug(f"Linked default buffer to {last_buf_path}")
         else:
             pytest.fail(
                 f"Source buffer file {last_buf_path} does not exist for linking."
@@ -114,7 +116,7 @@ def test_find_latest_run_dir(persist_config: PersistenceConfig):
     )
     run_name_no_timestamp = "run_no_timestamp"  # This one won't be matched by regex
 
-    # Create dummy directories using the corrected helper
+    # Create dummy directories using the corrected helper (within temp dir)
     create_dummy_run(persist_config, run_name_current, [])
     create_dummy_run(persist_config, run_name_older, [])
     create_dummy_run(persist_config, run_name_latest_previous, [])
@@ -181,7 +183,10 @@ def test_determine_checkpoint_to_load_auto_resume(
 
     assert load_path is not None
     assert load_path.name == persist_config.LATEST_CHECKPOINT_FILENAME
+    # Check parent structure relative to the temp dir
     assert load_path.parent.parent.name == run_name_previous
+    assert load_path.parent.parent.parent.name == persist_config.RUNS_DIR_NAME
+    assert load_path.parent.parent.parent.parent == persist_config._get_absolute_root()
 
 
 def test_determine_checkpoint_to_load_specific_path(
@@ -279,4 +284,7 @@ def test_determine_buffer_to_load_from_checkpoint_run(
 
     assert load_path is not None
     assert load_path.name == persist_config.BUFFER_FILENAME
+    # Check parent structure relative to the temp dir
     assert load_path.parent.parent.name == run_name_previous
+    assert load_path.parent.parent.parent.name == persist_config.RUNS_DIR_NAME
+    assert load_path.parent.parent.parent.parent == persist_config._get_absolute_root()

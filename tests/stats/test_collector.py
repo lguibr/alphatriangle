@@ -11,7 +11,9 @@ import ray
 # Correct the import path for config
 from alphatriangle.config import StatsConfig  # Corrected import
 from alphatriangle.stats import StatsCollectorActor
-from alphatriangle.stats.types import RawMetricEvent
+
+# Update import to use the new filename
+from alphatriangle.stats.stats_types import RawMetricEvent
 
 
 # Mock GameState for testing worker state updates
