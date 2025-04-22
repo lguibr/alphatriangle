@@ -1,4 +1,3 @@
-# File: alphatriangle/rl/core/trainer.py
 import logging
 from typing import cast
 
@@ -9,7 +8,7 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import _LRScheduler
 
 # Import EnvConfig from trianglengin's top level
-from trianglengin import EnvConfig  # UPDATED IMPORT
+from trianglengin import EnvConfig
 
 # Keep alphatriangle imports
 from ...config import TrainConfig
@@ -29,12 +28,12 @@ class Trainer:
         self,
         nn_interface: NeuralNetwork,
         train_config: TrainConfig,
-        env_config: EnvConfig,  # Uses trianglengin.EnvConfig
+        env_config: EnvConfig,
     ):
         self.nn = nn_interface
         self.model = nn_interface.model
         self.train_config = train_config
-        self.env_config = env_config  # Store trianglengin.EnvConfig
+        self.env_config = env_config
         self.model_config = nn_interface.model_config
         self.device = nn_interface.device
         self.optimizer = self._create_optimizer()
@@ -113,7 +112,6 @@ class Trainer:
         grids = []
         other_features = []
         n_step_returns = []
-        # Calculate action_dim manually
         action_dim_int = int(
             self.env_config.NUM_SHAPE_SLOTS
             * self.env_config.ROWS
@@ -176,13 +174,31 @@ class Trainer:
         b = (target_returns - self.v_min) / self.delta_z
         lower_idx = b.floor().long()
         u = b.ceil().long()
-        lower_idx = torch.max(torch.tensor(0, device=self.device), lower_idx)
-        u = torch.min(torch.tensor(self.num_atoms - 1, device=self.device), u)
-        m_l = u.float() - b
-        m_u = b - lower_idx.float()
+        # Ensure indices are within bounds [0, num_atoms - 1]
+        lower_idx = torch.clamp(lower_idx, 0, self.num_atoms - 1)
+        u = torch.clamp(u, 0, self.num_atoms - 1)
+
+        # Handle cases where lower and upper indices are the same
+        eq_mask = lower_idx == u
+        ne_mask = ~eq_mask
+
+        # Calculate weights for non-equal indices
+        m_l = u[ne_mask].float() - b[ne_mask]
+        m_u = b[ne_mask] - lower_idx[ne_mask].float()
+
+        # Distribute probability mass
         batch_indices = torch.arange(batch_size, device=self.device)
-        m[batch_indices, lower_idx] += m_l
-        m[batch_indices, u] += m_u
+        m[batch_indices[ne_mask], lower_idx[ne_mask]] += m_l
+        m[batch_indices[ne_mask], u[ne_mask]] += m_u
+
+        # Handle equal indices (assign full probability mass)
+        m[batch_indices[eq_mask], lower_idx[eq_mask]] += 1.0
+
+        # Normalize rows just in case of floating point issues near boundaries
+        # This might not be strictly necessary but adds robustness
+        # row_sums = m.sum(dim=1, keepdim=True)
+        # m = m / (row_sums + 1e-9) # Add epsilon for stability
+
         return m
 
     def train_step(
@@ -191,7 +207,7 @@ class Trainer:
         """
         Performs a single training step on the given batch from PER buffer.
         Uses distributional cross-entropy loss for the value head.
-        Returns loss info dictionary and TD errors for priority updates.
+        Returns raw loss info dictionary and TD errors for priority updates.
         """
         batch = per_sample["batch"]
         is_weights = per_sample["weights"]
@@ -213,35 +229,48 @@ class Trainer:
         self.optimizer.zero_grad()
         policy_logits, value_logits = self.model(grid_t, other_t)
 
-        target_distribution = self._calculate_target_distribution(n_step_return_t)
+        # --- Value Loss (Distributional Cross-Entropy) ---
+        with torch.no_grad():
+            target_distribution = self._calculate_target_distribution(n_step_return_t)
         log_pred_dist = F.log_softmax(value_logits, dim=1)
+        # Ensure target_distribution sums to 1 for valid cross-entropy calculation
+        # target_distribution = target_distribution / (target_distribution.sum(dim=1, keepdim=True) + 1e-9)
         value_loss_elementwise = -torch.sum(target_distribution * log_pred_dist, dim=1)
         value_loss = (value_loss_elementwise * is_weights_t).mean()
 
+        # --- Policy Loss (Cross-Entropy) ---
         log_probs = F.log_softmax(policy_logits, dim=1)
         policy_target_t = torch.nan_to_num(policy_target_t, nan=0.0)
+        # Ensure policy target sums to 1
+        # policy_target_t = policy_target_t / (policy_target_t.sum(dim=1, keepdim=True) + 1e-9)
         policy_loss_elementwise = -torch.sum(policy_target_t * log_probs, dim=1)
         policy_loss = (policy_loss_elementwise * is_weights_t).mean()
 
+        # --- Entropy Bonus ---
         entropy_scalar: float = 0.0
         entropy_loss_term = torch.tensor(0.0, device=self.device)
         if self.train_config.ENTROPY_BONUS_WEIGHT > 0:
             policy_probs = F.softmax(policy_logits, dim=1)
+            # Add epsilon for numerical stability in log
             entropy_term_elementwise: torch.Tensor = -torch.sum(
                 policy_probs * torch.log(policy_probs + 1e-9), dim=1
             )
+            # Calculate mean entropy across batch BEFORE applying weights
             entropy_scalar = float(entropy_term_elementwise.mean().item())
+            # Apply entropy bonus loss (weighted mean if needed, but usually mean is fine)
             entropy_loss_term = (
                 -self.train_config.ENTROPY_BONUS_WEIGHT
-                * entropy_term_elementwise.mean()
+                * entropy_term_elementwise.mean()  # Use mean entropy, not weighted
             )
 
+        # --- Total Loss ---
         total_loss = (
             self.train_config.POLICY_LOSS_WEIGHT * policy_loss
             + self.train_config.VALUE_LOSS_WEIGHT * value_loss
             + entropy_loss_term
         )
 
+        # --- Backpropagation and Optimization ---
         total_loss.backward()
 
         if (
@@ -256,18 +285,26 @@ class Trainer:
         if self.scheduler:
             self.scheduler.step()
 
+        # --- Calculate TD Errors for PER ---
         with torch.no_grad():
-            expected_value_pred = self.nn._logits_to_expected_value(value_logits)
-        td_errors = (
-            (n_step_return_t - expected_value_pred.squeeze(1)).detach().cpu().numpy()
-        )
+            # Use the element-wise value loss as the TD error proxy for distributional RL
+            # This is a common heuristic. Alternatively, calculate expected value difference.
+            # Using value_loss_elementwise directly aligns priorities with the loss being minimized.
+            td_errors = value_loss_elementwise.detach().cpu().numpy()
+            # Alternative: Calculate expected value difference
+            # expected_value_pred = self.nn._logits_to_expected_value(value_logits)
+            # td_errors = (n_step_return_t - expected_value_pred.squeeze(1)).detach().cpu().numpy()
 
+        # --- Prepare Raw Loss Info ---
+        # Return individual loss components for logging by the stats system
         loss_info = {
             "total_loss": total_loss.item(),
             "policy_loss": policy_loss.item(),
             "value_loss": value_loss.item(),
-            "entropy": entropy_scalar,
-            "mean_td_error": float(np.mean(np.abs(td_errors))),
+            "entropy": entropy_scalar,  # Report the mean entropy scalar
+            "mean_td_error": float(
+                np.mean(np.abs(td_errors))
+            ),  # Keep reporting mean TD error
         }
 
         return loss_info, td_errors
@@ -275,7 +312,12 @@ class Trainer:
     def get_current_lr(self) -> float:
         """Returns the current learning rate from the optimizer."""
         try:
-            return float(self.optimizer.param_groups[0]["lr"])
-        except (IndexError, KeyError):
-            logger.warning("Could not retrieve learning rate from optimizer.")
+            # Ensure optimizer and param_groups exist
+            if self.optimizer and self.optimizer.param_groups:
+                return float(self.optimizer.param_groups[0]["lr"])
+            else:
+                logger.warning("Optimizer or param_groups not available.")
+                return 0.0
+        except (IndexError, KeyError, AttributeError) as e:
+            logger.warning(f"Could not retrieve learning rate from optimizer: {e}")
             return 0.0

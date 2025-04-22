@@ -47,3 +47,5 @@ pytestdebug.log
 
 # Optional: Configuration files you might want to keep local
 # local_config.yaml
+
+mlruns/

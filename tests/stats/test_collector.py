@@ -1,222 +1,26 @@
 # File: tests/stats/test_collector.py
 import logging
-from collections import deque
+import time
+from typing import Any, cast  # Added cast
 
 import cloudpickle
 import pytest
 import ray
 
-# Import GameState from trianglengin's top level
-# Keep alphatriangle imports
+# Import new types
+# Correct the import path for config
+from alphatriangle.config import StatsConfig  # Corrected import
 from alphatriangle.stats import StatsCollectorActor
-from alphatriangle.utils.types import StepInfo  # Import StepInfo
-
-# --- Fixtures ---
+from alphatriangle.stats.types import RawMetricEvent
 
 
-@pytest.fixture(scope="module", autouse=True)
-def ray_init_shutdown():
-    if not ray.is_initialized():
-        ray.init(logging_level=logging.WARNING, num_cpus=1)
-    yield
-    if ray.is_initialized():
-        ray.shutdown()
-
-
-@pytest.fixture
-def stats_actor():
-    """Provides a fresh StatsCollectorActor instance for each test."""
-    actor = StatsCollectorActor.remote(max_history=5)
-    # Ensure actor is initialized before returning
-    ray.get(actor.clear.remote())  # Use a simple remote call to wait for init
-    yield actor
-    # Clean up the actor after the test
-    ray.kill(actor, no_restart=True)
-
-
-# --- Helper to create StepInfo ---
-def create_step_info(step: int) -> StepInfo:
-    """Creates a basic StepInfo dict for testing."""
-    return {"global_step": step}
-
-
-# --- Tests ---
-
-
-def test_actor_initialization(stats_actor):
-    """Test if the actor initializes correctly."""
-    assert ray.get(stats_actor.get_data.remote()) == {}
-    # Also check initial worker states
-    assert ray.get(stats_actor.get_latest_worker_states.remote()) == {}
-
-
-def test_log_single_metric(stats_actor):
-    """Test logging a single metric."""
-    metric_name = "test_metric"
-    value = 10.5
-    step = 1
-    step_info = create_step_info(step)
-    ray.get(stats_actor.log.remote(metric_name, value, step_info))
-    data = ray.get(stats_actor.get_data.remote())
-    assert metric_name in data
-    assert len(data[metric_name]) == 1
-    assert data[metric_name][0] == (step_info, value)
-
-
-def test_log_batch_metrics(stats_actor):
-    """Test logging a batch of metrics."""
-    step_info_1 = create_step_info(1)
-    step_info_2 = create_step_info(2)
-    ray.get(stats_actor.log.remote("metric_a", 1.0, step_info_1))
-    ray.get(stats_actor.log.remote("metric_b", 2.5, step_info_1))
-    ray.get(stats_actor.log.remote("metric_a", 1.1, step_info_2))
-
-    data = ray.get(stats_actor.get_data.remote())
-    assert "metric_a" in data
-    assert "metric_b" in data
-    assert len(data["metric_a"]) == 2, (
-        f"Expected 2 entries for metric_a, found {len(data['metric_a'])}"
-    )
-    assert len(data["metric_b"]) == 1
-    assert data["metric_a"][0] == (step_info_1, 1.0)
-    assert data["metric_a"][1] == (step_info_2, 1.1)
-    assert data["metric_b"][0] == (step_info_1, 2.5)
-
-
-def test_max_history(stats_actor):
-    """Test if the max_history constraint is enforced."""
-    metric_name = "history_test"
-    max_hist = 5  # Matches fixture
-    for i in range(max_hist + 3):
-        step_info = create_step_info(i)
-        ray.get(stats_actor.log.remote(metric_name, float(i), step_info))
-
-    data = ray.get(stats_actor.get_data.remote())
-    assert metric_name in data
-    assert len(data[metric_name]) == max_hist
-    expected_first_step_info = create_step_info(3)
-    assert data[metric_name][0] == (expected_first_step_info, 3.0)
-    expected_last_step_info = create_step_info(max_hist + 2)
-    assert data[metric_name][-1] == (expected_last_step_info, float(max_hist + 2))
-
-
-def test_get_metric_data(stats_actor):
-    """Test retrieving data for a specific metric."""
-    step_info_1 = create_step_info(1)
-    step_info_2 = create_step_info(2)
-    ray.get(stats_actor.log.remote("metric_1", 10.0, step_info_1))
-    ray.get(stats_actor.log.remote("metric_2", 20.0, step_info_1))
-    ray.get(stats_actor.log.remote("metric_1", 11.0, step_info_2))
-
-    metric1_data = ray.get(stats_actor.get_metric_data.remote("metric_1"))
-    metric2_data = ray.get(stats_actor.get_metric_data.remote("metric_2"))
-    metric3_data = ray.get(stats_actor.get_metric_data.remote("metric_3"))
-
-    assert isinstance(metric1_data, deque)
-    assert len(metric1_data) == 2
-    assert list(metric1_data) == [(step_info_1, 10.0), (step_info_2, 11.0)]
-
-    assert isinstance(metric2_data, deque)
-    assert len(metric2_data) == 1
-    assert list(metric2_data) == [(step_info_1, 20.0)]
-
-    assert metric3_data is None
-
-
-def test_clear_data(stats_actor):
-    """Test clearing the collected data."""
-    step_info = create_step_info(1)
-    ray.get(stats_actor.log.remote("metric_1", 10.0, step_info))
-    assert len(ray.get(stats_actor.get_data.remote())) == 1
-    ray.get(stats_actor.clear.remote())
-    assert ray.get(stats_actor.get_data.remote()) == {}
-    assert ray.get(stats_actor.get_latest_worker_states.remote()) == {}
-
-
-def test_log_non_finite(stats_actor):
-    """Test that non-finite values are not logged."""
-    metric_name = "non_finite_test"
-    ray.get(stats_actor.log.remote(metric_name, float("inf"), create_step_info(1)))
-    ray.get(stats_actor.log.remote(metric_name, float("-inf"), create_step_info(2)))
-    ray.get(stats_actor.log.remote(metric_name, float("nan"), create_step_info(3)))
-    step_info_4 = create_step_info(4)
-    ray.get(stats_actor.log.remote(metric_name, 10.0, step_info_4))
-
-    data = ray.get(stats_actor.get_data.remote())
-    assert metric_name in data
-    assert len(data[metric_name]) == 1
-    assert data[metric_name][0] == (step_info_4, 10.0)
-
-
-def test_get_set_state(stats_actor):
-    """Test saving and restoring the actor's state."""
-    step_info_10 = create_step_info(10)
-    step_info_11 = create_step_info(11)
-    ray.get(stats_actor.log.remote("m1", 1.0, step_info_10))
-    ray.get(stats_actor.log.remote("m2", 2.0, step_info_10))
-    ray.get(stats_actor.log.remote("m1", 1.5, step_info_11))
-
-    state = ray.get(stats_actor.get_state.remote())
-
-    assert isinstance(state, dict)
-    assert "max_history" in state
-    assert "_metrics_data_list" in state
-    assert isinstance(state["_metrics_data_list"], dict)
-    assert "m1" in state["_metrics_data_list"]
-    assert isinstance(state["_metrics_data_list"]["m1"], list)
-    assert state["_metrics_data_list"]["m1"] == [
-        (step_info_10, 1.0),
-        (step_info_11, 1.5),
-    ], f"Actual m1 list: {state['_metrics_data_list']['m1']}"
-    assert state["_metrics_data_list"]["m2"] == [(step_info_10, 2.0)], (
-        f"Actual m2 list: {state['_metrics_data_list']['m2']}"
-    )
-
-    pickled_state = cloudpickle.dumps(state)
-    unpickled_state = cloudpickle.loads(pickled_state)
-
-    new_actor = StatsCollectorActor.remote(max_history=10)
-    ray.get(new_actor.set_state.remote(unpickled_state))
-
-    restored_data = ray.get(new_actor.get_data.remote())
-    original_data = ray.get(stats_actor.get_data.remote())
-
-    assert len(restored_data) == len(original_data)
-    assert "m1" in restored_data
-    assert "m2" in restored_data
-    assert list(restored_data["m1"]) == list(original_data["m1"])
-    assert list(restored_data["m2"]) == list(original_data["m2"])
-
-    step_info_12 = create_step_info(12)
-    step_info_13 = create_step_info(13)
-    step_info_14 = create_step_info(14)
-    step_info_15 = create_step_info(15)
-    ray.get(new_actor.log.remote("m1", 2.0, step_info_12))
-    ray.get(new_actor.log.remote("m1", 2.5, step_info_13))
-    ray.get(new_actor.log.remote("m1", 3.0, step_info_14))
-    ray.get(new_actor.log.remote("m1", 3.5, step_info_15))
-
-    restored_m1 = ray.get(new_actor.get_metric_data.remote("m1"))
-    assert len(restored_m1) == 5
-    assert restored_m1[0] == (step_info_11, 1.5)
-
-    assert ray.get(new_actor.get_latest_worker_states.remote()) == {}
-
-    ray.kill(new_actor, no_restart=True)
-
-
-# --- Tests for Game State Handling ---
-# Mock GameState class for testing state updates
+# Mock GameState for testing worker state updates
 class MockGameStateForStats:
     def __init__(self, step: int, score: float):
         self.current_step = step
         self._game_score = score
-        # Add dummy attributes expected by the check in update_worker_game_state
-        # These don't need to be functional, just present
-        self.env_config = True
-        # Mimic methods expected by the check
-        self.grid_data = True  # Placeholder attribute
-        self.shapes = True  # Placeholder attribute
+        self.grid_data = True
+        self.shapes = True
 
     def game_score(self) -> float:
         return self._game_score
@@ -228,10 +32,232 @@ class MockGameStateForStats:
         return []
 
 
+# --- Fixtures ---
+
+
+@pytest.fixture(scope="module", autouse=True)
+def ray_init_shutdown():
+    if not ray.is_initialized():
+        # Use ERROR level for Ray to minimize noise during tests
+        ray.init(logging_level=logging.ERROR, num_cpus=1, log_to_driver=False)
+        initialized_here = True
+    else:
+        initialized_here = False
+    yield
+    if initialized_here and ray.is_initialized():
+        ray.shutdown()
+
+
+@pytest.fixture
+def mock_stats_config() -> StatsConfig:
+    """Provides a default StatsConfig for testing."""
+    # Use a small positive interval to satisfy validation (gt=0)
+    return StatsConfig(processing_interval_seconds=0.01, metrics=[])
+
+
+# REMOVED mock_processor fixture
+
+
+@pytest.fixture
+def stats_actor(mock_stats_config, tmp_path):
+    """Provides a normal StatsCollectorActor instance."""
+    tb_dir = tmp_path / "tb_logs"
+    # Create the actor normally
+    actor = StatsCollectorActor.remote(
+        stats_config=mock_stats_config,
+        run_name="test_run",
+        tb_log_dir=str(tb_dir),
+    )
+    # Ensure actor is initialized
+    ray.get(actor.get_state.remote())  # Use a simple remote call
+    yield actor  # Return only the actor handle
+    # Clean up
+    ray.kill(actor, no_restart=True)
+
+
+# --- Helper to create RawMetricEvent ---
+def create_event(
+    name: str, value: float, step: int, context: dict | None = None
+) -> RawMetricEvent:
+    """Creates a basic RawMetricEvent for testing."""
+    return RawMetricEvent(
+        name=name,
+        value=value,
+        global_step=step,
+        timestamp=time.time(),
+        context=context or {},
+    )
+
+
+# --- Helper to get internal state ---
+def get_actor_internal_state(actor_handle) -> dict[str, Any]:
+    """Gets internal state using the test-only method."""
+    # Use type ignore as the method is intended for testing
+    state_ref = actor_handle._get_internal_state_for_testing.remote()  # type: ignore [attr-defined]
+    # Cast the result of ray.get to satisfy MyPy
+    return cast("dict[str, Any]", ray.get(state_ref))
+
+
+# --- Tests ---
+
+
+def test_actor_initialization(stats_actor):
+    """Test if the actor initializes correctly."""
+    state = ray.get(stats_actor.get_state.remote())
+    assert state["last_processed_step"] == -1
+    assert ray.get(stats_actor.get_latest_worker_states.remote()) == {}
+    internal_state = get_actor_internal_state(stats_actor)
+    assert not internal_state["raw_data_buffer"]  # Buffer should be empty
+
+
+def test_log_single_event(stats_actor):
+    """Test logging a single valid event adds it to the internal buffer."""
+    event = create_event("test_metric", 10.5, 1)
+    ray.get(stats_actor.log_event.remote(event))
+
+    internal_state = get_actor_internal_state(stats_actor)
+    assert 1 in internal_state["raw_data_buffer"]
+    assert "test_metric" in internal_state["raw_data_buffer"][1]
+    assert internal_state["raw_data_buffer"][1]["test_metric"] == [10.5]
+
+
+def test_log_batch_events(stats_actor):
+    """Test logging a batch of events adds them to the internal buffer."""
+    events = [
+        create_event("metric_a", 1.0, 1),
+        create_event("metric_b", 2.5, 1),
+        create_event("metric_a", 1.1, 2),
+    ]
+    ray.get(stats_actor.log_batch_events.remote(events))
+
+    internal_state = get_actor_internal_state(stats_actor)
+    assert 1 in internal_state["raw_data_buffer"]
+    assert 2 in internal_state["raw_data_buffer"]
+    assert "metric_a" in internal_state["raw_data_buffer"][1]
+    assert "metric_b" in internal_state["raw_data_buffer"][1]
+    assert "metric_a" in internal_state["raw_data_buffer"][2]
+    assert internal_state["raw_data_buffer"][1]["metric_a"] == [1.0]
+    assert internal_state["raw_data_buffer"][1]["metric_b"] == [2.5]
+    assert internal_state["raw_data_buffer"][2]["metric_a"] == [1.1]
+
+
+def test_log_non_finite_event(stats_actor):
+    """Test that non-finite values are ignored and valid ones are kept."""
+    event_inf = create_event("non_finite", float("inf"), 1)
+    event_nan = create_event("non_finite", float("nan"), 2)
+    event_valid = create_event("non_finite", 10.0, 3)
+
+    ray.get(stats_actor.log_event.remote(event_inf))
+    ray.get(stats_actor.log_event.remote(event_nan))
+    ray.get(stats_actor.log_event.remote(event_valid))
+
+    internal_state_before = get_actor_internal_state(stats_actor)
+    # Check buffer before processing
+    assert (
+        1 not in internal_state_before["raw_data_buffer"]
+    )  # Inf should be skipped on log_event
+    assert (
+        2 not in internal_state_before["raw_data_buffer"]
+    )  # NaN should be skipped on log_event
+    assert 3 in internal_state_before["raw_data_buffer"]
+    assert internal_state_before["raw_data_buffer"][3]["non_finite"] == [10.0]
+
+    # Call the force method to bypass time check and process step 3
+    # Use type ignore as the method is intended for testing
+    ray.get(stats_actor.force_process_and_log.remote(current_global_step=3))  # type: ignore [attr-defined]
+
+    # Check buffer after processing
+    internal_state_after = get_actor_internal_state(stats_actor)
+    assert 3 not in internal_state_after["raw_data_buffer"]  # Step 3 should be cleared
+    assert internal_state_after["last_processed_step"] == 3
+
+
+def test_process_and_log_trigger(stats_actor):
+    """Test that force_process_and_log processes buffered data and updates state."""
+    event = create_event("metric_c", 5.0, 10)
+    ray.get(stats_actor.log_event.remote(event))
+
+    internal_state_before = get_actor_internal_state(stats_actor)
+    assert 10 in internal_state_before["raw_data_buffer"]
+    assert internal_state_before["last_processed_step"] == -1  # Assuming initial state
+
+    # Call the force method to bypass time check
+    # Use type ignore as the method is intended for testing
+    ray.get(stats_actor.force_process_and_log.remote(current_global_step=10))  # type: ignore [attr-defined]
+
+    # Check state after processing
+    internal_state_after = get_actor_internal_state(stats_actor)
+    assert (
+        10 not in internal_state_after["raw_data_buffer"]
+    )  # Step 10 should be cleared
+    assert internal_state_after["last_processed_step"] == 10
+
+
+def test_get_set_state(stats_actor):
+    """Test saving and restoring the actor's minimal state."""
+    # Log an event and process it to change the state
+    ray.get(stats_actor.log_event.remote(create_event("s_metric", 1.0, 5)))
+    # Use type ignore as the method is intended for testing
+    ray.get(stats_actor.force_process_and_log.remote(current_global_step=5))  # type: ignore [attr-defined]
+
+    # Get the minimal state
+    state = ray.get(stats_actor.get_state.remote())
+    assert isinstance(state, dict)
+    assert state["last_processed_step"] == 5
+    assert "last_processed_time" in state
+
+    # Pickle and unpickle
+    pickled_state = cloudpickle.dumps(state)
+    unpickled_state = cloudpickle.loads(pickled_state)
+
+    # Get config etc. from original actor using remote calls
+    # Use type ignore as ActorHandle doesn't expose these directly
+    original_config = ray.get(stats_actor.get_config.remote())  # type: ignore [attr-defined]
+    original_run_name = ray.get(stats_actor.get_run_name.remote())  # type: ignore [attr-defined]
+    original_tb_dir = ray.get(stats_actor.get_tb_log_dir.remote())  # type: ignore [attr-defined]
+
+    # Create a new actor instance
+    new_actor = StatsCollectorActor.remote(
+        stats_config=original_config,
+        run_name=original_run_name,
+        tb_log_dir=original_tb_dir,
+    )
+    ray.get(new_actor.get_state.remote())  # Ensure actor is ready
+
+    # Restore state into the new actor
+    ray.get(new_actor.set_state.remote(unpickled_state))
+
+    # Verify restored state
+    restored_state = ray.get(new_actor.get_state.remote())
+    assert restored_state["last_processed_step"] == 5
+    assert restored_state["last_processed_time"] == pytest.approx(
+        state["last_processed_time"]
+    )
+
+    # Verify internal state after restore (buffer should be cleared)
+    restored_internal_state = get_actor_internal_state(new_actor)
+    assert not restored_internal_state["raw_data_buffer"]
+
+    # Check that processing new events works correctly in the restored actor
+    ray.get(new_actor.log_event.remote(create_event("s_metric", 2.0, 6)))
+    internal_state_before_process = get_actor_internal_state(new_actor)
+    assert 6 in internal_state_before_process["raw_data_buffer"]
+
+    # Use type ignore as the method is intended for testing
+    ray.get(new_actor.force_process_and_log.remote(current_global_step=6))  # type: ignore [attr-defined]
+
+    internal_state_after_process = get_actor_internal_state(new_actor)
+    assert (
+        6 not in internal_state_after_process["raw_data_buffer"]
+    )  # Step 6 should be cleared
+    assert internal_state_after_process["last_processed_step"] == 6
+
+    ray.kill(new_actor, no_restart=True)
+
+
 def test_update_and_get_worker_state(stats_actor):
-    """Test updating and retrieving worker game states."""
+    """Test updating and retrieving worker game states (remains the same)."""
     worker_id = 1
-    # Use the mock class that mimics GameState structure
     state1 = MockGameStateForStats(step=10, score=5.0)
     state2 = MockGameStateForStats(step=11, score=6.0)
 
@@ -240,7 +266,6 @@ def test_update_and_get_worker_state(stats_actor):
     ray.get(stats_actor.update_worker_game_state.remote(worker_id, state1))
     latest_states = ray.get(stats_actor.get_latest_worker_states.remote())
     assert worker_id in latest_states
-    # Access attributes directly on the mock object
     assert latest_states[worker_id].current_step == 10
     assert latest_states[worker_id].game_score() == 5.0
 

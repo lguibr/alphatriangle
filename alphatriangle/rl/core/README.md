@@ -1,5 +1,4 @@
 
-
 # RL Core Submodule (`alphatriangle.rl.core`)
 
 ## Purpose and Architecture
@@ -8,7 +7,7 @@ This submodule contains core classes directly involved in the reinforcement lear
 
 -   **[`Trainer`](trainer.py):** This class encapsulates the logic for updating the neural network's weights.
     -   It holds the main `NeuralNetwork` interface, optimizer, and scheduler.
-    -   Its `train_step` method takes a batch of experiences (potentially with PER indices and weights), performs forward/backward passes, calculates losses (policy cross-entropy, **distributional value cross-entropy**, optional entropy bonus), applies importance sampling weights if using PER, updates weights, and returns calculated TD errors for PER priority updates. **Uses `trianglengin.EnvConfig`.**
+    -   Its `train_step` method takes a batch of experiences (potentially with PER indices and weights), performs forward/backward passes, calculates losses (policy cross-entropy, **distributional value cross-entropy**, optional entropy bonus), applies importance sampling weights if using PER, updates weights, and returns **raw loss components** and calculated TD errors for PER priority updates. **Logging of these losses is handled externally by the statistics module.** Uses `trianglengin.EnvConfig`.
 -   **[`ExperienceBuffer`](buffer.py):** This class implements a replay buffer storing `Experience` tuples (`(StateType, policy_target, n_step_return)`). It supports Prioritized Experience Replay (PER) via a SumTree, including prioritized sampling and priority updates, based on configuration.
 
 ## Exposed Interfaces
@@ -16,7 +15,7 @@ This submodule contains core classes directly involved in the reinforcement lear
 -   **Classes:**
     -   `Trainer`:
         -   `__init__(nn_interface: NeuralNetwork, train_config: TrainConfig, env_config: EnvConfig)`
-        -   `train_step(per_sample: PERBatchSample) -> Optional[Tuple[Dict[str, float], np.ndarray]]`: Takes PER sample, returns loss info and TD errors.
+        -   `train_step(per_sample: PERBatchSample) -> Optional[Tuple[Dict[str, float], np.ndarray]]`: Takes PER sample, returns raw loss info and TD errors.
         -   `load_optimizer_state(state_dict: dict)`
         -   `get_current_lr() -> float`
     -   `ExperienceBuffer`:

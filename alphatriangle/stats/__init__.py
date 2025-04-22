@@ -1,16 +1,21 @@
+# File: alphatriangle/stats/__init__.py
 """
-Statistics collection module.
+Statistics collection module. Handles asynchronous collection of raw metrics
+and processes/logs them according to configuration.
 """
-
-# Import StatsCollectorData from utils where it should reside
-from alphatriangle.utils.types import StatsCollectorData
 
 from .collector import StatsCollectorActor
-
-# REMOVE Plotter, PlotDefinitions, PlotType, render_subplot, plot_utils
+from .processor import StatsProcessor
+from .types import LogContext, MetricConfig, RawMetricEvent, StatsConfig
 
 __all__ = [
-    # Core Collector
+    # Core Collector Actor
     "StatsCollectorActor",
-    "StatsCollectorData",  # Export type alias
+    # Processor Logic (might be internal to actor)
+    "StatsProcessor",
+    # Configuration & Types
+    "StatsConfig",
+    "MetricConfig",
+    "RawMetricEvent",
+    "LogContext",
 ]

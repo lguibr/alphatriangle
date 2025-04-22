@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 import ray
 
 # Import EnvConfig from trianglengin's top level
-from trianglengin import EnvConfig  # UPDATED IMPORT
+from trianglengin import EnvConfig
 from trimcts import SearchConfiguration
 
 # Keep alphatriangle imports
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from alphatriangle.config import (
         ModelConfig,
         PersistenceConfig,
+        StatsConfig,  # ADDED
         TrainConfig,
     )
     from alphatriangle.data import DataManager
@@ -33,7 +34,8 @@ class TrainingComponents:
     data_manager: "DataManager"
     stats_collector_actor: ray.actor.ActorHandle | None
     train_config: "TrainConfig"
-    env_config: EnvConfig  # Uses trianglengin.EnvConfig
+    env_config: EnvConfig
     model_config: "ModelConfig"
-    mcts_config: SearchConfiguration  # Use the trimcts config type here
+    mcts_config: SearchConfiguration
     persist_config: "PersistenceConfig"
+    stats_config: "StatsConfig"  # ADDED

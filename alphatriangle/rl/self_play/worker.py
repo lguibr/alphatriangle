@@ -1,4 +1,3 @@
-# File: alphatriangle/rl/self_play/worker.py
 import cProfile
 import logging
 import random
@@ -14,6 +13,7 @@ from trimcts import SearchConfiguration, run_mcts
 from ...config import ModelConfig, TrainConfig
 from ...features import extract_state_features
 from ...nn import NeuralNetwork
+from ...stats.types import RawMetricEvent  # ADDED
 from ...utils import get_device, set_random_seeds
 from ..types import SelfPlayResult
 from .mcts_helpers import (
@@ -23,10 +23,9 @@ from .mcts_helpers import (
 )
 
 if TYPE_CHECKING:
-    # Use the specific ActorHandle type if available/preferred, otherwise keep as is
     from ray.actor import ActorHandle
 
-    from ...utils.types import Experience, PolicyTargetMapping, StateType, StepInfo
+    from ...utils.types import Experience, PolicyTargetMapping, StateType
 
     MctsTreeHandle = Any
 
@@ -40,6 +39,7 @@ class SelfPlayWorker:
     """
     A Ray actor responsible for running self-play episodes using trimcts and a NN.
     Uses trianglengin.GameState and supports MCTS tree reuse.
+    Sends raw metric events to the StatsCollectorActor.
     """
 
     def __init__(
@@ -49,7 +49,7 @@ class SelfPlayWorker:
         mcts_config: SearchConfiguration,
         model_config: ModelConfig,
         train_config: TrainConfig,
-        stats_collector_actor: "ActorHandle",  # Use ActorHandle hint
+        stats_collector_actor: "ActorHandle",
         run_base_dir: str,
         initial_weights: dict | None = None,
         seed: int | None = None,
@@ -60,23 +60,24 @@ class SelfPlayWorker:
         self.mcts_config = mcts_config
         self.model_config = model_config
         self.train_config = train_config
-        self.stats_collector_actor = stats_collector_actor
+        self.stats_collector = stats_collector_actor  # Renamed for clarity
         self.run_base_dir = Path(run_base_dir)
         self.seed = seed if seed is not None else random.randint(0, 1_000_000)
         self.worker_device_str = worker_device_str
 
         self.n_step = self.train_config.N_STEP_RETURNS
         self.gamma = self.train_config.GAMMA
-        self.current_trainer_step = 0
+        self.current_trainer_step = 0  # Global step of the network weights
 
-        worker_log_level = logging.DEBUG
-        log_format = (
-            f"%(asctime)s [%(levelname)s] [W{self.actor_id}] %(name)s: %(message)s"
-        )
-        logging.basicConfig(level=worker_log_level, format=log_format, force=True)
+        # Configure logging for this actor instance
+        # Create a logger specific to this actor instance if needed
+        # self.logger = logging.getLogger(f"Worker-{self.actor_id}")
+        # logging.basicConfig(level=worker_log_level, format=log_format, force=True) # Avoid global config
+        # Instead, use the root logger configured by the main process or runner
         global logger
         logger = logging.getLogger(__name__)
-        logging.getLogger("trimcts").setLevel(logging.INFO)
+        # Set levels for other loggers if needed
+        logging.getLogger("trimcts").setLevel(logging.WARNING)
         logging.getLogger("alphatriangle.nn").setLevel(logging.INFO)
         logging.getLogger("trianglengin").setLevel(logging.INFO)
 
@@ -121,47 +122,25 @@ class SelfPlayWorker:
         self.current_trainer_step = global_step
         logger.info(f"Worker {self.actor_id}: Trainer step set to {global_step}")
 
-    def _log_step_stats_async(
-        self,
-        game_state: GameState,
-        mcts_sims: int,
-        step_reward: float,
-    ):
-        """Logs per-step stats asynchronously."""
-        if self.stats_collector_actor:
+    def _send_event(self, name: str, value: float | int, context: dict | None = None):
+        """Helper to send a raw metric event to the collector."""
+        if self.stats_collector:
+            event = RawMetricEvent(
+                name=name,
+                value=value,
+                global_step=self.current_trainer_step,  # Use trainer step of current weights
+                timestamp=time.time(),
+                context=context or {},
+            )
             try:
-                step_info: StepInfo = {
-                    "game_step_index": game_state.current_step,
-                    "global_step": self.current_trainer_step,
-                }
-                step_stats: dict[str, tuple[float, StepInfo]] = {
-                    "RL/Current_Score": (game_state.game_score(), step_info),
-                    "MCTS/Step_Simulations": (float(mcts_sims), step_info),
-                    "RL/Step_Reward": (step_reward, step_info),
-                }
-                self.stats_collector_actor.log_batch.remote(step_stats)  # type: ignore [attr-defined]
+                # Use type ignore for remote call if needed
+                self.stats_collector.log_event.remote(event)  # type: ignore [attr-defined]
             except Exception as e:
-                logger.error(f"Failed to log step stats to collector: {e}")
-
-    def _log_episode_stats_async(self, final_score: float, episode_steps: int):
-        """Logs episode summary stats asynchronously."""
-        if self.stats_collector_actor:
-            try:
-                step_info: StepInfo = {"global_step": self.current_trainer_step}
-                episode_stats: dict[str, tuple[float, StepInfo]] = {
-                    "Episode/Final_Score": (final_score, step_info),
-                    "Episode/Length": (float(episode_steps), step_info),
-                }
-                self.stats_collector_actor.log_batch.remote(episode_stats)  # type: ignore [attr-defined]
-                logger.info(
-                    f"Logged episode stats: Score={final_score:.2f}, Length={episode_steps} (Trainer Step: {self.current_trainer_step})"
-                )
-            except Exception as e:
-                logger.error(f"Failed to log episode stats to collector: {e}")
+                logger.error(f"Failed to send event '{name}' to stats collector: {e}")
 
     def run_episode(self) -> SelfPlayResult:
         """Runs a single episode of self-play with MCTS tree reuse."""
-        step_at_start = self.current_trainer_step  # Capture step at start
+        step_at_start = self.current_trainer_step
         logger.info(
             f"Starting run_episode. Seed: {self.seed}. Using network from trainer step: {step_at_start}"
         )
@@ -175,7 +154,7 @@ class SelfPlayWorker:
         last_action: int = -1
         final_score = 0.0
         final_step = 0
-        step_simulations: list[int] = []
+        total_sims_episode = 0
 
         try:
             self.nn_evaluator.model.eval()
@@ -185,40 +164,55 @@ class SelfPlayWorker:
                 f"GameState initialized. Initial step: {game.current_step}, Initial score: {game.game_score()}"
             )
 
-            initial_is_over = game.is_over()
-            initial_valid_actions = game.valid_actions()
-            logger.debug(
-                f"Initial check: is_over={initial_is_over}, num_valid_actions={len(initial_valid_actions)}"
-            )
-            if initial_is_over:
+            # Initial game state checks (remain the same)
+            if game.is_over():
                 reason = game.get_game_over_reason() or "Unknown reason at start"
                 logger.error(
                     f"Game over immediately after reset (Seed: {episode_seed}). Reason: {reason}"
                 )
-                result = SelfPlayResult(
+                # Send episode end event even if it ends immediately
+                self._send_event(
+                    "episode_end",
+                    1.0,
+                    context={
+                        "score": game.game_score(),
+                        "length": 0,
+                        "simulations": 0,
+                        "trainer_step": step_at_start,
+                    },
+                )
+                return SelfPlayResult(
                     episode_experiences=[],
                     final_score=game.game_score(),
-                    episode_steps=game.current_step,
-                    trainer_step_at_episode_start=step_at_start,  # Add arg
+                    episode_steps=0,
+                    trainer_step_at_episode_start=step_at_start,
                     total_simulations=0,
                     avg_root_visits=0.0,
                     avg_tree_depth=0.0,
                 )
-                return result
-            if not initial_valid_actions:
+            if not game.valid_actions():
                 logger.error(
                     f"Game not over, but NO valid actions at start (Seed: {episode_seed})."
                 )
-                result = SelfPlayResult(
+                self._send_event(
+                    "episode_end",
+                    1.0,
+                    context={
+                        "score": game.game_score(),
+                        "length": 0,
+                        "simulations": 0,
+                        "trainer_step": step_at_start,
+                    },
+                )
+                return SelfPlayResult(
                     episode_experiences=[],
                     final_score=game.game_score(),
-                    episode_steps=game.current_step,
-                    trainer_step_at_episode_start=step_at_start,  # Add arg
+                    episode_steps=0,
+                    trainer_step_at_episode_start=step_at_start,
                     total_simulations=0,
                     avg_root_visits=0.0,
                     avg_tree_depth=0.0,
                 )
-                return result
 
             n_step_state_policy_buffer: deque[tuple[StateType, PolicyTargetMapping]] = (
                 deque(maxlen=self.n_step)
@@ -241,8 +235,7 @@ class SelfPlayWorker:
                     break
 
                 logger.debug(
-                    f"Step {current_step_in_loop}: Running MCTS ({self.mcts_config.max_simulations} sims)... "
-                    f"Handle: {'Yes' if mcts_tree_handle else 'No'}, LastAction: {last_action}"
+                    f"Step {current_step_in_loop}: Running MCTS ({self.mcts_config.max_simulations} sims)..."
                 )
                 mcts_start_time = time.monotonic()
                 visit_counts: dict[int, int] = {}
@@ -257,7 +250,7 @@ class SelfPlayWorker:
                     )
                     mcts_tree_handle = new_mcts_tree_handle
                     logger.debug(
-                        f"Step {current_step_in_loop}: MCTS returned visit_counts: {visit_counts}. New Handle: {'Yes' if mcts_tree_handle else 'No'}"
+                        f"Step {current_step_in_loop}: MCTS returned visit_counts: {len(visit_counts)} actions."
                     )
                 except Exception as mcts_err:
                     logger.error(
@@ -268,8 +261,18 @@ class SelfPlayWorker:
                     break
                 mcts_duration = time.monotonic() - mcts_start_time
                 last_total_visits = sum(visit_counts.values())
+                total_sims_episode += (
+                    last_total_visits  # Accumulate sims run in this step
+                )
                 logger.debug(
                     f"Step {current_step_in_loop}: MCTS finished ({mcts_duration:.3f}s). Total visits: {last_total_visits}"
+                )
+
+                # Send MCTS step event
+                self._send_event(
+                    "mcts_step",
+                    float(last_total_visits),
+                    context={"game_step": current_step_in_loop},
                 )
 
                 if not visit_counts:
@@ -278,6 +281,7 @@ class SelfPlayWorker:
                     )
                     break
 
+                # Action selection logic (remains the same)
                 action_selection_start_time = time.monotonic()
                 temp = 1.0
                 selection_temp = 1.0
@@ -301,7 +305,7 @@ class SelfPlayWorker:
                         visit_counts, temperature=selection_temp
                     )
                     logger.debug(
-                        f"Step {current_step_in_loop}: Policy target generated (sum={sum(policy_target.values()):.4f}). Action selected: {action} (Temp={selection_temp:.2f})"
+                        f"Step {current_step_in_loop}: Policy target generated. Action selected: {action}"
                     )
                 except PolicyGenerationError as policy_err:
                     logger.error(
@@ -322,6 +326,7 @@ class SelfPlayWorker:
                     f"Step {current_step_in_loop}: Action selection time: {action_selection_duration:.4f}s"
                 )
 
+                # Feature extraction (remains the same)
                 feature_start_time = time.monotonic()
                 try:
                     state_features: StateType = extract_state_features(
@@ -339,8 +344,8 @@ class SelfPlayWorker:
                 )
 
                 n_step_state_policy_buffer.append((state_features, policy_target))
-                step_simulations.append(self.mcts_config.max_simulations)
 
+                # Game step (remains the same)
                 game_step_start_time = time.monotonic()
                 step_reward, done = 0.0, False
                 try:
@@ -362,7 +367,14 @@ class SelfPlayWorker:
                 )
 
                 n_step_reward_buffer.append(step_reward)
+                # Send raw step reward event
+                self._send_event(
+                    "step_reward",
+                    step_reward,
+                    context={"game_step": current_step_in_loop},
+                )
 
+                # N-step return calculation (remains the same)
                 if len(n_step_reward_buffer) == self.n_step:
                     discounted_reward_sum = sum(
                         (self.gamma**i) * n_step_reward_buffer[i]
@@ -377,7 +389,7 @@ class SelfPlayWorker:
                                 f"Bootstrap eval error (Step {game.current_step}): {eval_err}",
                                 exc_info=True,
                             )
-                            bootstrap_value = 0.0
+                            bootstrap_value = 0.0  # Default to 0 if eval fails
                     n_step_return = (
                         discounted_reward_sum
                         + (self.gamma**self.n_step) * bootstrap_value
@@ -395,9 +407,13 @@ class SelfPlayWorker:
                         f"Step {current_step_in_loop}: Stored experience for step {current_step_in_loop - self.n_step + 1}. N-Step Return: {n_step_return:.4f}"
                     )
 
-                self._log_step_stats_async(
-                    game, self.mcts_config.max_simulations, step_reward
+                # Log current score via event
+                self._send_event(
+                    "current_score",
+                    game.game_score(),
+                    context={"game_step": current_step_in_loop},
                 )
+
                 step_duration = time.monotonic() - step_start_time
                 logger.debug(
                     f"--- Finished Step {current_step_in_loop}. Duration: {step_duration:.3f}s ---"
@@ -409,12 +425,14 @@ class SelfPlayWorker:
                     )
                     break
 
+            # --- Episode End Processing ---
             final_score = game.game_score() if game else 0.0
             final_step = game.current_step if game else 0
             logger.info(
                 f"Episode loop finished. Final Score: {final_score:.2f}, Final Step: {final_step}"
             )
 
+            # Process remaining n-step items (remains the same)
             remaining_steps = len(n_step_reward_buffer)
             logger.debug(f"Processing {remaining_steps} remaining n-step items.")
             for k in range(remaining_steps):
@@ -422,7 +440,7 @@ class SelfPlayWorker:
                     (self.gamma**i) * n_step_reward_buffer[k + i]
                     for i in range(remaining_steps - k)
                 )
-                n_step_return = discounted_reward_sum
+                n_step_return = discounted_reward_sum  # No bootstrap for final steps
                 state_features_t, policy_target_t = n_step_state_policy_buffer[k]
                 final_exp: Experience = (
                     state_features_t,
@@ -434,23 +452,33 @@ class SelfPlayWorker:
                     f"Stored final experience for step {final_step - remaining_steps + k + 1}. N-Step Return: {n_step_return:.4f}"
                 )
 
-            total_sims_episode = sum(step_simulations)
             if not episode_experiences:
                 logger.warning(
                     f"Episode finished with 0 experiences collected. Score: {final_score}, Steps: {final_step}"
                 )
 
-            # Log episode summary stats
-            self._log_episode_stats_async(final_score, final_step)
+            # Send episode end event
+            self._send_event(
+                name="episode_end",
+                value=1.0,  # Value indicates one episode ended
+                context={
+                    "score": final_score,
+                    "length": final_step,
+                    "simulations": total_sims_episode,
+                    "trainer_step": step_at_start,
+                },
+            )
 
             result = SelfPlayResult(
                 episode_experiences=episode_experiences,
                 final_score=final_score,
                 episode_steps=final_step,
-                trainer_step_at_episode_start=step_at_start,  # Add arg
+                trainer_step_at_episode_start=step_at_start,
                 total_simulations=total_sims_episode,
-                avg_root_visits=float(last_total_visits),
-                avg_tree_depth=0.0,
+                avg_root_visits=float(
+                    last_total_visits
+                ),  # Use last step's visits as proxy
+                avg_tree_depth=0.0,  # MCTS depth not easily available from trimcts result
             )
             logger.info(
                 f"Episode result created. Experiences: {len(result.episode_experiences)}"
@@ -460,18 +488,30 @@ class SelfPlayWorker:
             logger.critical(f"Unhandled exception in run_episode: {e}", exc_info=True)
             final_score = game.game_score() if game else 0.0
             final_step = game.current_step if game else 0
+            # Send episode end event even on error
+            self._send_event(
+                "episode_end",
+                1.0,
+                context={
+                    "score": final_score,
+                    "length": final_step,
+                    "simulations": total_sims_episode,
+                    "trainer_step": step_at_start,
+                    "error": True,
+                },
+            )
             result = SelfPlayResult(
                 episode_experiences=[],
                 final_score=final_score,
                 episode_steps=final_step,
-                trainer_step_at_episode_start=step_at_start,  # Add arg
-                total_simulations=sum(step_simulations),
+                trainer_step_at_episode_start=step_at_start,
+                total_simulations=total_sims_episode,
                 avg_root_visits=0.0,
                 avg_tree_depth=0.0,
             )
 
         finally:
-            mcts_tree_handle = None
+            mcts_tree_handle = None  # Ensure handle is cleared
             if self.profiler:
                 self.profiler.disable()
                 profile_dir = self.run_base_dir / "profile_data"
@@ -489,15 +529,26 @@ class SelfPlayWorker:
                         f"Worker {self.actor_id}: Failed to save profile stats: {e}"
                     )
 
-        if result is None:
+        if result is None:  # Should not happen with the try/except/finally structure
             logger.error(
                 "run_episode finished without setting a result. Returning empty."
+            )
+            self._send_event(
+                "episode_end",
+                1.0,
+                context={
+                    "score": 0.0,
+                    "length": 0,
+                    "simulations": 0,
+                    "trainer_step": step_at_start,
+                    "error": True,
+                },
             )
             result = SelfPlayResult(
                 episode_experiences=[],
                 final_score=0.0,
                 episode_steps=0,
-                trainer_step_at_episode_start=step_at_start,  # Add arg
+                trainer_step_at_episode_start=step_at_start,
                 total_simulations=0,
                 avg_root_visits=0.0,
                 avg_tree_depth=0.0,

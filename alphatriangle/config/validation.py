@@ -1,17 +1,17 @@
+# File: alphatriangle/config/validation.py
 import logging
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
 # Import EnvConfig from trianglengin's top level
-from trianglengin import EnvConfig  # UPDATED IMPORT
+from trianglengin import EnvConfig
 
-# REMOVE trimcts import
-# from trimcts import SearchConfiguration
 # Import the new config
 from .mcts_config import AlphaTriangleMCTSConfig
 from .model_config import ModelConfig
 from .persistence_config import PersistenceConfig
+from .stats_config import StatsConfig  # ADDED
 from .train_config import TrainConfig
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,8 @@ def print_config_info_and_validate(
         "Model": ModelConfig,
         "Training": TrainConfig,
         "Persistence": PersistenceConfig,
-        "MCTS": AlphaTriangleMCTSConfig,  # Validate the new config
+        "MCTS": AlphaTriangleMCTSConfig,
+        "Statistics": StatsConfig,  # ADDED
     }
 
     for name, ConfigClass in config_classes.items():
@@ -77,9 +78,9 @@ def print_config_info_and_validate(
             dump_data = instance.model_dump()
             for field_name, value in dump_data.items():
                 # Simple representation for long lists/dicts
-                if isinstance(value, list) and len(value) > 5:
+                if isinstance(value, list) and len(value) > 10:
                     print(f"  {field_name}: [List with {len(value)} items]")
-                elif isinstance(value, dict) and len(value) > 5:
+                elif isinstance(value, dict) and len(value) > 10:
                     print(f"  {field_name}: {{Dict with {len(value)} keys}}")
                 else:
                     print(f"  {field_name}: {value}")

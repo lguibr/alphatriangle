@@ -1,10 +1,12 @@
-# File: alphatriangle/training/loop.py
 import logging
 import threading
 import time
 from typing import TYPE_CHECKING, Any
 
+import ray
+
 from ..rl import SelfPlayResult
+from ..stats.types import RawMetricEvent  # ADDED
 from .loop_helpers import LoopHelpers
 from .worker_manager import WorkerManager
 
@@ -14,13 +16,15 @@ if TYPE_CHECKING:
     from ..utils.types import PERBatchSample
     from .components import TrainingComponents
 
+
 logger = logging.getLogger(__name__)
 
 
 class TrainingLoop:
     """
     Manages the core asynchronous training loop logic: coordinating worker tasks,
-    processing results, triggering training steps. Runs headless.
+    processing results, triggering training steps, and managing stats collection.
+    Runs headless.
     """
 
     def __init__(
@@ -29,36 +33,38 @@ class TrainingLoop:
     ):
         self.components = components
         self.train_config = components.train_config
-        self.persist_config = components.persist_config  # Add persist_config
+        self.persist_config = components.persist_config
+        self.stats_config = components.stats_config  # ADDED
         self.buffer = components.buffer
         self.trainer = components.trainer
-        self.data_manager = components.data_manager  # Add DataManager reference
+        self.data_manager = components.data_manager
+        self.stats_collector = components.stats_collector_actor  # Renamed for clarity
 
         self.global_step = 0
         self.episodes_played = 0
         self.total_simulations_run = 0
-        self.worker_weight_updates_count = 0
         self.start_time = time.time()
         self.stop_requested = threading.Event()
         self.training_complete = False
         self.training_exception: Exception | None = None
 
         self.worker_manager = WorkerManager(components)
-        self.loop_helpers = LoopHelpers(
-            components,
-            None,
-            self._get_loop_state,
-        )
+        # LoopHelpers is now simpler, mainly for ETA/progress string formatting
+        self.loop_helpers = LoopHelpers(components, self._get_loop_state)
+
+        self._last_stats_process_time = (
+            time.monotonic()
+        )  # Track last processing trigger
 
         logger.info("TrainingLoop initialized (Headless).")
 
     def _get_loop_state(self) -> dict[str, Any]:
         """Provides current loop state to helpers."""
+        # Note: Some stats previously calculated here (like rates) are now handled by StatsProcessor
         return {
             "global_step": self.global_step,
             "episodes_played": self.episodes_played,
             "total_simulations_run": self.total_simulations_run,
-            "worker_weight_updates": self.worker_weight_updates_count,
             "buffer_size": len(self.buffer),
             "buffer_capacity": self.buffer.capacity,
             "num_active_workers": self.worker_manager.get_num_active_workers(),
@@ -74,16 +80,10 @@ class TrainingLoop:
         self.global_step = global_step
         self.episodes_played = episodes_played
         self.total_simulations_run = total_simulations
-        self.worker_weight_updates_count = (
-            global_step // self.train_config.WORKER_UPDATE_FREQ_STEPS
-            if self.train_config.WORKER_UPDATE_FREQ_STEPS > 0
-            else 0
-        )
-        self.loop_helpers.reset_rate_counters(
-            global_step, episodes_played, total_simulations
-        )
+        # Reset rate counters in LoopHelpers if they still exist, otherwise remove
+        # self.loop_helpers.reset_rate_counters(global_step, episodes_played, total_simulations)
         logger.info(
-            f"TrainingLoop initial state set: Step={global_step}, Episodes={episodes_played}, Sims={total_simulations}, WeightUpdates={self.worker_weight_updates_count}"
+            f"TrainingLoop initial state set: Step={global_step}, Episodes={episodes_played}, Sims={total_simulations}"
         )
 
     def initialize_workers(self):
@@ -95,6 +95,29 @@ class TrainingLoop:
         if not self.stop_requested.is_set():
             logger.info("Stop requested for TrainingLoop.")
             self.stop_requested.set()
+
+    def _send_event(self, name: str, value: float | int, context: dict | None = None):
+        """Helper to send a raw metric event to the collector."""
+        if self.stats_collector:
+            event = RawMetricEvent(
+                name=name,
+                value=value,
+                global_step=self.global_step,
+                timestamp=time.time(),
+                context=context or {},
+            )
+            try:
+                self.stats_collector.log_event.remote(event)
+            except Exception as e:
+                logger.error(f"Failed to send event '{name}' to stats collector: {e}")
+
+    def _send_batch_events(self, events: list[RawMetricEvent]):
+        """Helper to send a batch of raw metric events."""
+        if self.stats_collector and events:
+            try:
+                self.stats_collector.log_batch_events.remote(events)
+            except Exception as e:
+                logger.error(f"Failed to send batch events to stats collector: {e}")
 
     def _process_self_play_result(self, result: SelfPlayResult, worker_id: int):
         """Processes a validated result from a worker."""
@@ -121,10 +144,27 @@ class TrainingLoop:
                     f"Error adding batch to buffer from worker {worker_id}: {e}",
                     exc_info=True,
                 )
-                return
+                return  # Don't count episode if experiences couldn't be added
 
             self.episodes_played += 1
             self.total_simulations_run += result.total_simulations
+
+            # Send episode end event for aggregation
+            self._send_event(
+                name="episode_end",
+                value=1.0,  # Value indicates one episode ended
+                context={
+                    "worker_id": worker_id,
+                    "score": result.final_score,
+                    "length": result.episode_steps,
+                    "simulations": result.total_simulations,
+                    "trainer_step": result.trainer_step_at_episode_start,
+                },
+            )
+            # Send loop counters
+            self._send_event("Progress/Episodes_Played", self.episodes_played)
+            self._send_event("Progress/Total_Simulations", self.total_simulations_run)
+
         else:
             logger.error(
                 f"Worker {worker_id}: Self-play episode produced NO valid experiences (Steps: {result.episode_steps}, Score: {result.final_score:.2f}). This prevents buffer filling and training."
@@ -137,8 +177,8 @@ class TrainingLoop:
             self.data_manager.save_training_state(
                 nn=self.components.nn,
                 optimizer=self.trainer.optimizer,
-                stats_collector_actor=self.components.stats_collector_actor,
-                buffer=self.buffer,  # Pass buffer for potential future use in checkpoint
+                stats_collector_actor=self.stats_collector,  # Pass handle
+                buffer=self.buffer,
                 global_step=self.global_step,
                 episodes_played=self.episodes_played,
                 total_simulations_run=self.total_simulations_run,
@@ -152,23 +192,20 @@ class TrainingLoop:
 
     def _save_buffer(self):
         """Saves the current replay buffer state."""
-        # Access persist_config directly from self
         if not self.persist_config.SAVE_BUFFER:
             return
         logger.info(f"Saving buffer at step {self.global_step}.")
         try:
             # DataManager save_training_state now handles buffer saving internally
-            # based on its config, so we just call that.
-            # We pass is_best=False as this is just a periodic buffer save.
             self.data_manager.save_training_state(
                 nn=self.components.nn,
                 optimizer=self.trainer.optimizer,
-                stats_collector_actor=self.components.stats_collector_actor,
+                stats_collector_actor=self.stats_collector,  # Pass handle
                 buffer=self.buffer,
                 global_step=self.global_step,
                 episodes_played=self.episodes_played,
                 total_simulations_run=self.total_simulations_run,
-                is_best=False,  # Not saving 'best' buffer, just periodic
+                is_best=False,
             )
         except Exception as e_save:
             logger.error(
@@ -186,18 +223,41 @@ class TrainingLoop:
         if not per_sample:
             return False
 
+        # Trainer now returns raw loss info and td_errors
         train_result: tuple[dict[str, float], np.ndarray] | None = (
             self.trainer.train_step(per_sample)
         )
         if train_result:
             loss_info, td_errors = train_result
             self.global_step += 1
+            self._send_event("step_completed", 1.0)  # Event for rate calculation
+
             if self.train_config.USE_PER:
                 self.buffer.update_priorities(per_sample["indices"], td_errors)
-            self.loop_helpers.log_training_results_async(
-                loss_info, self.global_step, self.total_simulations_run
+                # Send PER Beta if used
+                per_beta = self.buffer._calculate_beta(self.global_step)
+                self._send_event("PER/Beta", per_beta)
+
+            # Send raw loss components to stats collector
+            events_batch = [
+                RawMetricEvent(
+                    name=f"Loss/{k.replace('_', '/').title()}",
+                    value=v,
+                    global_step=self.global_step,
+                )
+                for k, v in loss_info.items()
+            ]
+            # Send Learning Rate
+            current_lr = self.trainer.get_current_lr()
+            events_batch.append(
+                RawMetricEvent(
+                    name="LearningRate", value=current_lr, global_step=self.global_step
+                )
             )
 
+            self._send_batch_events(events_batch)
+
+            # Update worker weights periodically
             if (
                 self.train_config.WORKER_UPDATE_FREQ_STEPS > 0
                 and self.global_step % self.train_config.WORKER_UPDATE_FREQ_STEPS == 0
@@ -207,21 +267,37 @@ class TrainingLoop:
                 )
                 try:
                     self.worker_manager.update_worker_networks(self.global_step)
-                    self.worker_weight_updates_count += 1
-                    self.loop_helpers.log_weight_update_event(self.global_step)
+                    # Send event marker for weight update
+                    self._send_event("Event/Weight_Update", 1.0)
                 except Exception as update_err:
                     logger.error(
                         f"Failed to update worker networks at step {self.global_step}: {update_err}"
                     )
 
+            # Log simple progress to console occasionally
             if self.global_step % 50 == 0:
                 logger.info(
-                    f"Step {self.global_step}: P Loss={loss_info['policy_loss']:.4f}, V Loss={loss_info['value_loss']:.4f}, Ent={loss_info['entropy']:.4f}, TD Err={loss_info['mean_td_error']:.4f}"
+                    f"Step {self.global_step}: P Loss={loss_info.get('policy_loss', 0.0):.4f}, V Loss={loss_info.get('value_loss', 0.0):.4f}"
                 )
             return True
         else:
             logger.warning(f"Training step {self.global_step + 1} failed.")
             return False
+
+    def _trigger_stats_processing(self):
+        """Triggers the stats actor to process and log buffered data."""
+        now = time.monotonic()
+        if (
+            now - self._last_stats_process_time
+            >= self.stats_config.processing_interval_seconds
+            and self.stats_collector
+        ):
+            logger.debug(f"Triggering stats processing at step {self.global_step}")
+            try:
+                self.stats_collector.process_and_log.remote(self.global_step)
+                self._last_stats_process_time = now
+            except Exception as e:
+                logger.error(f"Failed to trigger stats processing: {e}")
 
     def run(self):
         """Main training loop."""
@@ -247,15 +323,14 @@ class TrainingLoop:
                     )
                     self.training_complete = True
                     self.request_stop()
-                    break  # Exit loop immediately
+                    break
 
                 # --- Run Training Step ---
                 trained_this_step = False
                 if self.buffer.is_ready():
                     trained_this_step = self._run_training_step()
                 else:
-                    # Sleep briefly if buffer isn't ready to avoid busy-waiting
-                    time.sleep(0.01)
+                    time.sleep(0.01)  # Sleep briefly if buffer isn't ready
 
                 # --- Checkpoint Saving ---
                 if (
@@ -264,14 +339,12 @@ class TrainingLoop:
                     and self.global_step % self.train_config.CHECKPOINT_SAVE_FREQ_STEPS
                     == 0
                 ):
-                    self._save_checkpoint(
-                        is_best=False
-                    )  # Add is_best logic later if needed
+                    self._save_checkpoint(is_best=False)
 
                 # --- Buffer Saving ---
-                # Corrected attribute access: use self.persist_config
                 if (
                     trained_this_step
+                    and self.persist_config.SAVE_BUFFER  # Check if enabled
                     and self.persist_config.BUFFER_SAVE_FREQ_STEPS > 0
                     and self.global_step % self.persist_config.BUFFER_SAVE_FREQ_STEPS
                     == 0
@@ -311,12 +384,28 @@ class TrainingLoop:
                 if self.stop_requested.is_set():
                     break
 
-                # --- Logging & Sleep ---
+                # --- Logging & Stats Processing ---
+                # Log simple progress string
                 self.loop_helpers.log_progress_eta()
-                self.loop_helpers.calculate_and_log_rates()
-                self.loop_helpers.log_additional_stats()
+                # Send current loop state metrics
+                loop_state = self._get_loop_state()
+                self._send_event("Buffer/Size", loop_state["buffer_size"])
+                self._send_event(
+                    "System/Num_Active_Workers", loop_state["num_active_workers"]
+                )
+                self._send_event(
+                    "System/Num_Pending_Tasks", loop_state["num_pending_tasks"]
+                )
 
-                if not completed_tasks and not self.buffer.is_ready():
+                # Trigger stats processing periodically
+                self._trigger_stats_processing()
+
+                # Prevent busy-waiting if nothing happened
+                if (
+                    not completed_tasks
+                    and not trained_this_step
+                    and not self.buffer.is_ready()
+                ):
                     time.sleep(0.05)
 
         except KeyboardInterrupt:
@@ -327,6 +416,21 @@ class TrainingLoop:
             self.training_exception = e
             self.request_stop()
         finally:
+            # Ensure final stats are processed before cleanup
+            if self.stats_collector:
+                logger.info("Processing final stats before shutdown...")
+                try:
+                    # Use ray.get to wait for final processing if needed
+                    final_process_ref = self.stats_collector.process_and_log.remote(
+                        self.global_step
+                    )
+                    ray.get(final_process_ref, timeout=10.0)  # Wait up to 10s
+                    logger.info("Final stats processing complete.")
+                except Exception as final_stats_err:
+                    logger.error(
+                        f"Error during final stats processing: {final_stats_err}"
+                    )
+
             if (
                 self.training_exception
                 or self.stop_requested.is_set()
@@ -338,5 +442,18 @@ class TrainingLoop:
             )
 
     def cleanup_actors(self):
-        """Cleans up worker actors using WorkerManager."""
+        """Cleans up worker actors and stats collector."""
         self.worker_manager.cleanup_actors()
+        if self.stats_collector:
+            try:
+                # Close TB writer before killing actor
+                close_ref = self.stats_collector.close_tb_writer.remote()
+                ray.get(close_ref, timeout=5.0)
+            except Exception as tb_close_err:
+                logger.error(f"Error closing stats actor TB writer: {tb_close_err}")
+            try:
+                ray.kill(self.stats_collector, no_restart=True)
+                logger.info("StatsCollectorActor cleaned up.")
+            except Exception as kill_err:
+                logger.warning(f"Error killing StatsCollectorActor: {kill_err}")
+            self.stats_collector = None
