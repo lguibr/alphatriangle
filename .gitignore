@@ -159,3 +159,6 @@ files/ # Ignore specific directory if generated
 Thumbs.db
 .trieye_data
 .trieye_data/
+.resumed.txt
+.out.txt
+tests.txt
