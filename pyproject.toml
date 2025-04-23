@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alphatriangle"
-version = "1.9.0" # Incremented version for Trieye integration
+version = "2.0.0" # Incremented version for Trieye integration
 authors = [{ name="Luis Guilherme P. M.", email="lgpelin92@gmail.com" }]
 description = "AlphaZero implementation for a triangle puzzle game (uses trianglengin v2+, trimcts, and Trieye for stats/persistence)." # Updated description
 readme = "README.md"
