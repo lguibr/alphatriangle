@@ -11,15 +11,21 @@ AlphaTriangle is a project implementing an artificial intelligence agent based o
 
 **Key Features:**
 
-*   **Core Game Logic:** Uses the [`trianglengin>=2.0.6`](https://github.com/lguibr/trianglengin) library for the triangle puzzle game rules and state management, featuring a high-performance C++ core.
+*   **Core Game Logic:** Uses the [`trianglengin>=2.0.7`](https://github.com/lguibr/trianglengin) library for the triangle puzzle game rules and state management, featuring a high-performance C++ core.
 *   **High-Performance MCTS:** Integrates the [`trimcts>=1.2.1`](https://github.com/lguibr/trimcts) library, providing a **C++ implementation of MCTS** for efficient search, callable from Python. MCTS parameters are configurable via `alphatriangle/config/mcts_config.py`.
 *   **Deep Learning Model:** Features a PyTorch neural network with policy and distributional value heads, convolutional layers, and **optional Transformer Encoder layers**.
 *   **Parallel Self-Play:** Leverages **Ray** for distributed self-play data generation across multiple CPU cores. **The number of workers automatically adjusts based on detected CPU cores (reserving some for stability), capped by the `NUM_SELF_PLAY_WORKERS` setting in `TrainConfig`.**
-*   **Experiment Tracking:** Uses **MLflow** and **TensorBoard** for logging parameters, metrics, and artifacts, enabling web-based monitoring. All persistent data is stored within the `.alphatriangle_data` directory.
+*   **Asynchronous Stats & Persistence (NEW):** Uses the [`trieye>=0.1.2`](https://github.com/lguibr/trieye) library, which provides a dedicated **Ray actor (`TrieyeActor`)** for:
+    *   Asynchronous collection of raw metric events from workers and the training loop.
+    *   Configurable processing and aggregation of metrics.
+    *   Logging processed metrics to **MLflow** and **TensorBoard**.
+    *   Saving/loading training state (checkpoints, buffers) to the filesystem and logging artifacts to MLflow.
+    *   Handling auto-resumption from previous runs.
+    *   All persistent data managed by `trieye` is stored within the `.trieye_data/<app_name>` directory (default: `.trieye_data/alphatriangle`).
 *   **Headless Training:** Focuses on a command-line interface for running the training pipeline without visual output.
 *   **Enhanced CLI:** Uses the **`rich`** library for improved visual feedback (colors, panels, emojis) in the terminal.
-*   **Centralized Logging:** Uses Python's standard `logging` module configured centrally for consistent log formatting (including `▲` prefix) and level control across the project. Run logs are saved to `.alphatriangle_data/runs/<run_name>/logs/`.
-*   **Optional Profiling:** Supports profiling worker 0 using `cProfile` via a command-line flag. Profile data is saved to `.alphatriangle_data/runs/<run_name>/profile_data/`.
+*   **Centralized Logging:** Uses Python's standard `logging` module configured centrally for consistent log formatting (including `▲` prefix) and level control across the project. Run logs are saved to `.trieye_data/<app_name>/runs/<run_name>/logs/`.
+*   **Optional Profiling:** Supports profiling worker 0 using `cProfile` via a command-line flag. Profile data is saved to `.trieye_data/<app_name>/runs/<run_name>/profile_data/`.
 *   **Unit Tests:** Includes tests for RL components.
 
 ---
@@ -33,16 +39,17 @@ This project trains an agent to play the game defined by the `trianglengin` libr
 ## Core Technologies
 
 *   **Python 3.10+**
-*   **trianglengin>=2.0.6:** Core game engine (state, actions, rules) with C++ optimizations.
+*   **trianglengin>=2.0.7:** Core game engine (state, actions, rules) with C++ optimizations.
 *   **trimcts>=1.2.1:** High-performance C++ MCTS implementation with Python bindings.
+*   **trieye>=0.1.2:** Asynchronous statistics collection, processing, logging (MLflow/TensorBoard), and data persistence via a Ray actor.
 *   **PyTorch:** For the deep learning model (CNNs, **optional Transformers**, Distributional Value Head) and training, with CUDA/MPS support.
 *   **NumPy:** For numerical operations, especially state representation (used by `trianglengin` and features).
-*   **Ray:** For parallelizing self-play data generation and statistics collection across multiple CPU cores/processes. **Dynamically scales worker count based on available cores.**
+*   **Ray:** For parallelizing self-play data generation and hosting the `TrieyeActor`. **Dynamically scales worker count based on available cores.**
 *   **Numba:** (Optional, used in `features.grid_features`) For performance optimization of specific grid calculations.
-*   **Cloudpickle:** For serializing the experience replay buffer and training checkpoints.
-*   **MLflow:** For logging parameters, metrics, and artifacts (checkpoints, buffers) during training runs. **Provides the primary web UI dashboard for experiment management. Data stored in `.alphatriangle_data/mlruns/`.**
-*   **TensorBoard:** For visualizing metrics during training (e.g., detailed loss curves). **Provides a secondary web UI dashboard. Data stored in `.alphatriangle_data/runs/<run_name>/tensorboard/`.**
-*   **Pydantic:** For configuration management and data validation.
+*   **Cloudpickle:** For serializing the experience replay buffer and training checkpoints (used by `trieye`).
+*   **MLflow:** For logging parameters, metrics, and artifacts (checkpoints, buffers) during training runs. **Provides the primary web UI dashboard for experiment management. Data stored in `.trieye_data/<app_name>/mlruns/`.** Managed by `trieye`.
+*   **TensorBoard:** For visualizing metrics during training (e.g., detailed loss curves). **Provides a secondary web UI dashboard. Data stored in `.trieye_data/<app_name>/runs/<run_name>/tensorboard/`.** Managed by `trieye`.
+*   **Pydantic:** For configuration management and data validation (used by `alphatriangle` and `trieye`).
 *   **Typer:** For the command-line interface.
 *   **Rich:** For enhanced CLI output formatting and styling.
 *   **Pytest:** For running unit tests.
@@ -53,68 +60,62 @@ This project trains an agent to play the game defined by the `trianglengin` libr
 .
 ├── .github/workflows/      # GitHub Actions CI/CD
 │   └── ci_cd.yml
-├── .alphatriangle_data/    # Root directory for ALL persistent data (GITIGNORED)
-│   ├── mlruns/             # MLflow internal tracking data & artifact store (for MLflow UI)
-│   │   └── <experiment_id>/
-│   │       └── <mlflow_run_id>/
-│   │           ├── artifacts/ # MLflow's copy of logged artifacts (checkpoints, buffers, etc.)
-│   │           ├── metrics/
-│   │           ├── params/
-│   │           └── tags/
-│   └── runs/               # Local artifacts per run (source for TensorBoard UI & resume)
-│       └── <run_name>/     # e.g., train_YYYYMMDD_HHMMSS
-│           ├── checkpoints/ # Saved model weights & optimizer states (*.pkl)
-│           ├── buffers/     # Saved experience replay buffers (*.pkl)
-│           ├── logs/        # Plain text log files for the run (*.log)
-│           ├── tensorboard/ # TensorBoard log files (event files)
-│           ├── profile_data/ # cProfile output files (*.prof) if profiling enabled
-│           └── configs.json # Copy of run configuration
+├── .trieye_data/           # Root directory for ALL persistent data (GITIGNORED) - Managed by Trieye
+│   └── alphatriangle/      # Default app_name
+│       ├── mlruns/         # MLflow internal tracking data & artifact store (for MLflow UI)
+│       │   └── <experiment_id>/
+│       │       └── <mlflow_run_id>/
+│       │           ├── artifacts/ # MLflow's copy of logged artifacts (checkpoints, buffers, etc.)
+│       │           ├── metrics/
+│       │           ├── params/
+│       │           └── tags/
+│       └── runs/           # Local artifacts per run (source for TensorBoard UI & resume)
+│           └── <run_name>/ # e.g., train_YYYYMMDD_HHMMSS
+│               ├── checkpoints/ # Saved model weights & optimizer states (*.pkl)
+│               ├── buffers/     # Saved experience replay buffers (*.pkl)
+│               ├── logs/        # Plain text log files for the run (*.log) - App + Trieye logs
+│               ├── tensorboard/ # TensorBoard log files (event files)
+│               ├── profile_data/ # cProfile output files (*.prof) if profiling enabled
+│               └── configs.json # Copy of run configuration
 ├── alphatriangle/          # Source code for the AlphaZero agent package
 │   ├── __init__.py
 │   ├── cli.py              # CLI logic (train, ml, tb, ray commands - headless only, uses Rich)
-│   ├── config/             # Pydantic configuration models (Model, Train, Persistence, MCTS, Stats)
-│   │   └── README.md
-│   ├── data/               # Data saving/loading logic (DataManager, Schemas, PathManager, Serializer)
+│   ├── config/             # Pydantic configuration models (Model, Train, MCTS) - Stats/Persistence now in Trieye
 │   │   └── README.md
 │   ├── features/           # Feature extraction logic (operates on trianglengin.GameState)
 │   │   └── README.md
-│   ├── logging_config.py   # Centralized logging setup function
+│   ├── logging_config.py   # Centralized logging setup function (for console)
 │   ├── nn/                 # Neural network definition and wrapper (implements trimcts.AlphaZeroNetworkInterface)
 │   │   └── README.md
 │   ├── rl/                 # RL components (Trainer, Buffer, Worker using trimcts)
 │   │   └── README.md
-│   ├── stats/              # Statistics collection actor (StatsCollectorActor, StatsProcessor)
-│   │   └── README.md
-│   ├── training/           # Training orchestration (Loop, Setup, Runner, WorkerManager)
+│   ├── training/           # Training orchestration (Loop, Setup, Runner, WorkerManager) - Interacts with TrieyeActor
 │   │   └── README.md
 │   └── utils/              # Shared utilities and types (specific to AlphaTriangle)
 │       └── README.md
-├── tests/                  # Unit tests (for alphatriangle components, excluding MCTS)
+├── tests/                  # Unit tests (for alphatriangle components, excluding MCTS, Stats, Data)
 │   ├── conftest.py
 │   ├── nn/
 │   ├── rl/
-│   ├── stats/
 │   └── training/
 ├── .gitignore
 ├── .python-version
 ├── LICENSE                 # License file (MIT)
 ├── MANIFEST.in             # Specifies files for source distribution
-├── pyproject.toml          # Build system & package configuration (depends on trianglengin, trimcts, rich)
+├── pyproject.toml          # Build system & package configuration (depends on trianglengin, trimcts, trieye, rich)
 ├── README.md               # This file
-└── requirements.txt        # List of dependencies (includes trianglengin, trimcts, rich)
+└── requirements.txt        # List of dependencies (includes trianglengin, trimcts, trieye, rich)
 ```
 
 ## Key Modules (`alphatriangle`)
 
 *   **`cli`:** Defines the command-line interface using Typer (**`train`**, **`ml`**, **`tb`**, **`ray`** commands - headless). Uses **`rich`** for styling. ([`alphatriangle/cli.py`](alphatriangle/cli.py))
-*   **`config`:** Centralized Pydantic configuration classes (Model, Train, Persistence, **MCTS**, **Stats**). Imports `EnvConfig` from `trianglengin`. ([`alphatriangle/config/README.md`](alphatriangle/config/README.md))
+*   **`config`:** Centralized Pydantic configuration classes (Model, Train, **MCTS**). Imports `EnvConfig` from `trianglengin`. **Uses `TrieyeConfig` from `trieye` for stats/persistence.** ([`alphatriangle/config/README.md`](alphatriangle/config/README.md))
 *   **`features`:** Contains logic to convert `trianglengin.GameState` objects into numerical features (`StateType`). ([`alphatriangle/features/README.md`](alphatriangle/features/README.md))
-*   **`logging_config`:** Defines the `setup_logging` function for centralized logger configuration. ([`alphatriangle/logging_config.py`](alphatriangle/logging_config.py))
+*   **`logging_config`:** Defines the `setup_logging` function for centralized **console** logger configuration. ([`alphatriangle/logging_config.py`](alphatriangle/logging_config.py))
 *   **`nn`:** Contains the PyTorch `nn.Module` definition (`AlphaTriangleNet`) and a wrapper class (`NeuralNetwork`). **The `NeuralNetwork` class implicitly conforms to the `trimcts.AlphaZeroNetworkInterface` protocol.** ([`alphatriangle/nn/README.md`](alphatriangle/nn/README.md))
-*   **`rl`:** Contains RL components: `Trainer` (network updates), `ExperienceBuffer` (data storage, **supports PER**), and `SelfPlayWorker` (Ray actor for parallel self-play **using `trimcts.run_mcts`**). ([`alphatriangle/rl/README.md`](alphatriangle/rl/README.md))
-*   **`training`:** Orchestrates the **headless** training process using `TrainingLoop`, managing workers, data flow, logging (via centralized setup), and checkpoints. Includes `runner.py` for the callable training function. ([`alphatriangle/training/README.md`](alphatriangle/training/README.md))
-*   **`stats`:** Contains the `StatsCollectorActor` (Ray actor) for asynchronous statistics collection and the `StatsProcessor` for aggregation/logging based on `StatsConfig`. ([`alphatriangle/stats/README.md`](alphatriangle/stats/README.md))
-*   **`data`:** Manages saving and loading of training artifacts (`DataManager`, `PathManager`, `Serializer`) using Pydantic schemas and `cloudpickle`. ([`alphatriangle/data/README.md`](alphatriangle/data/README.md))
+*   **`rl`:** Contains RL components: `Trainer` (network updates), `ExperienceBuffer` (data storage, **supports PER**), and `SelfPlayWorker` (Ray actor for parallel self-play **using `trimcts.run_mcts`**). **Workers now send `RawMetricEvent`s to the `TrieyeActor`.** ([`alphatriangle/rl/README.md`](alphatriangle/rl/README.md))
+*   **`training`:** Orchestrates the **headless** training process using `TrainingLoop`, managing workers, data flow, and interaction with the **`TrieyeActor`** for logging, checkpointing, and state loading. Includes `runner.py` for the callable training function. ([`alphatriangle/training/README.md`](alphatriangle/training/README.md))
 *   **`utils`:** Provides common helper functions and shared type definitions specific to the AlphaZero implementation. ([`alphatriangle/utils/README.md`](alphatriangle/utils/README.md))
 
 ## Setup
@@ -129,20 +130,22 @@ This project trains an agent to play the game defined by the `trianglengin` libr
     python -m venv venv
     source venv/bin/activate  # On Windows use `venv\Scripts\activate`
     ```
-3.  **Install the package (including `trianglengin`, `trimcts`, and `rich`):**
+3.  **Install the package (including `trianglengin`, `trimcts`, `trieye`, and `rich`):**
     *   **For users:**
         ```bash
-        # This will automatically install trianglengin, trimcts, and rich from PyPI if available
+        # This will automatically install trianglengin, trimcts, trieye, and rich from PyPI if available
         pip install alphatriangle
         # Or install directly from Git (installs dependencies from PyPI)
         # pip install git+https://github.com/lguibr/alphatriangle.git
         ```
     *   **For developers (editable install):**
-        *   First, ensure `trianglengin` and `trimcts` are installed (ideally in editable mode from their own directories if developing all three):
+        *   First, ensure `trianglengin`, `trimcts`, and `trieye` are installed (ideally in editable mode from their own directories if developing all):
             ```bash
             # From the trianglengin directory (requires C++ build tools):
             # pip install -e .
             # From the trimcts directory (requires C++ build tools):
+            # pip install -e .
+            # From the trieye directory:
             # pip install -e .
             ```
         *   Then, install `alphatriangle` in editable mode:
@@ -156,7 +159,7 @@ This project trains an agent to play the game defined by the `trianglengin` libr
 4.  **(Optional but Recommended) Add data directory to `.gitignore`:**
     Ensure the `.gitignore` file in your project root contains the line:
     ```
-    .alphatriangle_data/
+    .trieye_data/
     ```
 
 ## Running the Code (CLI)
@@ -169,19 +172,20 @@ Use the `alphatriangle` command for training and monitoring. The CLI uses `rich`
     ```
 *   **Run Training (Headless Only):**
     ```bash
-    alphatriangle train [--seed 42] [--log-level INFO] [--profile]
+    alphatriangle train [--seed 42] [--log-level INFO] [--profile] [--run-name my_custom_run]
     ```
-    *   `--log-level`: Set console/file logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default: INFO. Logs are saved to `.alphatriangle_data/runs/<run_name>/logs/`.
+    *   `--log-level`: Set console logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default: INFO. Logs are saved to `.trieye_data/alphatriangle/runs/<run_name>/logs/`.
     *   `--seed`: Set the random seed for reproducibility. Default: 42.
-    *   `--profile`: Enable cProfile for worker 0. Generates `.prof` files in `.alphatriangle_data/runs/<run_name>/profile_data/`.
+    *   `--profile`: Enable cProfile for worker 0. Generates `.prof` files in `.trieye_data/alphatriangle/runs/<run_name>/profile_data/`.
+    *   `--run-name`: Specify a custom name for the run. Default: `train_YYYYMMDD_HHMMSS`.
 *   **Launch MLflow UI:**
-    Launches the MLflow web interface, automatically pointing to the `.alphatriangle_data/mlruns` directory.
+    Launches the MLflow web interface, automatically pointing to the `.trieye_data/alphatriangle/mlruns` directory.
     ```bash
     alphatriangle ml [--host 127.0.0.1] [--port 5000]
     ```
     Access via `http://localhost:5000` (or the specified host/port).
 *   **Launch TensorBoard UI:**
-    Launches the TensorBoard web interface, automatically pointing to the `.alphatriangle_data/runs` directory (which contains the individual run subdirectories with `tensorboard` logs).
+    Launches the TensorBoard web interface, automatically pointing to the `.trieye_data/alphatriangle/runs` directory (which contains the individual run subdirectories with `tensorboard` logs).
     ```bash
     alphatriangle tb [--host 127.0.0.1] [--port 6006]
     ```
@@ -206,19 +210,21 @@ Use the `alphatriangle` command for training and monitoring. The CLI uses `rich`
 *   **Analyzing Profile Data (if `--profile` was used):**
     Use the provided `analyze_profiles.py` script (requires `typer`).
     ```bash
-    python analyze_profiles.py .alphatriangle_data/runs/<run_name>/profile_data/worker_0_ep_<ep_seed>.prof [-n <num_lines>]
+    python analyze_profiles.py .trieye_data/alphatriangle/runs/<run_name>/profile_data/worker_0_ep_<ep_seed>.prof [-n <num_lines>]
     ```
 
 ## Configuration
 
-All major parameters for the AlphaZero agent (Model, Training, Persistence, **MCTS**, **Stats**) are defined in the Pydantic classes within the `alphatriangle/config/` directory. Modify these files to experiment with different settings. Environment configuration (`EnvConfig`) is defined within the `trianglengin` library.
+*   **AlphaTriangle Specific:** Parameters for the Model (`ModelConfig`), Training (`TrainConfig`), and MCTS (`AlphaTriangleMCTSConfig`) are defined in the Pydantic classes within the `alphatriangle/config/` directory.
+*   **Environment:** Environment configuration (`EnvConfig`) is defined within the `trianglengin` library.
+*   **Stats & Persistence:** Statistics logging and data persistence are configured via `TrieyeConfig` (which includes `StatsConfig` and `PersistenceConfig`) from the `trieye` library. These are typically instantiated in `alphatriangle/training/runner.py` or `alphatriangle/cli.py`.
 
 ## Data Storage
 
-All persistent data is stored within the `.alphatriangle_data/` directory in the project root. This directory should be added to your `.gitignore`.
+All persistent data is now managed by the `trieye` library and stored within the `.trieye_data/<app_name>/` directory (default: `.trieye_data/alphatriangle/`) in the project root. This directory should be added to your `.gitignore`.
 
-*   **`.alphatriangle_data/mlruns/`**: Managed by **MLflow**. Contains MLflow's internal tracking data (parameters, metrics) and its own copy of logged artifacts. This is the source for the MLflow UI (`alphatriangle ml`).
-*   **`.alphatriangle_data/runs/`**: Managed by **DataManager**. Contains locally saved artifacts for each run (checkpoints, buffers, TensorBoard logs, configs, **profile data**) before/during logging to MLflow. This directory is used for auto-resuming and is the source for the TensorBoard UI (`alphatriangle tb`).
+*   **`.trieye_data/<app_name>/mlruns/`**: Managed by **MLflow** (via `trieye`). Contains MLflow's internal tracking data (parameters, metrics) and its own copy of logged artifacts. This is the source for the MLflow UI (`alphatriangle ml`).
+*   **`.trieye_data/<app_name>/runs/`**: Managed by **`trieye`**. Contains locally saved artifacts for each run (checkpoints, buffers, TensorBoard logs, configs, **profile data**) before/during logging to MLflow. This directory is used for auto-resuming and is the source for the TensorBoard UI (`alphatriangle tb`).
     *   **Replay Buffer Content:** The saved buffer file (`buffer.pkl`) contains `Experience` tuples: `(StateType, PolicyTargetMapping, n_step_return)`. The `StateType` includes:
         *   `grid`: Numerical features representing grid occupancy.
         *   `other_features`: Numerical features derived from game state and available shapes.
@@ -226,4 +232,4 @@ All persistent data is stored within the `.alphatriangle_data/` directory in the
 
 ## Maintainability
 
-This project includes README files within each major `alphatriangle` submodule. **Please keep these READMEs updated** when making changes to the code's structure, interfaces, or core logic.
+This project includes README files within each major `alphatriangle` submodule. **Please keep these READMEs updated** when making changes to the code's structure, interfaces, or core logic, especially regarding the interaction with the `trieye` library.

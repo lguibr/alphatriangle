@@ -1,5 +1,4 @@
 # File: alphatriangle/utils/types.py
-from collections import deque
 from collections.abc import Mapping
 
 import numpy as np
@@ -24,12 +23,7 @@ ActionType = int
 PolicyTargetMapping = Mapping[ActionType, float]
 
 
-class StepInfo(TypedDict, total=False):
-    """Dictionary to hold various step counters associated with a metric."""
-
-    global_step: int  # Overall training step count
-    buffer_size: int  # Current size of the experience buffer
-    game_step_index: int  # Index within a self-play episode
+# REMOVED StepInfo TypedDict (no longer needed directly here)
 
 
 Experience = tuple[StateType, PolicyTargetMapping, float]
@@ -48,12 +42,10 @@ ExperienceBatch = list[Experience]
 # Output type from the neural network's evaluate method (for MCTS interaction)
 # 1. dict[ActionType, float]: Policy probabilities P(a|s) for the evaluated state.
 # 2. float: The expected value V(s) calculated from the value distribution logits.
-PolicyValueOutput = tuple[dict[ActionType, float], float]
+PolicyValueOutput = tuple[dict[int, float], float]
 
 
-# Type alias for the data structure holding collected statistics
-# Maps metric name to a deque of (step_info_dict, value) tuples
-StatsCollectorData = dict[str, deque[tuple[StepInfo, float]]]
+# REMOVED StatsCollectorData type alias
 
 
 class PERBatchSample(TypedDict):

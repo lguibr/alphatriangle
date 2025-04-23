@@ -8,13 +8,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import ray
+from ray.actor import ActorHandle
 from trianglengin import EnvConfig, GameState
+from trieye.schemas import RawMetricEvent  # Import from trieye
 from trimcts import SearchConfiguration, run_mcts
 
 from ...config import ModelConfig, TrainConfig
 from ...features import extract_state_features
 from ...nn import NeuralNetwork
-from ...stats.stats_types import RawMetricEvent
 from ...utils import get_device, set_random_seeds
 from ..types import SelfPlayResult
 from .mcts_helpers import (
@@ -24,8 +25,6 @@ from .mcts_helpers import (
 )
 
 if TYPE_CHECKING:
-    from ray.actor import ActorHandle
-
     from ...utils.types import Experience, PolicyTargetMapping, StateType
 
     MctsTreeHandle = Any
@@ -38,7 +37,7 @@ class SelfPlayWorker:
     """
     A Ray actor responsible for running self-play episodes using trimcts and a NN.
     Uses trianglengin.GameState and supports MCTS tree reuse.
-    Sends raw metric events to the StatsCollectorActor.
+    Sends raw metric events to the TrieyeActor using its name.
     """
 
     def __init__(
@@ -48,7 +47,7 @@ class SelfPlayWorker:
         mcts_config: SearchConfiguration,
         model_config: ModelConfig,
         train_config: TrainConfig,
-        stats_collector_actor: "ActorHandle",
+        trieye_actor_name: str,  # Changed from handle to name
         run_base_dir: str,
         initial_weights: dict | None = None,
         seed: int | None = None,
@@ -60,7 +59,7 @@ class SelfPlayWorker:
         self.mcts_config = mcts_config
         self.model_config = model_config
         self.train_config = train_config
-        self.stats_collector = stats_collector_actor
+        self.trieye_actor_name = trieye_actor_name  # Store actor name
         self.run_base_dir = Path(run_base_dir)
         self.seed = seed if seed is not None else random.randint(0, 1_000_000)
         self.worker_device_str = worker_device_str
@@ -88,9 +87,12 @@ class SelfPlayWorker:
         else:
             self.nn_evaluator.model.eval()
 
+        # Cache the actor handle after first lookup
+        self._trieye_actor_handle: ActorHandle | None = None
+
         logger.debug(f"INIT: MCTS Config: {self.mcts_config.model_dump()}")
         logger.info(
-            f"Worker {self.actor_id} initialized on device {self.device}. Seed: {self.seed}. LogLevel: {logging.getLevelName(logger.getEffectiveLevel())}"
+            f"Worker {self.actor_id} initialized on device {self.device}. Seed: {self.seed}. LogLevel: {logging.getLevelName(logger.getEffectiveLevel())}. TrieyeActor Name: {self.trieye_actor_name}"
         )
         logger.debug(f"Worker {self.actor_id} init complete.")
 
@@ -100,6 +102,26 @@ class SelfPlayWorker:
             logger.warning(f"Worker {self.actor_id}: Profiling ENABLED.")
         else:
             logger.info(f"Worker {self.actor_id}: Profiling DISABLED.")
+
+    def _get_trieye_actor(self) -> ActorHandle | None:
+        """Gets the TrieyeActor handle, caching it after the first lookup."""
+        if self._trieye_actor_handle is None:
+            try:
+                self._trieye_actor_handle = ray.get_actor(self.trieye_actor_name)
+                logger.info(
+                    f"Worker {self.actor_id}: Successfully got TrieyeActor handle."
+                )
+            except ValueError:
+                logger.error(
+                    f"Worker {self.actor_id}: Could not find TrieyeActor named '{self.trieye_actor_name}'. Logging disabled."
+                )
+                self._trieye_actor_handle = None
+            except Exception as e:
+                logger.error(
+                    f"Worker {self.actor_id}: Error getting TrieyeActor handle: {e}"
+                )
+                self._trieye_actor_handle = None
+        return self._trieye_actor_handle
 
     def set_weights(self, weights: dict):
         """Updates the neural network weights."""
@@ -116,20 +138,30 @@ class SelfPlayWorker:
         self.current_trainer_step = global_step
         logger.info(f"Worker {self.actor_id}: Trainer step set to {global_step}")
 
-    def _send_event(self, name: str, value: float | int, context: dict | None = None):
-        """Helper to send a raw metric event to the collector."""
-        if self.stats_collector:
+    def _send_event_async(
+        self, name: str, value: float | int, context: dict | None = None
+    ):
+        """Helper to send a raw metric event to the Trieye actor asynchronously."""
+        actor_handle = self._get_trieye_actor()
+        if actor_handle:
             event = RawMetricEvent(
                 name=name,
                 value=value,
-                global_step=self.current_trainer_step,
+                global_step=self.current_trainer_step,  # Use worker's current trainer step
                 timestamp=time.time(),
                 context=context or {},
             )
             try:
-                self.stats_collector.log_event.remote(event)
+                # Fire-and-forget remote call
+                actor_handle.log_event.remote(event)
             except Exception as e:
-                logger.error(f"Failed to send event '{name}' to stats collector: {e}")
+                logger.error(
+                    f"Worker {self.actor_id}: Failed to send event '{name}' to Trieye actor: {e}"
+                )
+        else:
+            logger.warning(
+                f"Worker {self.actor_id}: Cannot send event '{name}', TrieyeActor handle not available."
+            )
 
     def run_episode(self) -> SelfPlayResult:
         """Runs a single episode of self-play with MCTS tree reuse."""
@@ -172,7 +204,8 @@ class SelfPlayWorker:
                     "triangles_cleared": 0,
                     "trainer_step": step_at_start,
                 }
-                self._send_event("episode_end", 1.0, context=episode_end_context)
+                # Send event even on immediate game over
+                self._send_event_async("episode_end", 1.0, context=episode_end_context)
                 return SelfPlayResult(
                     episode_experiences=[],
                     final_score=game.game_score(),
@@ -194,7 +227,7 @@ class SelfPlayWorker:
                     "triangles_cleared": 0,
                     "trainer_step": step_at_start,
                 }
-                self._send_event("episode_end", 1.0, context=episode_end_context)
+                self._send_event_async("episode_end", 1.0, context=episode_end_context)
                 return SelfPlayResult(
                     episode_experiences=[],
                     final_score=game.game_score(),
@@ -262,7 +295,8 @@ class SelfPlayWorker:
                     f"Worker {self.actor_id}: Step {current_step_in_loop}: MCTS finished ({mcts_duration:.3f}s). Total visits: {last_total_visits}"
                 )
 
-                self._send_event(
+                # Send MCTS simulation count event
+                self._send_event_async(
                     "mcts_step",
                     float(last_total_visits),
                     context={"game_step": current_step_in_loop},
@@ -341,8 +375,6 @@ class SelfPlayWorker:
                 cleared_triangles_this_step = 0
                 try:
                     step_reward, done = game.step(action)
-                    # Get cleared triangles count using the new method
-                    # Add type ignore as this method is new in the dependency
                     cleared_triangles_this_step = game.get_last_cleared_triangles()  # type: ignore [attr-defined]
                     total_triangles_cleared_episode += cleared_triangles_this_step
                     logger.debug(
@@ -362,13 +394,14 @@ class SelfPlayWorker:
                 )
 
                 n_step_reward_buffer.append(step_reward)
-                self._send_event(
+                # Send step reward event
+                self._send_event_async(
                     "step_reward",
                     step_reward,
                     context={"game_step": current_step_in_loop},
                 )
                 if cleared_triangles_this_step > 0:
-                    self._send_event(
+                    self._send_event_async(
                         "triangles_cleared_step",
                         cleared_triangles_this_step,
                         context={"game_step": current_step_in_loop},
@@ -406,7 +439,8 @@ class SelfPlayWorker:
                         f"Worker {self.actor_id}: Step {current_step_in_loop}: Stored experience for step {current_step_in_loop - self.n_step + 1}. N-Step Return: {n_step_return:.4f}"
                     )
 
-                self._send_event(
+                # Send current score event
+                self._send_event_async(
                     "current_score",
                     game.game_score(),
                     context={"game_step": current_step_in_loop},
@@ -455,14 +489,17 @@ class SelfPlayWorker:
                     f"Worker {self.actor_id}: Episode finished with 0 experiences collected. Score: {final_score}, Steps: {final_step}"
                 )
 
+            # Send episode end event
             episode_end_context = {
                 "score": final_score,
                 "length": final_step,
                 "simulations": total_sims_episode,
                 "triangles_cleared": total_triangles_cleared_episode,
-                "trainer_step": step_at_start,
+                "trainer_step": step_at_start,  # Log trainer step when episode started
             }
-            self._send_event(name="episode_end", value=1.0, context=episode_end_context)
+            self._send_event_async(
+                name="episode_end", value=1.0, context=episode_end_context
+            )
 
             result = SelfPlayResult(
                 episode_experiences=episode_experiences,
@@ -471,8 +508,8 @@ class SelfPlayWorker:
                 trainer_step_at_episode_start=step_at_start,
                 total_simulations=total_sims_episode,
                 avg_root_visits=float(last_total_visits),
-                avg_tree_depth=0.0,
-                context=episode_end_context,
+                avg_tree_depth=0.0,  # Placeholder, trimcts doesn't expose this easily
+                context=episode_end_context,  # Pass context for potential use in loop
             )
             logger.info(
                 f"Worker {self.actor_id}: Episode result created. Experiences: {len(result.episode_experiences)}"
@@ -493,7 +530,7 @@ class SelfPlayWorker:
                 "trainer_step": step_at_start,
                 "error": True,
             }
-            self._send_event(
+            self._send_event_async(
                 "episode_end",
                 1.0,
                 context=episode_end_context,
@@ -540,7 +577,7 @@ class SelfPlayWorker:
                 "trainer_step": step_at_start,
                 "error": True,
             }
-            self._send_event(
+            self._send_event_async(
                 "episode_end",
                 1.0,
                 context=episode_end_context,

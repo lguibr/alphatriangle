@@ -1,3 +1,4 @@
+# File: tests/conftest.py
 import random
 from typing import cast
 
@@ -15,12 +16,13 @@ from trimcts import SearchConfiguration
 # Keep alphatriangle imports
 from alphatriangle.config import (
     ModelConfig,
-    PersistenceConfig,
     TrainConfig,
 )
 from alphatriangle.nn import NeuralNetwork
 from alphatriangle.rl import ExperienceBuffer, Trainer
 from alphatriangle.utils.types import Experience, StateType
+
+# Removed PersistenceConfig, StatsConfig imports
 
 rng = np.random.default_rng()
 
@@ -31,7 +33,6 @@ def mock_env_config() -> EnvConfig:
     rows = 3
     cols = 3
     playable_range = [(0, 3), (0, 3), (0, 3)]
-    # Use EnvConfig from trianglengin
     return EnvConfig(
         ROWS=rows,
         COLS=cols,
@@ -43,12 +44,9 @@ def mock_env_config() -> EnvConfig:
 @pytest.fixture(scope="session")
 def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
     """Provides a default ModelConfig compatible with mock_env_config (session-scoped)."""
-    # Calculate action_dim manually
     action_dim_int = int(
         mock_env_config.NUM_SHAPE_SLOTS * mock_env_config.ROWS * mock_env_config.COLS
     )
-    # Revert OTHER_NN_INPUT_FEATURES_DIM to previous value or recalculate if needed
-    # Assuming the original intent was 10 for the simple test config
     expected_other_dim = 10
 
     return ModelConfig(
@@ -67,7 +65,7 @@ def mock_model_config(mock_env_config: EnvConfig) -> ModelConfig:
         FC_DIMS_SHARED=[8],
         POLICY_HEAD_DIMS=[action_dim_int],
         VALUE_HEAD_DIMS=[1],
-        OTHER_NN_INPUT_FEATURES_DIM=expected_other_dim,  # Use reverted dim
+        OTHER_NN_INPUT_FEATURES_DIM=expected_other_dim,
         ACTIVATION_FUNCTION="ReLU",
         USE_BATCH_NORM=True,
     )
@@ -81,14 +79,14 @@ def mock_train_config() -> TrainConfig:
         BUFFER_CAPACITY=100,
         MIN_BUFFER_SIZE_TO_TRAIN=10,
         USE_PER=False,
-        LOAD_CHECKPOINT_PATH=None,
+        LOAD_CHECKPOINT_PATH=None,  # Keep load paths for potential Trieye usage
         LOAD_BUFFER_PATH=None,
-        AUTO_RESUME_LATEST=False,
+        AUTO_RESUME_LATEST=False,  # Keep auto-resume for potential Trieye usage
         DEVICE="cpu",
         RANDOM_SEED=42,
         NUM_SELF_PLAY_WORKERS=1,
         WORKER_DEVICE="cpu",
-        WORKER_UPDATE_FREQ_STEPS=10,  # Keep lowered default for tests
+        WORKER_UPDATE_FREQ_STEPS=10,
         OPTIMIZER_TYPE="Adam",
         LEARNING_RATE=1e-3,
         WEIGHT_DECAY=1e-4,
@@ -96,7 +94,7 @@ def mock_train_config() -> TrainConfig:
         POLICY_LOSS_WEIGHT=1.0,
         VALUE_LOSS_WEIGHT=1.0,
         ENTROPY_BONUS_WEIGHT=0.0,
-        CHECKPOINT_SAVE_FREQ_STEPS=50,
+        CHECKPOINT_SAVE_FREQ_STEPS=50,  # Keep checkpoint freq for loop logic
         PER_ALPHA=0.6,
         PER_BETA_INITIAL=0.4,
         PER_BETA_FINAL=1.0,
@@ -105,26 +103,17 @@ def mock_train_config() -> TrainConfig:
         MAX_TRAINING_STEPS=200,
         N_STEP_RETURNS=3,
         GAMMA=0.99,
-        PROFILE_WORKERS=False,  # Added default for tests
-        RUN_NAME="pytest_default_run",  # Add a default run name
+        PROFILE_WORKERS=False,
+        RUN_NAME="pytest_default_run",  # Keep run name
     )
 
 
-@pytest.fixture(scope="session")
-def mock_persistence_config(tmp_path_factory) -> PersistenceConfig:
-    """Provides a PersistenceConfig using a temporary directory (session-scoped)."""
-    # Create a base temporary directory for the session
-    base_tmp_dir = tmp_path_factory.mktemp("alphatriangle_test_data_session")
-    return PersistenceConfig(
-        ROOT_DATA_DIR=str(base_tmp_dir),  # Use the session-scoped temp dir
-        RUN_NAME="test_run_pytest",  # Keep a default run name for tests
-    )
+# Removed mock_persistence_config fixture
 
 
 @pytest.fixture(scope="session")
 def mock_mcts_config() -> SearchConfiguration:
     """Provides a default trimcts.SearchConfiguration for tests."""
-    # Use low simulation count for tests
     return SearchConfiguration(
         max_simulations=8,
         max_depth=5,
@@ -159,7 +148,6 @@ def mock_experience(
     mock_state_type: StateType, mock_env_config: EnvConfig
 ) -> Experience:
     """Creates a mock Experience tuple."""
-    # Calculate action_dim manually
     action_dim = int(
         mock_env_config.NUM_SHAPE_SLOTS * mock_env_config.ROWS * mock_env_config.COLS
     )
@@ -169,7 +157,6 @@ def mock_experience(
         else {0: 1.0}
     )
     value_target = random.uniform(-1, 1)
-    # Ensure the mock_state_type is included correctly
     return (mock_state_type, policy_target, value_target)
 
 
@@ -215,13 +202,10 @@ def filled_mock_buffer(
 ) -> ExperienceBuffer:
     """Provides a buffer filled with some mock experiences."""
     for i in range(mock_experience_buffer.min_size_to_train + 5):
-        # Deep copy the StateType dictionary and its contents
         state_copy: StateType = {
-            "grid": mock_experience[0]["grid"].copy() + i * 0.01,  # Add smaller noise
+            "grid": mock_experience[0]["grid"].copy() + i * 0.01,
             "other_features": mock_experience[0]["other_features"].copy() + i * 0.01,
         }
-
-        # Create a new experience tuple with the copied state
         exp_copy: Experience = (state_copy, mock_experience[1], random.uniform(-1, 1))
         mock_experience_buffer.add(exp_copy)
     return mock_experience_buffer

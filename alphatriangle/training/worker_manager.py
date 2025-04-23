@@ -22,9 +22,15 @@ class WorkerManager:
         self.components = components
         self.train_config = components.train_config
         self.nn = components.nn
-        self.stats_collector_actor = components.stats_collector_actor
-        self.run_base_dir_str = str(components.data_manager.path_manager.run_base_dir)
-        self.profile_workers = components.profile_workers  # Store profile flag
+        # Get Trieye actor name via remote call
+        self.trieye_actor_name = ray.get(
+            components.trieye_actor.get_actor_name.remote()
+        )
+        # Get run base dir string via Trieye actor
+        self.run_base_dir_str = ray.get(
+            components.trieye_actor.get_run_base_dir_str.remote()
+        )
+        self.profile_workers = components.profile_workers
 
         self.workers: list[ray.actor.ActorHandle | None] = []
         self.worker_tasks: dict[ray.ObjectRef, int] = {}
@@ -43,7 +49,6 @@ class WorkerManager:
 
         for i in range(self.train_config.NUM_SELF_PLAY_WORKERS):
             try:
-                # Determine if this specific worker should be profiled
                 profile_this_worker = self.profile_workers and i == 0
 
                 worker = SelfPlayWorker.options(num_cpus=1).remote(
@@ -52,12 +57,12 @@ class WorkerManager:
                     mcts_config=self.components.mcts_config,
                     model_config=self.components.model_config,
                     train_config=self.train_config,
-                    stats_collector_actor=self.stats_collector_actor,
+                    trieye_actor_name=self.trieye_actor_name,  # Pass actor name
                     run_base_dir=run_base_dir_for_worker,
                     initial_weights=weights_ref,
                     seed=self.train_config.RANDOM_SEED + i,
                     worker_device_str=self.train_config.WORKER_DEVICE,
-                    profile_this_worker=profile_this_worker,  # Pass profile flag
+                    profile_this_worker=profile_this_worker,
                 )
                 self.workers[i] = worker
                 self.active_worker_indices.add(i)
@@ -129,6 +134,7 @@ class WorkerManager:
                 result_raw = ray.get(ref)
                 logger.debug(f"ray.get succeeded for worker {worker_idx}")
                 try:
+                    # Use Pydantic validation from SelfPlayResult
                     result_validated = SelfPlayResult.model_validate(result_raw)
                     completed_results.append((worker_idx, result_validated))
                     logger.debug(

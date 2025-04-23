@@ -3,78 +3,39 @@ import logging
 import sys
 import time
 import traceback
-from typing import TYPE_CHECKING, cast  # Import cast
 
-import mlflow
 import ray
 import torch
+from trieye import (  # Import from Trieye
+    LoadedTrainingState,
+    TrieyeConfig,
+)
 
-from ..config import APP_NAME, PersistenceConfig, TrainConfig
+from ..config import TrainConfig
 from ..logging_config import setup_logging  # Import centralized setup
 from ..utils.sumtree import SumTree
 from .components import TrainingComponents
-from .logging_utils import log_configs_to_mlflow  # Keep MLflow helper
+from .logging_utils import log_configs_to_mlflow  # Keep MLflow helper for AT configs
 from .loop import TrainingLoop
 from .setup import count_parameters, setup_training_components
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
-def _initialize_mlflow(
-    persist_config: PersistenceConfig, run_name: str, log_file_path: "Path | None"
-) -> str | None:
+# Removed _initialize_mlflow
+
+
+def _load_and_apply_initial_state(
+    components: TrainingComponents,
+) -> tuple[TrainingLoop, LoadedTrainingState]:
     """
-    Sets up MLflow tracking and starts a run. Optionally logs the log file.
-    Returns the MLflow run_id if successful, otherwise None.
+    Loads initial state using TrieyeActor and applies it to components.
+    Returns an initialized TrainingLoop and the loaded state object.
     """
-    try:
-        # Use the computed property which resolves the path and creates the dir
-        mlflow_tracking_uri = persist_config.MLFLOW_TRACKING_URI
-        mlflow_abs_path = persist_config.get_mlflow_abs_path()
-        logger.info(f"Resolved MLflow absolute path: {mlflow_abs_path}")
-        logger.info(f"Using MLflow tracking URI: {mlflow_tracking_uri}")
-
-        mlflow.set_tracking_uri(mlflow_tracking_uri)
-        mlflow.set_experiment(APP_NAME)
-        logger.info(f"Set MLflow experiment to: {APP_NAME}")
-
-        mlflow.start_run(run_name=run_name)
-        active_run = mlflow.active_run()
-        if active_run:
-            run_id = cast("str", active_run.info.run_id)  # Cast to str
-            logger.info(f"MLflow Run started (ID: {run_id}).")
-            # Log the log file artifact *if* it exists
-            if log_file_path and log_file_path.exists():
-                try:
-                    # Log the file into an 'logs' artifact directory
-                    mlflow.log_artifact(str(log_file_path), artifact_path="logs")
-                    logger.info(f"Logged log file artifact: {log_file_path.name}")
-                except Exception as log_artifact_err:
-                    logger.error(
-                        f"Failed to log log file to MLflow: {log_artifact_err}"
-                    )
-            elif log_file_path:
-                logger.warning(
-                    f"Log file path provided but does not exist, skipping MLflow artifact logging: {log_file_path}"
-                )
-            else:
-                logger.info("No log file path provided, skipping MLflow artifact log.")
-
-            return run_id
-        else:
-            logger.error("MLflow run failed to start.")
-            return None
-    except Exception as e:
-        logger.error(f"Failed to initialize MLflow: {e}", exc_info=True)
-        return None
-
-
-def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoop:
-    """Loads initial state using DataManager and applies it to components, returning an initialized TrainingLoop."""
-    loaded_state = components.data_manager.load_initial_state()
+    logger.info("Requesting initial state load from TrieyeActor...")
+    loaded_state: LoadedTrainingState = ray.get(
+        components.trieye_actor.load_initial_state.remote()
+    )
     training_loop = TrainingLoop(components)
     initial_step = 0
 
@@ -91,6 +52,7 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
                 components.trainer.optimizer.load_state_dict(
                     cp_data.optimizer_state_dict
                 )
+                # Move optimizer state to the correct device
                 for state in components.trainer.optimizer.state.values():
                     for k, v in state.items():
                         if isinstance(v, torch.Tensor):
@@ -100,20 +62,7 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
                 logger.error(
                     f"Could not load optimizer state: {opt_load_err}. Optimizer might reset."
                 )
-        if (
-            cp_data.stats_collector_state
-            and components.stats_collector_actor is not None
-        ):
-            try:
-                set_state_ref = components.stats_collector_actor.set_state.remote(
-                    cp_data.stats_collector_state
-                )
-                ray.get(set_state_ref, timeout=5.0)
-                logger.info("StatsCollectorActor state restored.")
-            except Exception as e:
-                logger.error(
-                    f"Error restoring StatsCollectorActor state: {e}", exc_info=True
-                )
+        # Actor state is restored internally by TrieyeActor's load_initial_state
 
         training_loop.set_initial_state(
             cp_data.global_step,
@@ -127,25 +76,38 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
 
     loaded_buffer_size = 0
     if loaded_state.buffer_data:
+        buffer_list = loaded_state.buffer_data.buffer_list
         if components.train_config.USE_PER:
             logger.info("Rebuilding PER SumTree from loaded buffer data...")
             if not hasattr(components.buffer, "tree") or components.buffer.tree is None:
                 components.buffer.tree = SumTree(components.buffer.capacity)
             else:
-                # Re-initialize SumTree to ensure correct state
                 components.buffer.tree = SumTree(components.buffer.capacity)
 
             max_p = 1.0
-            for exp in loaded_state.buffer_data.buffer_list:
-                components.buffer.tree.add(max_p, exp)
+            for exp in buffer_list:
+                # Basic validation before adding to tree
+                if isinstance(exp, tuple) and len(exp) == 3:
+                    components.buffer.tree.add(max_p, exp)
+                else:
+                    logger.warning(
+                        f"Skipping invalid item from loaded buffer: {type(exp)}"
+                    )
             loaded_buffer_size = len(components.buffer)
             logger.info(f"PER buffer loaded. Size: {loaded_buffer_size}")
         else:
             from collections import deque
 
+            # Basic validation before adding to deque
+            valid_buffer_list = [
+                exp for exp in buffer_list if isinstance(exp, tuple) and len(exp) == 3
+            ]
+            if len(valid_buffer_list) < len(buffer_list):
+                logger.warning(
+                    f"Filtered {len(buffer_list) - len(valid_buffer_list)} invalid items from loaded buffer."
+                )
             components.buffer.buffer = deque(
-                loaded_state.buffer_data.buffer_list,
-                maxlen=components.buffer.capacity,
+                valid_buffer_list, maxlen=components.buffer.capacity
             )
             loaded_buffer_size = len(components.buffer)
             logger.info(f"Uniform buffer loaded. Size: {loaded_buffer_size}")
@@ -156,121 +118,101 @@ def _load_and_apply_initial_state(components: TrainingComponents) -> TrainingLoo
     logger.info(
         f"Initial state loaded and applied. Starting step: {initial_step}, Buffer size: {loaded_buffer_size}"
     )
-    return training_loop
+    return training_loop, loaded_state
 
 
 def _save_final_state(training_loop: TrainingLoop):
-    """Saves the final training state."""
-    if not training_loop:
-        logger.warning("Cannot save final state: TrainingLoop not available.")
+    """Triggers the Trieye actor to save the final training state."""
+    if not training_loop or not training_loop.trieye_actor:
+        logger.warning("Cannot save final state: TrainingLoop or TrieyeActor missing.")
         return
     components = training_loop.components
-    logger.info("Saving final training state...")
+    logger.info("Requesting final training state save via TrieyeActor...")
     try:
-        components.data_manager.save_training_state(
-            nn=components.nn,
-            optimizer=components.trainer.optimizer,
-            stats_collector_actor=components.stats_collector_actor,
-            buffer=components.buffer,
+        # Prepare data using the local serializer from components
+        nn_state = components.nn.get_weights()
+        opt_state = components.serializer.prepare_optimizer_state(
+            components.trainer.optimizer.state_dict()  # Pass state_dict
+        )
+        buffer_data = components.serializer.prepare_buffer_data(
+            list(components.buffer.buffer)
+            if not components.buffer.use_per
+            else [
+                components.buffer.tree.data[i]
+                for i in range(components.buffer.tree.n_entries)
+                if components.buffer.tree.data[i] != 0
+            ]  # Pass buffer content list
+        )
+
+        # Fire-and-forget call to the actor
+        components.trieye_actor.save_training_state.remote(
+            nn_state_dict=nn_state,
+            optimizer_state_dict=opt_state,
+            buffer_content=buffer_data.buffer_list if buffer_data else [],
             global_step=training_loop.global_step,
             episodes_played=training_loop.episodes_played,
             total_simulations_run=training_loop.total_simulations_run,
-            is_best=False,
+            is_best=False,  # Final save is not 'best'
+            save_buffer=components.trieye_config.persistence.SAVE_BUFFER,
+            model_config_dict=components.model_config.model_dump(),
+            env_config_dict=components.env_config.model_dump(),
         )
+        # Allow some time for the async save call to potentially start
+        time.sleep(0.5)
     except Exception as e_save:
-        logger.error(f"Failed to save final training state: {e_save}", exc_info=True)
+        logger.error(f"Failed to trigger final state save: {e_save}", exc_info=True)
 
 
 def run_training(
     log_level_str: str,
     train_config_override: TrainConfig,
-    persist_config_override: PersistenceConfig,
-    profile: bool,  # Added profile flag
+    trieye_config_override: TrieyeConfig,  # Use TrieyeConfig
+    profile: bool,
 ) -> int:
     """Runs the training pipeline (headless)."""
     training_loop: TrainingLoop | None = None
     components: TrainingComponents | None = None
     exit_code = 1
-    log_file_path: Path | None = None
+    # log_file_path: Path | None = None # Path determined by Trieye
     file_handler: logging.FileHandler | None = None
     ray_initialized_by_setup = False
-    mlflow_run_id: str | None = None
-    tb_log_dir: Path | None = None  # Use Path object
+    trieye_actor_handle: ray.actor.ActorHandle | None = None
 
     try:
-        # --- Setup File Logging Path ---
-        # Determine log file path before setting up logging
-        log_dir = (
-            persist_config_override.get_run_base_dir()
-            / persist_config_override.LOG_DIR_NAME
-        )
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_file_path = log_dir / f"{train_config_override.RUN_NAME}_train.log"
+        # --- Setup Console Logging ---
+        # File logging is handled by TrieyeActor
+        file_handler = setup_logging(log_level_str, log_file=None)  # Pass log_file=None
+        logger.info(f"Console logging level set to: {log_level_str.upper()}")
 
-        # --- Setup Centralized Logging ---
-        # Pass the determined log file path
-        file_handler = setup_logging(log_level_str, log_file_path)
-        logger.info(
-            f"Logging {log_level_str.upper()} and higher messages to console and: {log_file_path}"
-        )
-
-        # --- TensorBoard Directory Setup ---
-        tb_log_dir = persist_config_override.get_tensorboard_log_dir()
-        if tb_log_dir:
-            try:
-                tb_log_dir.mkdir(parents=True, exist_ok=True)
-                logger.info(f"Ensured TensorBoard log directory exists: {tb_log_dir}")
-            except Exception as e:
-                logger.error(
-                    f"Failed to create TensorBoard directory '{tb_log_dir}': {e}"
-                )
-                tb_log_dir = None
-        else:
-            logger.warning("Could not determine TensorBoard log directory path.")
-
-        # --- Initialize MLflow (before setup to get run_id) ---
-        mlflow_run_id = _initialize_mlflow(
-            persist_config_override, train_config_override.RUN_NAME, log_file_path
-        )
-
-        # --- Setup Components (includes Ray init, StatsActor init) ---
-        # Pass tb_log_dir as string, profile flag, and mlflow_run_id
+        # --- Setup Components (includes Ray init, TrieyeActor init) ---
         components, ray_initialized_by_setup = setup_training_components(
             train_config_override,
-            persist_config_override,
-            str(tb_log_dir) if tb_log_dir else None,
-            profile,  # Pass profile flag
-            mlflow_run_id,  # Pass run_id
+            trieye_config_override,  # Pass TrieyeConfig
+            profile,
         )
-        if not components:
-            raise RuntimeError("Failed to initialize training components.")
+        if not components or not components.trieye_actor:
+            raise RuntimeError(
+                "Failed to initialize training components or TrieyeActor."
+            )
 
-        # --- Log Configs and Params to MLflow (if run started) ---
+        trieye_actor_handle = components.trieye_actor  # Store handle for cleanup
+
+        # --- Log Configs and Params to MLflow (if run started by Trieye) ---
+        mlflow_run_id = ray.get(trieye_actor_handle.get_mlflow_run_id.remote())
         if mlflow_run_id:
-            log_configs_to_mlflow(components)
+            log_configs_to_mlflow(components)  # Log AlphaTriangle configs
             total_params, trainable_params = count_parameters(components.nn.model)
             logger.info(
                 f"Model Parameters: Total={total_params:,}, Trainable={trainable_params:,}"
             )
-            mlflow.log_param("model_total_params", total_params)
-            mlflow.log_param("model_trainable_params", trainable_params)
-
-            if tb_log_dir:
-                try:
-                    # Log the relative path to the TB dir as a parameter
-                    relative_tb_path = tb_log_dir.relative_to(
-                        components.persist_config.get_runs_root_dir()
-                    )
-                    mlflow.log_param("tensorboard_log_dir", str(relative_tb_path))
-                except Exception as tb_param_err:
-                    logger.error(
-                        f"Failed to log TensorBoard path to MLflow: {tb_param_err}"
-                    )
+            # Parameter logging removed as TrieyeActor doesn't expose log_param
         else:
-            logger.warning("MLflow initialization failed, proceeding without MLflow.")
+            logger.warning(
+                "MLflow run ID not available from TrieyeActor, skipping MLflow param logging."
+            )
 
         # --- Load State & Initialize Loop ---
-        training_loop = _load_and_apply_initial_state(components)
+        training_loop, _ = _load_and_apply_initial_state(components)
 
         # --- Run Training Loop ---
         training_loop.initialize_workers()
@@ -280,20 +222,19 @@ def run_training(
         if training_loop.training_complete:
             exit_code = 0
             logger.info(
-                f"Training run '[bold cyan]{components.train_config.RUN_NAME}[/]' completed successfully.",
+                f"Training run '[bold cyan]{components.trieye_config.run_name}[/]' completed successfully.",
                 extra={"markup": True},
             )
         elif training_loop.training_exception:
             exit_code = 1
             logger.error(
-                f"Training run '[bold cyan]{components.train_config.RUN_NAME}[/]' failed due to exception: {training_loop.training_exception}",
+                f"Training run '[bold cyan]{components.trieye_config.run_name}[/]' failed due to exception: {training_loop.training_exception}",
                 extra={"markup": True},
             )
         else:
-            # If stopped manually or for other reasons without exception/completion
-            exit_code = 0  # Consider manual stop successful
+            exit_code = 0
             logger.warning(
-                f"Training run '[bold cyan]{components.train_config.RUN_NAME}[/]' stopped before completion.",
+                f"Training run '[bold cyan]{components.trieye_config.run_name}[/]' stopped before completion.",
                 extra={"markup": True},
             )
 
@@ -302,66 +243,61 @@ def run_training(
             f"An unhandled error occurred during training setup or execution: {e}"
         )
         traceback.print_exc()
-        if mlflow_run_id:
+        # Attempt to log failure status via actor if possible
+        if trieye_actor_handle:
             try:
-                mlflow.log_param("training_status", "SETUP_FAILED")
-                mlflow.log_param("error_message", str(e))
-            except Exception as mlf_err:
-                logger.error(f"Failed to log setup error status to MLflow: {mlf_err}")
+                # Use log_event to log status if log_param is unavailable
+                from trieye.schemas import RawMetricEvent
+
+                ray.get(
+                    trieye_actor_handle.log_event.remote(
+                        RawMetricEvent(
+                            name="training_status_code", value=-1, global_step=0
+                        )
+                    )
+                )  # Example event
+                ray.get(
+                    trieye_actor_handle.log_event.remote(
+                        RawMetricEvent(
+                            name="error_message_flag",
+                            value=1,
+                            global_step=0,
+                            context={"error": str(e)},
+                        )
+                    )
+                )
+            except Exception as log_err:
+                logger.error(
+                    f"Failed to log setup error status via TrieyeActor log_event: {log_err}"
+                )
         exit_code = 1
 
     finally:
         # --- Cleanup ---
-        final_status = "UNKNOWN"
-        error_msg = ""
-        if training_loop and components:  # Check components exist too
-            _save_final_state(training_loop)
-            training_loop.cleanup_actors()
-            if training_loop.training_exception:
-                final_status = "FAILED"
-                error_msg = str(training_loop.training_exception)
-            elif training_loop.training_complete:
-                final_status = "COMPLETED"
-            else:
-                final_status = "INTERRUPTED"
-        elif not components:
-            final_status = "SETUP_FAILED"
-            error_msg = "Component setup failed"
-        else:  # components exist but training_loop doesn't (error during loop init)
-            final_status = "SETUP_FAILED"
-            error_msg = "Training loop initialization failed"
+        if training_loop and components:
+            _save_final_state(training_loop)  # Trigger final save via actor
+            training_loop.cleanup_actors()  # Cleans up workers
 
-        # Log final TensorBoard artifacts if the directory exists
-        if (
-            mlflow_run_id
-            and tb_log_dir
-            and tb_log_dir.exists()
-            and components is not None
-        ):
+        # Shutdown TrieyeActor gracefully
+        if trieye_actor_handle:
+            logger.info("Shutting down TrieyeActor...")
             try:
-                time.sleep(1)  # Allow final writes
-                # Log the entire TB directory relative to the run base dir
-                mlflow.log_artifacts(
-                    str(tb_log_dir),
-                    artifact_path=components.persist_config.TENSORBOARD_DIR_NAME,
+                # Force final processing and shutdown
+                final_step = training_loop.global_step if training_loop else 0
+                ray.get(
+                    trieye_actor_handle.force_process_and_log.remote(final_step),
+                    timeout=15,
                 )
-                logger.info(
-                    f"Logged TensorBoard directory to MLflow artifacts: {components.persist_config.TENSORBOARD_DIR_NAME}"
-                )
-            except Exception as tb_artifact_err:
+                ray.get(trieye_actor_handle.shutdown.remote(), timeout=15)
+                logger.info("TrieyeActor shutdown complete.")
+            except Exception as actor_shutdown_err:
                 logger.error(
-                    f"Failed to log TensorBoard directory to MLflow: {tb_artifact_err}"
+                    f"Error during TrieyeActor shutdown: {actor_shutdown_err}. Attempting kill."
                 )
-
-        if mlflow_run_id:
-            try:
-                mlflow.log_param("training_status", final_status)
-                if error_msg:
-                    mlflow.log_param("error_message", error_msg)
-                mlflow.end_run()
-                logger.info(f"MLflow Run ended. Final Status: {final_status}")
-            except Exception as mlf_end_err:
-                logger.error(f"Error ending MLflow run: {mlf_end_err}")
+                try:
+                    ray.kill(trieye_actor_handle)
+                except Exception as kill_err:
+                    logger.error(f"Failed to kill TrieyeActor: {kill_err}")
 
         if ray_initialized_by_setup and ray.is_initialized():
             try:
@@ -370,14 +306,13 @@ def run_training(
             except Exception as e:
                 logger.error(f"Error shutting down Ray: {e}", exc_info=True)
 
-        # Close file logger handler if it was created
+        # Close console logger handler if it was created
         if file_handler:
             try:
                 file_handler.flush()
                 file_handler.close()
                 logging.getLogger().removeHandler(file_handler)
             except Exception as e_close:
-                # Use print for final cleanup errors as logging might be compromised
                 print(f"Error closing log file handler: {e_close}", file=sys.__stderr__)
 
         logger.info(f"Training finished with exit code {exit_code}.")

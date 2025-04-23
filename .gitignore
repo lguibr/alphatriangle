@@ -157,3 +157,5 @@ files/ # Ignore specific directory if generated
 # OS generated files
 .DS_Store
 Thumbs.db
+.trieye_data
+.trieye_data/

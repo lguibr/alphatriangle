@@ -4,12 +4,9 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any
 
-import ray
+from trieye.schemas import RawMetricEvent  # Import from trieye
 
 from ..rl import SelfPlayResult
-
-# Update import to use the new filename
-from ..stats.stats_types import RawMetricEvent
 from .loop_helpers import LoopHelpers
 from .worker_manager import WorkerManager
 
@@ -26,7 +23,7 @@ logger = logging.getLogger(__name__)
 class TrainingLoop:
     """
     Manages the core asynchronous training loop logic: coordinating worker tasks,
-    processing results, triggering training steps, and managing stats collection.
+    processing results, triggering training steps, and interacting with TrieyeActor.
     Runs headless.
     """
 
@@ -36,29 +33,26 @@ class TrainingLoop:
     ):
         self.components = components
         self.train_config = components.train_config
-        self.persist_config = components.persist_config
-        self.stats_config = components.stats_config
+        self.trieye_config = components.trieye_config
         self.buffer = components.buffer
         self.trainer = components.trainer
-        self.data_manager = components.data_manager
-        self.stats_collector = components.stats_collector_actor
+        self.trieye_actor = components.trieye_actor
+        self.serializer = components.serializer  # Get serializer from components
 
         self.global_step = 0
         self.episodes_played = 0
         self.total_simulations_run = 0
-        self.weight_update_count = 0  # Added counter
+        self.weight_update_count = 0
         self.start_time = time.time()
         self.stop_requested = threading.Event()
         self.training_complete = False
         self.training_exception: Exception | None = None
-        self._buffer_ready_logged = False  # Flag to log buffer readiness only once
+        self._buffer_ready_logged = False
 
         self.worker_manager = WorkerManager(components)
         self.loop_helpers = LoopHelpers(components, self._get_loop_state)
 
-        self._last_stats_process_time = time.monotonic()
-
-        logger.info("TrainingLoop initialized (Headless).")
+        logger.info("TrainingLoop initialized (Headless, using Trieye).")
 
     def _get_loop_state(self) -> dict[str, Any]:
         """Provides current loop state to helpers."""
@@ -66,7 +60,7 @@ class TrainingLoop:
             "global_step": self.global_step,
             "episodes_played": self.episodes_played,
             "total_simulations_run": self.total_simulations_run,
-            "weight_update_count": self.weight_update_count,  # Added
+            "weight_update_count": self.weight_update_count,
             "buffer_size": len(self.buffer),
             "buffer_capacity": self.buffer.capacity,
             "num_active_workers": self.worker_manager.get_num_active_workers(),
@@ -82,7 +76,6 @@ class TrainingLoop:
         self.global_step = global_step
         self.episodes_played = episodes_played
         self.total_simulations_run = total_simulations
-        # Estimate weight updates based on frequency if resuming
         self.weight_update_count = (
             global_step // self.train_config.WORKER_UPDATE_FREQ_STEPS
             if self.train_config.WORKER_UPDATE_FREQ_STEPS > 0
@@ -102,9 +95,11 @@ class TrainingLoop:
             logger.info("Stop requested for TrainingLoop.")
             self.stop_requested.set()
 
-    def _send_event(self, name: str, value: float | int, context: dict | None = None):
-        """Helper to send a raw metric event to the collector."""
-        if self.stats_collector:
+    def _send_event_async(
+        self, name: str, value: float | int, context: dict | None = None
+    ):
+        """Helper to send a raw metric event to the Trieye actor asynchronously."""
+        if self.trieye_actor:
             event = RawMetricEvent(
                 name=name,
                 value=value,
@@ -113,17 +108,17 @@ class TrainingLoop:
                 context=context or {},
             )
             try:
-                self.stats_collector.log_event.remote(event)
+                self.trieye_actor.log_event.remote(event)
             except Exception as e:
-                logger.error(f"Failed to send event '{name}' to stats collector: {e}")
+                logger.error(f"Failed to send event '{name}' to Trieye actor: {e}")
 
-    def _send_batch_events(self, events: list[RawMetricEvent]):
-        """Helper to send a batch of raw metric events."""
-        if self.stats_collector and events:
+    def _send_batch_events_async(self, events: list[RawMetricEvent]):
+        """Helper to send a batch of raw metric events asynchronously."""
+        if self.trieye_actor and events:
             try:
-                self.stats_collector.log_batch_events.remote(events)
+                self.trieye_actor.log_batch_events.remote(events)
             except Exception as e:
-                logger.error(f"Failed to send batch events to stats collector: {e}")
+                logger.error(f"Failed to send batch events to Trieye actor: {e}")
 
     def _process_self_play_result(self, result: SelfPlayResult, worker_id: int):
         """Processes a validated result from a worker."""
@@ -146,7 +141,6 @@ class TrainingLoop:
                 logger.debug(
                     f"Added {len(valid_experiences)} experiences from worker {worker_id} to buffer (Buffer size: {buffer_size})."
                 )
-                # Log buffer readiness once
                 if (
                     not self._buffer_ready_logged
                     and buffer_size >= self.buffer.min_size_to_train
@@ -166,70 +160,53 @@ class TrainingLoop:
             self.episodes_played += 1
             self.total_simulations_run += result.total_simulations
 
-            # Send episode end event for aggregation
-            # Context keys must match MetricConfig context_key values
-            self._send_event(
-                name="episode_end",
-                value=1.0,
-                context={
-                    "worker_id": worker_id,
-                    "score": result.final_score,
-                    "length": result.episode_steps,
-                    "simulations": result.total_simulations,
-                    "triangles_cleared": result.context.get(
-                        "triangles_cleared", 0
-                    ),  # Get from result context
-                    "trainer_step": result.trainer_step_at_episode_start,
-                },
+            self._send_event_async("Progress/Episodes_Played", self.episodes_played)
+            self._send_event_async(
+                "Progress/Total_Simulations", self.total_simulations_run
             )
-            # Send loop counters
-            self._send_event("Progress/Episodes_Played", self.episodes_played)
-            self._send_event("Progress/Total_Simulations", self.total_simulations_run)
 
         else:
             logger.error(
                 f"Worker {worker_id}: Self-play episode produced NO valid experiences (Steps: {result.episode_steps}, Score: {result.final_score:.2f}). This prevents buffer filling and training."
             )
 
-    def _save_checkpoint(self, is_best: bool = False):
-        """Saves the current training checkpoint."""
-        logger.info(f"Saving checkpoint at step {self.global_step}. Best={is_best}")
+    def _trigger_save_state(self, is_best: bool = False, save_buffer: bool = False):
+        """Triggers the Trieye actor to save the current training state."""
+        if not self.trieye_actor:
+            logger.error("Cannot save state: TrieyeActor handle is missing.")
+            return
+
+        logger.info(
+            f"Requesting state save via Trieye at step {self.global_step}. Best={is_best}, SaveBuffer={save_buffer}"
+        )
         try:
-            self.data_manager.save_training_state(
-                nn=self.components.nn,
-                optimizer=self.trainer.optimizer,
-                stats_collector_actor=self.stats_collector,
-                buffer=self.buffer,
+            # Prepare data using the local serializer
+            nn_state = self.components.nn.get_weights()
+            opt_state = self.serializer.prepare_optimizer_state(self.trainer.optimizer)
+            buffer_data = self.serializer.prepare_buffer_data(self.buffer)
+
+            if buffer_data is None and save_buffer:
+                logger.error("Failed to prepare buffer data, cannot save buffer.")
+                save_buffer = False  # Don't attempt to save None
+
+            # Fire-and-forget call to the actor
+            self.trieye_actor.save_training_state.remote(
+                nn_state_dict=nn_state,
+                optimizer_state_dict=opt_state,
+                buffer_content=(
+                    buffer_data.buffer_list if buffer_data else []
+                ),  # Pass the list
                 global_step=self.global_step,
                 episodes_played=self.episodes_played,
                 total_simulations_run=self.total_simulations_run,
                 is_best=is_best,
+                save_buffer=save_buffer,
+                model_config_dict=self.components.model_config.model_dump(),
+                env_config_dict=self.components.env_config.model_dump(),
             )
         except Exception as e_save:
             logger.error(
-                f"Failed to save checkpoint at step {self.global_step}: {e_save}",
-                exc_info=True,
-            )
-
-    def _save_buffer(self):
-        """Saves the current replay buffer state."""
-        if not self.persist_config.SAVE_BUFFER:
-            return
-        logger.info(f"Saving buffer at step {self.global_step}.")
-        try:
-            self.data_manager.save_training_state(
-                nn=self.components.nn,
-                optimizer=self.trainer.optimizer,
-                stats_collector_actor=self.stats_collector,
-                buffer=self.buffer,
-                global_step=self.global_step,
-                episodes_played=self.episodes_played,
-                total_simulations_run=self.total_simulations_run,
-                is_best=False,
-            )
-        except Exception as e_save:
-            logger.error(
-                f"Failed to save buffer at step {self.global_step}: {e_save}",
+                f"Failed to trigger save state via Trieye at step {self.global_step}: {e_save}",
                 exc_info=True,
             )
 
@@ -254,21 +231,20 @@ class TrainingLoop:
                 logger.info(
                     f"--- First training step completed (Global Step: {self.global_step}) ---"
                 )
-            self._send_event("step_completed", 1.0)
+            self._send_event_async("step_completed", 1.0)
 
             if self.train_config.USE_PER:
                 self.buffer.update_priorities(per_sample["indices"], td_errors)
                 per_beta = self.buffer._calculate_beta(self.global_step)
-                self._send_event("PER/Beta", per_beta)
+                self._send_event_async("PER/Beta", per_beta)
 
-            # Send raw loss components with simplified names
             events_batch = []
             loss_name_map = {
                 "total_loss": "Loss/Total",
                 "policy_loss": "Loss/Policy",
                 "value_loss": "Loss/Value",
                 "entropy": "Loss/Entropy",
-                "mean_td_error": "Loss/Mean_Abs_TD_Error",  # Match renamed metric
+                "mean_td_error": "Loss/Mean_Abs_TD_Error",
             }
             for key, value in loss_info.items():
                 metric_name = loss_name_map.get(key)
@@ -290,9 +266,8 @@ class TrainingLoop:
                 )
             )
 
-            self._send_batch_events(events_batch)
+            self._send_batch_events_async(events_batch)
 
-            # Update worker weights periodically
             if (
                 self.train_config.WORKER_UPDATE_FREQ_STEPS > 0
                 and self.global_step % self.train_config.WORKER_UPDATE_FREQ_STEPS == 0
@@ -302,9 +277,8 @@ class TrainingLoop:
                 )
                 try:
                     self.worker_manager.update_worker_networks(self.global_step)
-                    self.weight_update_count += 1  # Increment counter
-                    # Send the cumulative count
-                    self._send_event(
+                    self.weight_update_count += 1
+                    self._send_event_async(
                         "Progress/Weight_Updates_Total", self.weight_update_count
                     )
                 except Exception as update_err:
@@ -312,7 +286,6 @@ class TrainingLoop:
                         f"Failed to update worker networks at step {self.global_step}: {update_err}"
                     )
 
-            # Log simple progress to console occasionally
             if self.global_step % 50 == 0:
                 logger.info(
                     f"Step {self.global_step}: P Loss={loss_info.get('policy_loss', 0.0):.4f}, V Loss={loss_info.get('value_loss', 0.0):.4f}"
@@ -321,21 +294,6 @@ class TrainingLoop:
         else:
             logger.warning(f"Training step {self.global_step + 1} failed.")
             return False
-
-    def _trigger_stats_processing(self):
-        """Triggers the stats actor to process and log buffered data."""
-        now = time.monotonic()
-        if (
-            now - self._last_stats_process_time
-            >= self.stats_config.processing_interval_seconds
-            and self.stats_collector
-        ):
-            logger.debug(f"Triggering stats processing at step {self.global_step}")
-            try:
-                self.stats_collector.process_and_log.remote(self.global_step)
-                self._last_stats_process_time = now
-            except Exception as e:
-                logger.error(f"Failed to trigger stats processing: {e}")
 
     def run(self):
         """Main training loop."""
@@ -366,7 +324,6 @@ class TrainingLoop:
                 if self.buffer.is_ready():
                     trained_this_step = self._run_training_step()
                 else:
-                    # Log buffer status if not ready and not yet logged
                     if not self._buffer_ready_logged and self.global_step % 100 == 0:
                         logger.info(
                             f"Waiting for buffer... Size: {len(self.buffer)}/{self.buffer.min_size_to_train}"
@@ -379,16 +336,17 @@ class TrainingLoop:
                     and self.global_step % self.train_config.CHECKPOINT_SAVE_FREQ_STEPS
                     == 0
                 ):
-                    self._save_checkpoint(is_best=False)
+                    self._trigger_save_state(is_best=False, save_buffer=False)
 
                 if (
                     trained_this_step
-                    and self.persist_config.SAVE_BUFFER
-                    and self.persist_config.BUFFER_SAVE_FREQ_STEPS > 0
-                    and self.global_step % self.persist_config.BUFFER_SAVE_FREQ_STEPS
+                    and self.trieye_config.persistence.SAVE_BUFFER
+                    and self.trieye_config.persistence.BUFFER_SAVE_FREQ_STEPS > 0
+                    and self.global_step
+                    % self.trieye_config.persistence.BUFFER_SAVE_FREQ_STEPS
                     == 0
                 ):
-                    self._save_buffer()
+                    self._trigger_save_state(is_best=False, save_buffer=True)
 
                 if self.stop_requested.is_set():
                     break
@@ -421,15 +379,16 @@ class TrainingLoop:
 
                 self.loop_helpers.log_progress_eta()
                 loop_state = self._get_loop_state()
-                self._send_event("Buffer/Size", loop_state["buffer_size"])
-                self._send_event(
+                self._send_event_async("Buffer/Size", loop_state["buffer_size"])
+                self._send_event_async(
                     "System/Num_Active_Workers", loop_state["num_active_workers"]
                 )
-                self._send_event(
+                self._send_event_async(
                     "System/Num_Pending_Tasks", loop_state["num_pending_tasks"]
                 )
 
-                self._trigger_stats_processing()
+                if self.trieye_actor:
+                    self.trieye_actor.process_and_log.remote(self.global_step)
 
                 if (
                     not completed_tasks
@@ -446,19 +405,6 @@ class TrainingLoop:
             self.training_exception = e
             self.request_stop()
         finally:
-            if self.stats_collector:
-                logger.info("Processing final stats before shutdown...")
-                try:
-                    final_process_ref = self.stats_collector.process_and_log.remote(
-                        self.global_step
-                    )
-                    ray.get(final_process_ref, timeout=10.0)
-                    logger.info("Final stats processing complete.")
-                except Exception as final_stats_err:
-                    logger.error(
-                        f"Error during final stats processing: {final_stats_err}"
-                    )
-
             if (
                 self.training_exception
                 or self.stop_requested.is_set()
@@ -470,17 +416,5 @@ class TrainingLoop:
             )
 
     def cleanup_actors(self):
-        """Cleans up worker actors and stats collector."""
+        """Cleans up worker actors. TrieyeActor cleanup handled by runner."""
         self.worker_manager.cleanup_actors()
-        if self.stats_collector:
-            try:
-                close_ref = self.stats_collector.close_tb_writer.remote()
-                ray.get(close_ref, timeout=5.0)
-            except Exception as tb_close_err:
-                logger.error(f"Error closing stats actor TB writer: {tb_close_err}")
-            try:
-                ray.kill(self.stats_collector, no_restart=True)
-                logger.info("StatsCollectorActor cleaned up.")
-            except Exception as kill_err:
-                logger.warning(f"Error killing StatsCollectorActor: {kill_err}")
-            self.stats_collector = None

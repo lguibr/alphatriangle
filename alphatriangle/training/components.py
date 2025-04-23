@@ -6,22 +6,17 @@ import ray
 
 # Import EnvConfig from trianglengin's top level
 from trianglengin import EnvConfig
+from trieye import Serializer  # Import Serializer from trieye
 from trimcts import SearchConfiguration
 
 # Keep alphatriangle imports
 
 if TYPE_CHECKING:
-    from alphatriangle.config import (
-        ModelConfig,
-        PersistenceConfig,
-        StatsConfig,
-        TrainConfig,
-    )
-    from alphatriangle.data import DataManager
+    from trieye import TrieyeConfig  # Import TrieyeConfig
+
+    from alphatriangle.config import ModelConfig, TrainConfig
     from alphatriangle.nn import NeuralNetwork
     from alphatriangle.rl import ExperienceBuffer, Trainer
-
-    pass
 
 
 @dataclass
@@ -31,12 +26,11 @@ class TrainingComponents:
     nn: "NeuralNetwork"
     buffer: "ExperienceBuffer"
     trainer: "Trainer"
-    data_manager: "DataManager"
-    stats_collector_actor: ray.actor.ActorHandle | None
+    trieye_actor: ray.actor.ActorHandle
+    trieye_config: "TrieyeConfig"
+    serializer: Serializer  # Added Serializer instance
     train_config: "TrainConfig"
     env_config: EnvConfig
     model_config: "ModelConfig"
     mcts_config: SearchConfiguration
-    persist_config: "PersistenceConfig"
-    stats_config: "StatsConfig"
-    profile_workers: bool  # Added flag
+    profile_workers: bool
