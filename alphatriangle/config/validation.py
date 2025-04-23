@@ -7,12 +7,12 @@ from pydantic import BaseModel, ValidationError
 # Import EnvConfig from trianglengin's top level
 from trianglengin import EnvConfig
 
-# Import the new config
+# Import AlphaTriangle configs
 from .mcts_config import AlphaTriangleMCTSConfig
 from .model_config import ModelConfig
-from .persistence_config import PersistenceConfig
-from .stats_config import StatsConfig  # ADDED
 from .train_config import TrainConfig
+
+# Removed PersistenceConfig, StatsConfig imports
 
 logger = logging.getLogger(__name__)
 
@@ -20,20 +20,23 @@ logger = logging.getLogger(__name__)
 def print_config_info_and_validate(
     mcts_config_instance: AlphaTriangleMCTSConfig | None,
 ):
-    """Prints configuration summary and performs validation using Pydantic."""
+    """
+    Prints configuration summary and performs validation using Pydantic
+    for AlphaTriangle-specific configurations.
+    Note: TrieyeConfig validation happens within the Trieye library.
+    """
     print("-" * 40)
-    print("Configuration Validation & Summary")
+    print("AlphaTriangle Configuration Validation & Summary")
     print("-" * 40)
     all_valid = True
     configs_validated: dict[str, Any] = {}
 
+    # Only validate AlphaTriangle-specific configs here
     config_classes: dict[str, type[BaseModel]] = {
         "Environment": EnvConfig,
         "Model": ModelConfig,
         "Training": TrainConfig,
-        "Persistence": PersistenceConfig,
         "MCTS": AlphaTriangleMCTSConfig,
-        "Statistics": StatsConfig,  # ADDED
     }
 
     for name, ConfigClass in config_classes.items():
@@ -93,5 +96,5 @@ def print_config_info_and_validate(
         logger.critical("Configuration validation failed. Please check errors above.")
         raise ValueError("Invalid configuration settings.")
     else:
-        logger.info("All configurations validated successfully.")
+        logger.info("AlphaTriangle configurations validated successfully.")
     print("-" * 40)

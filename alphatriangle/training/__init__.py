@@ -1,10 +1,8 @@
+# File: alphatriangle/training/__init__.py
 from .components import TrainingComponents
 
 # Utilities
-from .logging_utils import (
-    Tee,
-    log_configs_to_mlflow,
-)  # Removed get_root_logger, setup_file_logging
+from .logging_utils import log_configs_to_mlflow
 from .loop import TrainingLoop
 from .loop_helpers import LoopHelpers
 
@@ -27,6 +25,5 @@ __all__ = [
     # Runners (re-exported)
     "run_training",
     # Logging Utilities
-    "Tee",
     "log_configs_to_mlflow",
 ]

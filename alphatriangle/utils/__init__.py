@@ -1,3 +1,4 @@
+# File: alphatriangle/utils/__init__.py
 from .geometry import is_point_in_polygon
 from .helpers import (
     format_eta,
@@ -13,7 +14,7 @@ from .types import (
     PERBatchSample,
     PolicyValueOutput,
     StateType,
-    StatsCollectorData,
+    # Removed StatsCollectorData
 )
 
 __all__ = [
@@ -28,7 +29,7 @@ __all__ = [
     "Experience",
     "ExperienceBatch",
     "PolicyValueOutput",
-    "StatsCollectorData",
+    # Removed StatsCollectorData
     "PERBatchSample",
     # geometry
     "is_point_in_polygon",

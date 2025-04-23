@@ -1,3 +1,4 @@
+# File: alphatriangle/cli.py
 import logging
 import shutil
 import subprocess
@@ -8,9 +9,12 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
+# Import Trieye config
+from trieye import PersistenceConfig, TrieyeConfig
+
 # Import alphatriangle specific configs and runner
 from alphatriangle.config import (
-    PersistenceConfig,
+    APP_NAME,  # Use APP_NAME from config
     TrainConfig,
 )
 from alphatriangle.logging_config import setup_logging  # Import centralized setup
@@ -61,6 +65,15 @@ ProfileOption = Annotated[
     ),
 ]
 
+RunNameOption = Annotated[
+    str | None,
+    typer.Option(
+        "--run-name",
+        help="Specify a custom name for the run (overrides default timestamp).",
+    ),
+]
+
+
 HostOption = Annotated[
     str, typer.Option(help="The network address to listen on (default: 127.0.0.1).")
 ]
@@ -106,7 +119,8 @@ def _run_external_ui(
             console.print(
                 f"[bold red]Error:[/bold red] {ui_name} command failed with exit code {process.returncode}"
             )
-            raise typer.Exit(code=process.returncode)
+            # Don't exit immediately, let the calling function handle it if needed
+            # raise typer.Exit(code=process.returncode)
     except FileNotFoundError as e:
         console.print(
             f"[bold red]Error:[/bold red] '{executable}' command not found. Is {ui_name} installed and in your PATH?"
@@ -129,27 +143,37 @@ def train(
     log_level: LogLevelOption = "INFO",
     seed: SeedOption = 42,
     profile: ProfileOption = False,
+    run_name: RunNameOption = None,  # Add run_name option
 ):
     """
     🚀 Run the AlphaTriangle training pipeline (headless).
 
-    Initiates the self-play and learning process. Logs will be saved to the run directory.
+    Initiates the self-play and learning process. Uses Trieye for stats/persistence.
+    Logs will be saved to the run directory within `.trieye_data/alphatriangle/runs/`.
+    This command also initializes Ray and starts the Ray Dashboard. Check the logs for the dashboard URL.
     """
-    # Setup logging using the centralized function (file logging handled by runner)
+    # Setup logging using the centralized function (file logging handled by Trieye)
     setup_logging(log_level)
     logging.getLogger(__name__)  # Get logger after setup
 
-    # Use alphatriangle configs here
+    # Use alphatriangle TrainConfig
     train_config_override = TrainConfig()
-    persist_config_override = PersistenceConfig()
     train_config_override.RANDOM_SEED = seed
     train_config_override.PROFILE_WORKERS = profile  # Set profile config
-    # Ensure run name is set for persistence config
-    persist_config_override.RUN_NAME = train_config_override.RUN_NAME
+
+    # Create TrieyeConfig, overriding run_name if provided
+    trieye_config_override = TrieyeConfig(app_name=APP_NAME)
+    if run_name:
+        trieye_config_override.run_name = run_name
+        # Sync run_name to persistence config within TrieyeConfig
+        trieye_config_override.persistence.RUN_NAME = run_name
+    else:
+        # Use the default factory-generated run_name from TrieyeConfig
+        run_name = trieye_config_override.run_name
 
     console.print(
         Panel(
-            f"Starting Training Run: '[bold cyan]{train_config_override.RUN_NAME}[/]'\n"
+            f"Starting Training Run: '[bold cyan]{run_name}[/]'\n"
             f"Seed: {seed}, Log Level: {log_level.upper()}, Profiling: {'✅ Enabled' if profile else '❌ Disabled'}",
             title="[bold green]Training Setup[/]",
             border_style="green",
@@ -157,18 +181,18 @@ def train(
         )
     )
 
-    # Call the single runner function directly, passing the profile flag
+    # Call the single runner function directly, passing configs
     exit_code = run_training(
         log_level_str=log_level,
         train_config_override=train_config_override,
-        persist_config_override=persist_config_override,
+        trieye_config_override=trieye_config_override,
         profile=profile,
     )
 
     if exit_code == 0:
         console.print(
             Panel(
-                f"✅ Training run '[bold cyan]{train_config_override.RUN_NAME}[/]' completed successfully.",
+                f"✅ Training run '[bold cyan]{run_name}[/]' completed successfully.",
                 title="[bold green]Training Finished[/]",
                 border_style="green",
             )
@@ -176,7 +200,7 @@ def train(
     else:
         console.print(
             Panel(
-                f"❌ Training run '[bold cyan]{train_config_override.RUN_NAME}[/]' failed with exit code {exit_code}.",
+                f"❌ Training run '[bold cyan]{run_name}[/]' failed with exit code {exit_code}.",
                 title="[bold red]Training Failed[/]",
                 border_style="red",
             )
@@ -192,11 +216,11 @@ def ml(
     """
     📊 Launch the MLflow UI for experiment tracking.
 
-    Requires MLflow to be installed. Points to the `.alphatriangle_data/mlruns` directory.
+    Requires MLflow to be installed. Points to the `.trieye_data/<app_name>/mlruns` directory.
     """
     setup_logging("INFO")  # Basic logging for this command
-    persist_config = PersistenceConfig()
-    # Use the computed property which resolves the path and creates the dir
+    # Use Trieye's PersistenceConfig to find the path
+    persist_config = PersistenceConfig(APP_NAME=APP_NAME)
     mlflow_uri = persist_config.MLFLOW_TRACKING_URI
     mlflow_path = persist_config.get_mlflow_abs_path()
 
@@ -217,7 +241,15 @@ def ml(
         "--port",
         str(port),
     ]
-    _run_external_ui("mlflow", command_args, "MLflow UI", f"http://{host}:{port}")
+    try:
+        _run_external_ui("mlflow", command_args, "MLflow UI", f"http://{host}:{port}")
+    except typer.Exit as e:
+        if e.exit_code != 0:
+            console.print(
+                f"[yellow]MLflow UI failed to start (Exit Code: {e.exit_code}). "
+                f"Is port {port} already in use? Try specifying a different port with --port.[/]"
+            )
+        sys.exit(e.exit_code)
 
 
 @app.command()
@@ -228,11 +260,11 @@ def tb(
     """
     📈 Launch TensorBoard UI pointing to the runs directory.
 
-    Requires TensorBoard to be installed. Points to the `.alphatriangle_data/runs` directory.
+    Requires TensorBoard to be installed. Points to the `.trieye_data/<app_name>/runs` directory.
     """
     setup_logging("INFO")  # Basic logging for this command
-    persist_config = PersistenceConfig()
-    # Point to the parent directory containing all individual run folders
+    # Use Trieye's PersistenceConfig to find the path
+    persist_config = PersistenceConfig(APP_NAME=APP_NAME)
     runs_root_dir = persist_config.get_runs_root_dir()
 
     if not runs_root_dir.exists() or not any(runs_root_dir.iterdir()):
@@ -253,37 +285,45 @@ def tb(
         "--port",
         str(port),
     ]
-    _run_external_ui(
-        "tensorboard", command_args, "TensorBoard UI", f"http://{host}:{port}"
-    )
+    try:
+        _run_external_ui(
+            "tensorboard", command_args, "TensorBoard UI", f"http://{host}:{port}"
+        )
+    except typer.Exit as e:
+        if e.exit_code != 0:
+            console.print(
+                f"[yellow]TensorBoard UI failed to start (Exit Code: {e.exit_code}). "
+                f"Is port {port} already in use? Try specifying a different port with --port.[/]"
+            )
+        sys.exit(e.exit_code)
 
 
 @app.command()
 def ray(
-    host: HostOption = "127.0.0.1",
+    host: HostOption = "127.0.0.1",  # Keep host/port options for reference
     port: PortOption = 8265,
 ):
     """
-    ☀️ Launch the Ray Dashboard web UI.
+    ☀️ Provides instructions to view the Ray Dashboard.
 
-    Requires Ray to be installed and potentially running (e.g., started by `alphatriangle train`).
+    The dashboard is automatically started when you run `alphatriangle train`.
+    Check the output logs of the `train` command for the correct URL.
     """
     setup_logging("INFO")  # Basic logging for this command
     console.print(
-        "[yellow]Note:[/yellow] This command attempts to open the Ray Dashboard for an existing Ray cluster."
+        Panel(
+            f"💡 To view the Ray Dashboard:\n\n"
+            f"1. The Ray Dashboard is started automatically when you run the `[bold]alphatriangle train[/]` command.\n"
+            f"2. Check the console output or the log file for the `train` command (located in `.trieye_data/{APP_NAME}/runs/<run_name>/logs/`).\n"
+            f"3. Look for a line similar to: '[bold cyan]Ray Dashboard running at: http://<address>:<port>[/]' \n"
+            f"4. Open that specific URL in your web browser.\n\n"
+            f"[dim]Note: The default URL is often http://{host}:{port}, but it might differ. "
+            f"If you cannot access the URL, check firewall settings or if the port is blocked.[/]",
+            title="[bold yellow]Ray Dashboard Instructions[/]",
+            border_style="yellow",
+            expand=False,
+        )
     )
-    console.print(
-        "If Ray is not running, this command might fail. Start Ray first (e.g., via `alphatriangle train`)."
-    )
-
-    command_args = [
-        "dashboard",
-        "--host",
-        host,
-        "--port",
-        str(port),
-    ]
-    _run_external_ui("ray", command_args, "Ray Dashboard", f"http://{host}:{port}")
 
 
 if __name__ == "__main__":

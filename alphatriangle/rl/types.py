@@ -1,10 +1,10 @@
-# File: alphatriangle/rl/types.py
 import logging
+from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..utils.types import Experience, StateType  # Import StateType
+from ..utils.types import Experience, StateType
 
 logger = logging.getLogger(__name__)
 
@@ -19,18 +19,21 @@ class SelfPlayResult(BaseModel):
     episode_experiences: list[Experience]
     final_score: float
     episode_steps: int
-    trainer_step_at_episode_start: int  # Added field
+    trainer_step_at_episode_start: int
 
     total_simulations: int = Field(..., ge=0)
     avg_root_visits: float = Field(..., ge=0)
     avg_tree_depth: float = Field(..., ge=0)
+    context: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional context from the episode (e.g., triangles_cleared).",
+    )
 
     @model_validator(mode="after")
     def check_experience_structure(self) -> "SelfPlayResult":
         """Basic structural validation for experiences, including StateType."""
         invalid_count = 0
         valid_experiences = []
-        # Rename unused loop variable 'i' to '_i'
         for i, exp in enumerate(self.episode_experiences):
             is_valid = False
             reason = "Unknown structure"
@@ -39,7 +42,6 @@ class SelfPlayResult(BaseModel):
                     state_type: StateType = exp[0]
                     policy_map = exp[1]
                     value = exp[2]
-                    # Combine nested if statements
                     if (
                         isinstance(state_type, dict)
                         and "grid" in state_type
@@ -47,10 +49,8 @@ class SelfPlayResult(BaseModel):
                         and isinstance(state_type["grid"], np.ndarray)
                         and isinstance(state_type["other_features"], np.ndarray)
                         and isinstance(policy_map, dict)
-                        # Use isinstance with | for multiple types
                         and isinstance(value, float | int)
                     ):
-                        # Basic check for NaN/inf in features
                         if np.all(np.isfinite(state_type["grid"])) and np.all(
                             np.isfinite(state_type["other_features"])
                         ):
@@ -80,6 +80,7 @@ class SelfPlayResult(BaseModel):
             logger.warning(
                 f"SelfPlayResult validation: Found {invalid_count} invalid experience structures out of {len(self.episode_experiences)}. Keeping only valid ones."
             )
+            # Use object.__setattr__ to modify the field within the validator
             object.__setattr__(self, "episode_experiences", valid_experiences)
 
         return self

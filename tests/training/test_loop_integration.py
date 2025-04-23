@@ -1,17 +1,20 @@
+# File: tests/training/test_loop_integration.py
 import logging
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
-from unittest.mock import MagicMock  # Import call
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
+import torch
+
+# Import Trieye config for components
+from trieye import Serializer, TrieyeConfig  # Added Serializer
+from trieye.schemas import RawMetricEvent  # Import from trieye
 
 # Import necessary classes for patching targets
-from alphatriangle.config import StatsConfig, TrainConfig  # Import StatsConfig
-from alphatriangle.data import DataManager, PathManager
+from alphatriangle.config import TrainConfig
 from alphatriangle.rl import ExperienceBuffer, SelfPlayResult, Trainer
-from alphatriangle.stats.stats_types import RawMetricEvent  # Import RawMetricEvent
 from alphatriangle.training import TrainingComponents, TrainingLoop
 from alphatriangle.training.loop_helpers import LoopHelpers
 from alphatriangle.training.worker_manager import WorkerManager
@@ -19,43 +22,35 @@ from alphatriangle.training.worker_manager import WorkerManager
 if TYPE_CHECKING:
     from alphatriangle.utils.types import Experience, PERBatchSample
 
-    # Define ActorHandle type alias if ray provides one, otherwise use Any
-    try:
-        from ray.actor import ActorHandle
-    except ImportError:
-        ActorHandle = Any  # type: ignore
-
-# Define logger for the test file
 logger = logging.getLogger(__name__)
+
 
 # --- Fixtures ---
 
 
-# Mock Worker class (remains mostly the same, but logging changes)
 class MockSelfPlayWorker:
-    def __init__(
-        self, actor_id: int, stats_collector_mock: MagicMock | None
-    ):  # Allow None for typing
+    """Simplified Mock Worker for loop integration tests."""
+
+    def __init__(self, actor_id: int, trieye_actor_mock: MagicMock | None):
         self.actor_id = actor_id
-        self.stats_collector_mock = stats_collector_mock
+        self.trieye_actor_mock = trieye_actor_mock  # Store mock handle
         self.weights_set_count = 0
         self.last_weights_received: dict[str, Any] | None = None
         self.step_set_count = 0
         self.current_trainer_step = 0
         self.task_running = False
-        # Mock the remote methods directly on the instance
         self.set_weights = MagicMock(side_effect=self._set_weights_impl)
         self.set_current_trainer_step = MagicMock(
             side_effect=self._set_current_trainer_step_impl
         )
         self.run_episode = MagicMock(side_effect=self._run_episode_impl)
 
-        # Mock the .remote attribute to return the mocked methods
+        # Simulate remote calls
         self.set_weights.remote = self.set_weights
         self.set_current_trainer_step.remote = self.set_current_trainer_step
         self.run_episode.remote = self.run_episode
 
-    def _run_episode_impl(self):
+    def _run_episode_impl(self) -> SelfPlayResult:
         self.task_running = True
         step_at_start = self.current_trainer_step
         time.sleep(0.01)
@@ -64,9 +59,17 @@ class MockSelfPlayWorker:
             {0: 1.0},
             0.5,
         )
-        # Simulate sending events from worker (check if mock exists)
-        if self.stats_collector_mock:
-            self.stats_collector_mock.log_event.remote(
+        episode_context = {
+            "score": 1.0,
+            "length": 1,
+            "simulations": 10,
+            "triangles_cleared": 0,
+            "trainer_step": step_at_start,
+        }
+
+        # Simulate worker sending events to Trieye
+        if self.trieye_actor_mock:
+            self.trieye_actor_mock.log_event.remote(
                 RawMetricEvent(
                     name="mcts_step",
                     value=10.0,
@@ -74,7 +77,7 @@ class MockSelfPlayWorker:
                     context={"game_step": 0},
                 )
             )
-            self.stats_collector_mock.log_event.remote(
+            self.trieye_actor_mock.log_event.remote(
                 RawMetricEvent(
                     name="step_reward",
                     value=0.1,
@@ -82,7 +85,7 @@ class MockSelfPlayWorker:
                     context={"game_step": 0},
                 )
             )
-            self.stats_collector_mock.log_event.remote(
+            self.trieye_actor_mock.log_event.remote(
                 RawMetricEvent(
                     name="current_score",
                     value=1.0,
@@ -90,18 +93,12 @@ class MockSelfPlayWorker:
                     context={"game_step": 0},
                 )
             )
-            # Simulate episode end event
-            self.stats_collector_mock.log_event.remote(
+            self.trieye_actor_mock.log_event.remote(
                 RawMetricEvent(
                     name="episode_end",
                     value=1.0,
                     global_step=step_at_start,
-                    context={
-                        "score": 1.0,
-                        "length": 1,
-                        "simulations": 10,
-                        "trainer_step": step_at_start,
-                    },
+                    context=episode_context,
                 )
             )
 
@@ -113,16 +110,17 @@ class MockSelfPlayWorker:
             total_simulations=10,
             avg_root_visits=10.0,
             avg_tree_depth=1.0,
+            context=episode_context,
         )
         self.task_running = False
         return result
 
-    def _set_weights_impl(self, weights: dict):
+    def _set_weights_impl(self, weights: dict) -> None:
         self.weights_set_count += 1
         self.last_weights_received = weights
         time.sleep(0.001)
 
-    def _set_current_trainer_step_impl(self, global_step: int):
+    def _set_current_trainer_step_impl(self, global_step: int) -> None:
         self.step_set_count += 1
         self.current_trainer_step = global_step
         time.sleep(0.001)
@@ -139,15 +137,16 @@ def mock_training_config(mock_train_config: TrainConfig) -> TrainConfig:
     cfg.MAX_TRAINING_STEPS = 20
     cfg.USE_PER = False
     cfg.COMPILE_MODEL = False
-    cfg.PROFILE_WORKERS = False  # Ensure profiling is off for standard tests
+    cfg.PROFILE_WORKERS = False
+    cfg.CHECKPOINT_SAVE_FREQ_STEPS = 10  # Save checkpoint during short run
     return cfg
 
 
 @pytest.fixture
-def mock_stats_config_fixture() -> StatsConfig:
-    """Fixture for a basic StatsConfig."""
-    # Use a very short interval for testing processing triggers
-    return StatsConfig(processing_interval_seconds=0.05, metrics=[])
+def mock_trieye_config() -> TrieyeConfig:
+    """Fixture for a basic TrieyeConfig."""
+    # Use default metrics for simplicity in this test
+    return TrieyeConfig(app_name="test_loop_app", run_name="test_loop_run")
 
 
 @pytest.fixture
@@ -155,11 +154,10 @@ def mock_components(
     mocker,
     mock_nn_interface,
     mock_training_config,
-    mock_stats_config_fixture,
+    mock_trieye_config,  # Use Trieye config
     mock_env_config,
     mock_model_config,
     mock_mcts_config,
-    mock_persistence_config,
     mock_experience,
 ) -> TrainingComponents:
     """Fixture to create TrainingComponents with mocks suitable for loop tests."""
@@ -194,32 +192,38 @@ def mock_components(
         np.array([0.1]),
     )
     mock_trainer.get_current_lr.return_value = mock_training_config.LEARNING_RATE
+    # Mock the optimizer attribute needed for saving state
+    mock_trainer.optimizer = MagicMock(spec=torch.optim.Optimizer)
+    mock_trainer.optimizer.state_dict.return_value = {"opt_state": "dummy"}
     mocker.patch("alphatriangle.rl.core.trainer.Trainer", return_value=mock_trainer)
 
-    mock_path_manager = MagicMock(spec=PathManager)
-    mock_path_manager.run_base_dir = Path("/tmp/mock_run")
-    mock_data_manager = MagicMock(spec=DataManager)
-    mock_data_manager.path_manager = mock_path_manager
-    mocker.patch("alphatriangle.data.DataManager", return_value=mock_data_manager)
-
-    mock_stats_collector_handle = MagicMock(name="StatsCollectorActorMockHandle")
-    mock_stats_collector_handle.log_event = MagicMock(name="log_event_remote")
-    mock_stats_collector_handle.log_batch_events = MagicMock(
+    # Mock Trieye Actor Handle
+    mock_trieye_actor_handle = MagicMock(name="TrieyeActorMockHandle")
+    mock_trieye_actor_handle.log_event = MagicMock(name="log_event_remote")
+    mock_trieye_actor_handle.log_batch_events = MagicMock(
         name="log_batch_events_remote"
     )
-    mock_stats_collector_handle.process_and_log = MagicMock(
-        name="process_and_log_remote"
+    mock_trieye_actor_handle.save_training_state = MagicMock(
+        name="save_training_state_remote"
     )
-    mock_stats_collector_handle.log_event.remote = mock_stats_collector_handle.log_event
-    mock_stats_collector_handle.log_batch_events.remote = (
-        mock_stats_collector_handle.log_batch_events
+    # Simulate remote calls
+    mock_trieye_actor_handle.log_event.remote = mock_trieye_actor_handle.log_event
+    mock_trieye_actor_handle.log_batch_events.remote = (
+        mock_trieye_actor_handle.log_batch_events
     )
-    mock_stats_collector_handle.process_and_log.remote = (
-        mock_stats_collector_handle.process_and_log
+    mock_trieye_actor_handle.save_training_state.remote = (
+        mock_trieye_actor_handle.save_training_state
     )
 
+    # --- ADDED: Create mock serializer ---
+    mock_serializer = MagicMock(spec=Serializer)
+    mock_serializer.prepare_optimizer_state.return_value = {"opt_state": "dummy"}
+    mock_serializer.prepare_buffer_data.return_value = MagicMock(buffer_list=[])
+    # Attach serializer to the mock Trieye handle (mimicking real actor structure for loop logic)
+    mock_trieye_actor_handle.serializer = mock_serializer
+
     mock_workers = [
-        MockSelfPlayWorker(i, mock_stats_collector_handle)
+        MockSelfPlayWorker(i, mock_trieye_actor_handle)  # Pass Trieye mock
         for i in range(mock_training_config.NUM_SELF_PLAY_WORKERS)
     ]
     mock_worker_manager_instance = MagicMock(spec=WorkerManager)
@@ -290,19 +294,19 @@ def mock_components(
         "alphatriangle.training.loop.LoopHelpers", return_value=mock_loop_helpers
     )
 
+    # Create TrainingComponents with Trieye actor handle and config
     components = TrainingComponents(
         nn=mock_nn_interface,
         buffer=mock_buffer,
         trainer=mock_trainer,
-        data_manager=mock_data_manager,
-        stats_collector_actor=mock_stats_collector_handle,
+        trieye_actor=mock_trieye_actor_handle,
+        trieye_config=mock_trieye_config,
+        serializer=mock_serializer,  # --- ADDED missing argument ---
         train_config=mock_training_config,
         env_config=mock_env_config,
         model_config=mock_model_config,
         mcts_config=mock_mcts_config,
-        persist_config=mock_persistence_config,
-        stats_config=mock_stats_config_fixture,
-        profile_workers=mock_training_config.PROFILE_WORKERS,  # Pass profile flag
+        profile_workers=mock_training_config.PROFILE_WORKERS,
     )
 
     return components
@@ -321,21 +325,19 @@ def mock_training_loop(mock_components: TrainingComponents) -> TrainingLoop:
 # --- Test ---
 
 
-def test_worker_weight_update_usage(
+def test_worker_weight_update_and_stats_logging(
     mock_training_loop: TrainingLoop, mock_components: TrainingComponents
 ):
     """
     Verify that worker weights/steps are updated and that the weight update
-    event is sent to the stats collector.
+    event is sent to the Trieye actor.
     """
     loop = mock_training_loop
     components = mock_components
     worker_manager = loop.worker_manager
     mock_workers = worker_manager.workers
-    stats_collector_mock = components.stats_collector_actor
-    assert stats_collector_mock is not None, (
-        "Stats collector mock handle should not be None"
-    )
+    trieye_actor_mock = components.trieye_actor  # Get mock handle
+    assert trieye_actor_mock is not None, "Trieye actor mock handle should not be None"
 
     update_freq = components.train_config.WORKER_UPDATE_FREQ_STEPS
     max_steps = components.train_config.MAX_TRAINING_STEPS or 20
@@ -344,22 +346,29 @@ def test_worker_weight_update_usage(
 
     results_processed = loop.episodes_played
     total_expected_updates = max_steps // update_freq
+    expected_total_weight_updates = total_expected_updates
 
+    # Check calls to Trieye actor's log_event
     weight_update_event_calls = [
         c
-        for c in stats_collector_mock.log_event.call_args_list
+        for c in trieye_actor_mock.log_event.call_args_list
         if isinstance(c.args[0], RawMetricEvent)
-        and c.args[0].name == "Event/Weight_Update"
+        and c.args[0].name == "Progress/Weight_Updates_Total"
     ]
     assert len(weight_update_event_calls) == total_expected_updates, (
         f"Weight update event calls: expected {total_expected_updates}, got {len(weight_update_event_calls)}"
     )
 
-    for i, update_call in enumerate(weight_update_event_calls):
-        expected_step = (i + 1) * update_freq
-        event_arg = update_call.args[0]
-        assert isinstance(event_arg, RawMetricEvent)
-        assert event_arg.global_step == expected_step, f"Event {i} step mismatch"
+    if weight_update_event_calls:
+        last_event_arg = weight_update_event_calls[-1].args[0]
+        assert isinstance(last_event_arg, RawMetricEvent)
+        assert last_event_arg.value == expected_total_weight_updates, (
+            f"Last weight update event value mismatch: expected {expected_total_weight_updates}, got {last_event_arg.value}"
+        )
+        last_expected_step = total_expected_updates * update_freq
+        assert last_event_arg.global_step == last_expected_step, (
+            f"Last weight update event step mismatch: expected {last_expected_step}, got {last_event_arg.global_step}"
+        )
 
     assert results_processed > 0, "No self-play results were processed"
 
@@ -389,23 +398,31 @@ def test_worker_weight_update_usage(
     )
 
 
-def test_stats_processing_trigger(
+def test_checkpoint_save_trigger(
     mock_training_loop: TrainingLoop, mock_components: TrainingComponents
 ):
-    """Verify that the stats processing is triggered periodically."""
+    """Verify that save_training_state is called on the Trieye actor."""
     loop = mock_training_loop
-    stats_collector_mock = mock_components.stats_collector_actor
-    assert stats_collector_mock is not None, (
-        "Stats collector mock handle should not be None"
-    )
+    trieye_actor_mock = mock_components.trieye_actor
+    assert trieye_actor_mock is not None
 
-    loop.train_config.MAX_TRAINING_STEPS = 10
+    save_freq = loop.train_config.CHECKPOINT_SAVE_FREQ_STEPS
+    loop.train_config.MAX_TRAINING_STEPS = save_freq + 2  # Ensure save is triggered
+
     loop.run()
 
-    assert stats_collector_mock.process_and_log.call_count > 0, (
-        "Stats processing was never triggered"
-    )
+    # Check if save_training_state was called at the correct step
+    save_calls = trieye_actor_mock.save_training_state.call_args_list
+    assert len(save_calls) >= 1, "save_training_state was not called"
 
-    last_call_args, _ = stats_collector_mock.process_and_log.call_args
-    assert isinstance(last_call_args[0], int)
-    assert last_call_args[0] <= loop.global_step
+    # Check the call at the expected frequency step
+    call_found = False
+    for call in save_calls:
+        if call.kwargs.get("global_step") == save_freq:
+            assert call.kwargs.get("is_best") is False
+            assert (
+                call.kwargs.get("save_buffer") is False
+            )  # Default checkpoint save doesn't save buffer
+            call_found = True
+            break
+    assert call_found, f"save_training_state not called at expected step {save_freq}"

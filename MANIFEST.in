@@ -1,6 +1,5 @@
 
 # File: MANIFEST.in
-# File: MANIFEST.in
 include README.md
 include LICENSE
 include requirements.txt
@@ -15,6 +14,9 @@ prune alphatriangle/visualization
 prune alphatriangle/interaction
 # REMOVE MCTS pruning
 # prune alphatriangle/mcts
+# Remove Trieye-replaced directories
+prune alphatriangle/stats
+prune alphatriangle/data
 # Remove pruned files
 global-exclude alphatriangle/app.py
 # Remove pruned test directories
@@ -22,5 +24,10 @@ prune tests/visualization
 prune tests/interaction
 # REMOVE MCTS test pruning
 # prune tests/mcts
+# Remove Trieye-replaced test directories
+prune tests/stats
+prune tests/data
 # Remove pruned core files
 global-exclude alphatriangle/rl/core/visual_state_actor.py
+# REMOVE test_save_resume.py
+global-exclude tests/training/test_save_resume.py
